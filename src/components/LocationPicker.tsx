@@ -1,247 +1,159 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   View,
+  Text,
   StyleSheet,
   ActivityIndicator,
-  Text,
   ViewStyle,
   TextStyle,
 } from "react-native";
-import LocationPicker from "./LocationPicker";
-import {
-  getCountries,
-  getDepartmentsByCountry,
-  getMunicipalitiesByDepartment,
-} from "../services/locationService";
+import { Picker } from "@react-native-picker/picker";
 
 interface LocationOption {
   label: string;
   value: string;
+  id?: string;
 }
 
-interface LocationSelectorProps {
-  onCountryChange: (value: string) => void;
-  onDepartmentChange: (value: string) => void;
-  onMunicipalityChange: (value: string) => void;
-  selectedCountry: string;
-  selectedDepartment: string;
-  selectedMunicipality: string;
+interface LocationPickerProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  isLoading: boolean;
+  items: LocationOption[];
+  placeholder: string;
+  style?: ViewStyle;
+  disabled?: boolean;
+  testID?: string;
 }
 
-const LocationSelector: React.FC<LocationSelectorProps> = ({
-  onCountryChange,
-  onDepartmentChange,
-  onMunicipalityChange,
-  selectedCountry,
-  selectedDepartment,
-  selectedMunicipality,
+const LocationPicker: React.FC<LocationPickerProps> = ({
+  label,
+  value,
+  onChange,
+  isLoading,
+  items,
+  placeholder,
+  style,
+  disabled = false,
+  testID,
 }) => {
-  const [countries, setCountries] = useState<LocationOption[]>([]);
-  const [departments, setDepartments] = useState<LocationOption[]>([]);
-  const [municipalities, setMunicipalities] = useState<LocationOption[]>([]);
-
-  const [loadingCountries, setLoadingCountries] = useState<boolean>(true);
-  const [loadingDepartments, setLoadingDepartments] = useState<boolean>(false);
-  const [loadingMunicipalities, setLoadingMunicipalities] = useState<boolean>(false);
-
-  useEffect(() => {
-    const fetchCountries = async () => {
-      setLoadingCountries(true);
-      try {
-        const response = await getCountries();
-        setCountries(
-          response.map((c: any) => ({
-            label: c.name,
-            value: c.id,
-          }))
-        );
-      } catch (error) {
-        console.error("Error cargando países", error);
-      }
-      setLoadingCountries(false);
-    };
-
-    fetchCountries();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedCountry) {
-      setDepartments([]);
-      setMunicipalities([]);
-      return;
+  // ✅ Handler mejorado con debug detallado
+  const handleValueChange = (selectedValue: string) => {
+    console.log(`📍 [${label}] Value change:`, {
+      from: value,
+      to: selectedValue,
+      availableOptions: items.map(item => ({ label: item.label, value: item.value })),
+      isValidOption: items.some(item => item.value === selectedValue) || selectedValue === ""
+    });
+    
+    // Solo llamar onChange si el valor realmente cambió
+    if (selectedValue !== value) {
+      onChange(selectedValue);
     }
+  };
 
-    const fetchDepartments = async () => {
-      setLoadingDepartments(true);
-      try {
-        const response = await getDepartmentsByCountry(selectedCountry);
-        setDepartments(
-          response.map((d: any) => ({
-            label: d.name,
-            value: d.id,
-          }))
-        );
-        onDepartmentChange("");
-        setMunicipalities([]);
-        onMunicipalityChange("");
-      } catch (error) {
-        console.error("Error cargando departamentos", error);
-      }
-      setLoadingDepartments(false);
-    };
-
-    fetchDepartments();
-  }, [selectedCountry]);
-
-  useEffect(() => {
-    if (!selectedDepartment) {
-      setMunicipalities([]);
-      return;
-    }
-
-    const fetchMunicipalities = async () => {
-      setLoadingMunicipalities(true);
-      try {
-        const response = await getMunicipalitiesByDepartment(selectedDepartment);
-        setMunicipalities(
-          response.map((m: any) => ({
-            label: m.name,
-            value: m.id,
-          }))
-        );
-        onMunicipalityChange("");
-      } catch (error) {
-        console.error("Error cargando municipios", error);
-      }
-      setLoadingMunicipalities(false);
-    };
-
-    fetchMunicipalities();
-  }, [selectedDepartment]);
-
-  if (loadingCountries) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#284F66" />
-        <Text style={styles.loadingText}>Cargando países...</Text>
-      </View>
-    );
-  }
+  // ✅ Validar que el valor actual existe en las opciones
+  const isValueValid = !value || value === "" || items.some(item => item.value === value);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.pickerContainer}>
-        <LocationPicker
-          label="País*"
-          value={selectedCountry}
-          onChange={onCountryChange}
-          isLoading={loadingCountries}
-          items={countries}
-          placeholder="Selecciona un país"
-          style={styles.picker}
-        />
-      </View>
-
-      <View style={styles.pickerContainer}>
-        {selectedCountry ? (
-          <LocationPicker
-            label="Departamento*"
-            value={selectedDepartment}
-            onChange={onDepartmentChange}
-            isLoading={loadingDepartments}
-            items={departments}
-            placeholder="Selecciona un departamento"
-            style={styles.picker}
-            disabled={!selectedCountry}
-          />
-        ) : (
-          <View style={styles.disabledPicker}>
-            <Text style={styles.disabledText}>Selecciona un país primero</Text>
+    <View style={[styles.container, style]} testID={testID}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={[styles.pickerWrapper, style, disabled && styles.disabled]}>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#284F66" />
+            <Text style={styles.loadingText}>Cargando...</Text>
           </View>
+        ) : (
+          <Picker
+            selectedValue={value}
+            onValueChange={handleValueChange}
+            style={styles.picker}
+            enabled={!disabled && items.length > 0}
+            dropdownIconColor="#284F66"
+          >
+            <Picker.Item label={placeholder} value="" color="#999" />
+            {items.map((item) => (
+              <Picker.Item
+                key={item.id || item.value}
+                label={item.label}
+                value={item.value}
+                color="#333"
+              />
+            ))}
+          </Picker>
         )}
       </View>
-
-      <View style={styles.pickerContainer}>
-        {selectedDepartment ? (
-          <LocationPicker
-            label="Municipio*"
-            value={selectedMunicipality}
-            onChange={onMunicipalityChange}
-            isLoading={loadingMunicipalities}
-            items={municipalities}
-            placeholder="Selecciona un municipio"
-            style={styles.picker}
-            disabled={!selectedDepartment}
-          />
-        ) : (
-          <View style={styles.disabledPicker}>
-            <Text style={styles.disabledText}>Selecciona un departamento primero</Text>
-          </View>
-        )}
-      </View>
+      
+      {/* ✅ Warning para valores inválidos */}
+      {!isValueValid && (
+        <Text style={styles.warningText}>
+          ⚠️ Valor seleccionado no válido: "{value}"
+        </Text>
+      )}
+      
+      {/* ✅ Debug info */}
+      {__DEV__ && (
+        <Text style={styles.debugText}>
+          Debug: value="{value}" | items={items.length} | valid={isValueValid}
+        </Text>
+      )}
     </View>
   );
 };
 
-interface Style {
-  container: ViewStyle;
-  pickerContainer: ViewStyle;
-  picker: ViewStyle;
-  loadingContainer: ViewStyle;
-  loadingText: TextStyle;
-  disabledPicker: ViewStyle;
-  disabledText: TextStyle;
-  errorText: TextStyle;
-  errorContainer: ViewStyle;
-}
-
-const styles = StyleSheet.create<Style>({
+const styles = StyleSheet.create({
   container: {
-    marginVertical: 10,
-    width: "100%",
+    marginBottom: 16,
   },
-  pickerContainer: {
-    marginBottom: 20,
+  label: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 8,
+    fontWeight: "500",
+  },
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 8,
+    backgroundColor: "#FFF",
+    overflow: "hidden",
   },
   picker: {
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 8,
+    height: 50,
     paddingHorizontal: 16,
-    backgroundColor: "#FFF",
   },
   loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
+    height: 50,
+    flexDirection: "row",
     alignItems: "center",
-    padding: 20,
+    justifyContent: "center",
+    paddingHorizontal: 16,
   },
   loadingText: {
-    marginTop: 10,
+    marginLeft: 8,
     color: "#284F66",
-    fontSize: 16,
-  },
-  disabledPicker: {
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 8,
-    padding: 16,
-    backgroundColor: "#F5F5F5",
-    alignItems: "center",
-  },
-  disabledText: {
-    color: "#999",
     fontSize: 14,
   },
-  errorText: {
-    color: "#FF3B30",
+  disabled: {
+    backgroundColor: "#F5F5F5",
+    opacity: 0.6,
+  },
+  warningText: {
+    color: "#FF9500",
     fontSize: 12,
     marginTop: 4,
-    marginLeft: 4,
+    fontWeight: "500",
   },
-  errorContainer: {
-    borderColor: "#FF3B30",
+  debugText: {
+    color: "#007AFF",
+    fontSize: 10,
+    marginTop: 4,
+    backgroundColor: "#F0F8FF",
+    padding: 4,
+    borderRadius: 4,
   },
 });
 
-export default LocationSelector;
+export default LocationPicker;

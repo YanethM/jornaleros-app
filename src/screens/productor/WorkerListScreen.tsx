@@ -26,15 +26,21 @@ interface Worker {
     lastname: string;
     email: string;
     phone?: string;
-    city?: {
-      name: string;
-    } | string;
-    departmentState?: {
-      name: string;
-    } | string;
-    state?: {
-      name: string;
-    } | string;
+    city?:
+      | {
+          name: string;
+        }
+      | string;
+    departmentState?:
+      | {
+          name: string;
+        }
+      | string;
+    state?:
+      | {
+          name: string;
+        }
+      | string;
   };
   skills?: Array<{ name: string }> | string[];
   experience?: string;
@@ -52,7 +58,9 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>({});
+  const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>(
+    {}
+  );
 
   useEffect(() => {
     loadWorkers();
@@ -124,7 +132,7 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
     loadWorkers(true);
   };
 
-  const handleContactWorker = (worker: Worker) => {
+  const handleContactWorker = (worker) => {
     const workerFullName = getWorkerFullName(worker);
 
     Alert.alert(
@@ -135,13 +143,34 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
         {
           text: "📱 Enviar Mensaje",
           onPress: () => {
-            setUnreadMessages(prev => ({
+            setUnreadMessages((prev) => ({
               ...prev,
               [worker.id]: 0,
             }));
-            navigation.navigate("Messages", {
-              selectedWorkerId: worker.id,
+            
+            if (!worker.user?.id) {
+              Alert.alert("Error", "No se pudo obtener el ID del usuario");
+              return;
+            }
+
+            // ✅ NAVEGACIÓN CORREGIDA: Pasar datos completos sin necesidad de cargar desde backend
+            navigation.navigate("AddMessage", {
+              // Para evitar confusión, pasamos todos los datos que necesitamos:
+              receiverId: worker.user.id, // ← User ID para enviar mensaje
               workerName: workerFullName,
+              workerEmail: worker.user?.email,
+              workerPhone: worker.user?.phone,
+
+              // Datos completos del worker para mostrar en la UI
+              workerProfile: {
+                id: worker.id, // WorkerProfile ID
+                user: worker.user, // Datos del usuario
+                skills: worker.skills || [],
+                availability: worker.availability,
+                experience: worker.experience,
+                applicationStatus: worker.applicationStatus,
+                location: getLocationText(worker),
+              },
             });
           },
         },
@@ -153,10 +182,13 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
   const loadUnreadMessages = async () => {
     try {
       // Simular carga de mensajes no leídos por trabajador
-      const mockUnread = workers.reduce((acc, worker) => ({
-        ...acc,
-        [worker.id]: Math.floor(Math.random() * 5), // Ejemplo: 0-4 mensajes no leídos
-      }), {});
+      const mockUnread = workers.reduce(
+        (acc, worker) => ({
+          ...acc,
+          [worker.id]: Math.floor(Math.random() * 5), // Ejemplo: 0-4 mensajes no leídos
+        }),
+        {}
+      );
       setUnreadMessages(mockUnread);
     } catch (error) {
       console.error("Error cargando mensajes no leídos:", error);
@@ -164,13 +196,15 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
   };
 
   const getLocationText = (worker: Worker) => {
-    const cityName = typeof worker.user.city === 'string' 
-      ? worker.user.city 
-      : worker.user.city?.name || "No especificado";
-    
-    const stateName = typeof worker.user.departmentState === 'string'
-      ? worker.user.departmentState
-      : worker.user.departmentState?.name || worker.user.state?.name || "";
+    const cityName =
+      typeof worker.user.city === "string"
+        ? worker.user.city
+        : worker.user.city?.name || "No especificado";
+
+    const stateName =
+      typeof worker.user.departmentState === "string"
+        ? worker.user.departmentState
+        : worker.user.departmentState?.name || worker.user.state?.name || "";
 
     return stateName ? `${cityName}, ${stateName}` : cityName;
   };
@@ -185,20 +219,24 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
     }
 
     if (typeof worker.skills[0] === "string") {
-      return worker.skills.slice(0, 3).join(", ") + 
-             (worker.skills.length > 3 ? "..." : "");
+      return (
+        worker.skills.slice(0, 3).join(", ") +
+        (worker.skills.length > 3 ? "..." : "")
+      );
     }
 
-    return worker.skills
-      .slice(0, 3)
-      .map(skill => skill.name || skill)
-      .filter(Boolean)
-      .join(", ") + (worker.skills.length > 3 ? "..." : "");
+    return (
+      worker.skills
+        .slice(0, 3)
+        .map((skill) => skill.name || skill)
+        .filter(Boolean)
+        .join(", ") + (worker.skills.length > 3 ? "..." : "")
+    );
   };
 
   const renderWorkerItem = ({ item }: { item: Worker }) => {
     const unreadCount = unreadMessages[item.id] || 0;
-    
+
     return (
       <View style={styles.workerCard}>
         <View style={styles.workerImageContainer}>
@@ -287,7 +325,11 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
 
           <TouchableOpacity
             style={styles.detailButton}
-            onPress={() => console.log("Ver detalle del trabajador:", item.id)}>
+            onPress={() =>
+              navigation.navigate("WorkerProfileApplication", {
+                workerId: item.id,
+              })
+            }>
             <Icon name="info" size={20} color={PRIMARY_COLOR} />
           </TouchableOpacity>
         </View>
@@ -335,7 +377,8 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
       <Icon name="people-outline" size={80} color="#ccc" />
       <Text style={styles.emptyText}>No tienes trabajadores asociados</Text>
       <Text style={styles.emptySubText}>
-        Los trabajadores aparecerán aquí cuando apliquen a tus ofertas de trabajo
+        Los trabajadores aparecerán aquí cuando apliquen a tus ofertas de
+        trabajo
       </Text>
       <TouchableOpacity
         style={styles.emptyButton}
@@ -452,8 +495,8 @@ const styles = StyleSheet.create({
     marginLeft: -36,
   },
   headerStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     paddingHorizontal: 12,
@@ -557,7 +600,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
-    position: 'relative',
+    position: "relative",
   },
   detailButton: {
     backgroundColor: "#f0f0f0",
@@ -656,5 +699,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
+const getWorkerSkills = (worker) => {
+  if (!worker.skills || worker.skills.length === 0) {
+    return [];
+  }
+
+  if (typeof worker.skills[0] === "string") {
+    return worker.skills;
+  }
+
+  return worker.skills.map((skill) => skill.name || skill).filter(Boolean);
+};
 
 export default WorkerListScreen;

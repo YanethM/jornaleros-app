@@ -18,16 +18,16 @@ interface ContactScreenProps {
 }
 
 const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
-  const handleEmail = () => {
-    Linking.openURL('mailto:info@agroapp.com');
+  const handleFacebook = () => {
+    Linking.openURL('https://facebook.com/tu-pagina');
   };
 
-  const handlePhone = () => {
-    Linking.openURL('tel:+573001234567');
+  const handleInstagram = () => {
+    Linking.openURL('https://instagram.com/tu-perfil');
   };
 
-  const handleLocation = () => {
-    Linking.openURL('https://maps.google.com/?q=Bogotá,Colombia');
+  const handleLinkedIn = () => {
+    Linking.openURL('https://linkedin.com/company/tu-empresa');
   };
 
   return (
@@ -58,38 +58,15 @@ const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
         </View>
         
         <View style={styles.cardContainer}>
-          <TouchableOpacity style={styles.contactCard} onPress={handleEmail}>
+          <View style={styles.contactCard}>
             <View style={styles.iconContainer}>
               <Icon name="email" size={32} color="#284F66" />
             </View>
             <View style={styles.contactInfo}>
               <Text style={styles.contactLabel}>Correo electrónico</Text>
-              <Text style={styles.contactValue}>info@agroapp.com</Text>
+              <Text style={styles.contactValue}>jornaleando.arauca@gmail.com</Text>
             </View>
-            <Icon name="chevron-right" size={24} color="#999" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.contactCard} onPress={handlePhone}>
-            <View style={styles.iconContainer}>
-              <Icon name="phone" size={32} color="#284F66" />
-            </View>
-            <View style={styles.contactInfo}>
-              <Text style={styles.contactLabel}>Teléfono</Text>
-              <Text style={styles.contactValue}>+57 300 123 4567</Text>
-            </View>
-            <Icon name="chevron-right" size={24} color="#999" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.contactCard} onPress={handleLocation}>
-            <View style={styles.iconContainer}>
-              <Icon name="location-on" size={32} color="#284F66" />
-            </View>
-            <View style={styles.contactInfo}>
-              <Text style={styles.contactLabel}>Dirección</Text>
-              <Text style={styles.contactValue}>Calle 123 #45-67, Bogotá</Text>
-            </View>
-            <Icon name="chevron-right" size={24} color="#999" />
-          </TouchableOpacity>
+          </View>
         </View>
         
         <View style={styles.hoursCard}>
@@ -99,11 +76,7 @@ const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
             <Text style={styles.timeText}>8:00 AM - 6:00 PM</Text>
           </View>
           <View style={styles.hourRow}>
-            <Text style={styles.dayLabel}>Sábados:</Text>
-            <Text style={styles.timeText}>9:00 AM - 1:00 PM</Text>
-          </View>
-          <View style={styles.hourRow}>
-            <Text style={styles.dayLabel}>Domingos y festivos:</Text>
+            <Text style={styles.dayLabel}>Sábados, Domingos y festivos:</Text>
             <Text style={styles.timeText}>Cerrado</Text>
           </View>
         </View>
@@ -111,17 +84,11 @@ const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
         <View style={styles.socialSection}>
           <Text style={styles.socialTitle}>Síguenos en redes sociales</Text>
           <View style={styles.socialIcons}>
-            <TouchableOpacity style={styles.socialButton}>
+            <TouchableOpacity style={styles.socialButton} onPress={handleFacebook}>
               <Icon name="facebook" size={28} color="#284F66" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.socialButton}>
-              <Icon name="twitter" size={28} color="#284F66" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialButton}>
-              <Icon name="language" size={28} color="#284F66" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialButton}>
-              <Icon name="inbox" size={28} color="#284F66" />
+            <TouchableOpacity style={styles.socialButton} onPress={handleInstagram}>
+              <Icon name="photo-camera" size={28} color="#284F66" />
             </TouchableOpacity>
           </View>
         </View>

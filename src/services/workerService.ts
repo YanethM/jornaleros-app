@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import ApiClient from "../utils/api";
 
 export async function getAvailableWorkers() {
@@ -14,7 +15,7 @@ export async function getAvailableWorkers() {
 
 export async function getWorkerApplications(workerId: string) {
   try {
-    const result = await ApiClient.get(`/worker/${workerId}/applications`);
+    const result = await ApiClient.get(`/worker/${workerId}/application`);
     console.log("Worker applications response:", result.data);
     return result.data;
   } catch (error) {
@@ -34,75 +35,69 @@ export async function getRecommendedJobOffers(workerId: string) {
   }
 }
 
+export const getWorkerById = async (id) => {
+  try {
+    const response = await ApiClient.get(`/worker/complete/${id}`); // o la ruta correspondiente
+    console.log("Raw API response:", response.data); // Agrega este log
+    return response.data;
+  } catch (error) {
+    console.error("Error in getWorkerById:", error);
+    throw error;
+  }
+};
 
 export async function getWorkerProfile(workerId: string) {
+  const controller = new AbortController();
+
   try {
+    const token = await AsyncStorage.getItem("@user_token");
 
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Tiempo de espera agotado")), 10000)
-    );
+    const response = await ApiClient.get(`/worker/${workerId}`, {
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+console.log("Worker profile response:", response.data);
 
-    const result = await Promise.race([
-      ApiClient.get(`/worker/${workerId}`),
-      timeoutPromise
-    ]);
-
-    console.log("Worker response:", result.data);
-    
-    // Validar y normalizar la respuesta
-    if (!result.data) {
-      throw new Error("Respuesta vacía del servidor");
-    }
-
-    return normalizeWorkerProfile(result.data);
-  } catch (error) {
-    console.error("Error fetching worker by ID:", error);
-    
-    // Crear perfil por defecto para mantener la UI funcional
-    if (error.message.includes("No hay conexión") || 
-        error.message.includes("Tiempo de espera")) {
+    if (!response.data) {
+      console.warn("Empty server response");
       return getDefaultWorkerProfile();
     }
-    
-    throw error;
+
+    return normalizeWorkerProfile(response.data);
+  } catch (error) {
+    console.error("Error fetching worker profile:", error);
+    return getDefaultWorkerProfile();
   }
 }
 
-function normalizeWorkerProfile(profileData) {
+// Función para obtener un perfil por defecto
+function getDefaultWorkerProfile() {
   return {
-    ...profileData,
-    bio: profileData.bio || "",
-    experienceYears: profileData.experienceYears || 0,
-    hourlyRate: profileData.hourlyRate || 0,
-    availability: profileData.availability !== false,
-    user: {
-      name: profileData.user?.name || "",
-      lastname: profileData.user?.lastname || "",
-      email: profileData.user?.email || "",
-      phone: profileData.user?.phone || "",
-      city: profileData.user?.city || "",
-      departmentState: profileData.user?.departmentState || "",
-    }
+    id: "default",
+    name: "Trabajador",
+    skills: [],
+    experience: 0,
+    rating: 0,
+    location: "Desconocida",
+    available: false,
+    isDefault: true, // Bandera para identificar perfiles por defecto
   };
 }
 
-function getDefaultWorkerProfile() {
+// Función para normalizar los datos del trabajador
+function normalizeWorkerProfile(data) {
   return {
-    bio: "",
-    experienceYears: 0,
-    hourlyRate: 0,
-    availability: true,
-    totalJobs: 0,
-    completedJobs: 0,
-    totalEarnings: 0,
-    user: {
-      name: "",
-      lastname: "",
-      email: "",
-      phone: "",
-      city: "",
-      departmentState: ""
-    }
+    id: data.id || "default",
+    name: data.name || "Trabajador",
+    skills: Array.isArray(data.skills) ? data.skills : [],
+    experience: Number(data.experience) || 0,
+    rating: Number(data.rating) || 0,
+    location: data.location || "Desconocida",
+    available: Boolean(data.available),
+    isDefault: false,
   };
 }
 export async function getWorkersByEmployerId(employerId: string) {
@@ -152,14 +147,16 @@ export async function addWorkerSkill(
       cropTypeId: data.cropTypeId,
       experienceLevel: data.experienceLevel || "Básico",
       yearsOfExperience: data.yearsOfExperience || 0,
-      certified: data.certified || false
+      certified: data.certified || false,
     };
 
     const result = await ApiClient.post(`/worker/${workerId}/skills`, payload);
     return result.data;
   } catch (error) {
     console.error("Error adding worker skill:", error);
-    throw new Error(error.response?.data?.msg || "Error al agregar la habilidad");
+    throw new Error(
+      error.response?.data?.msg || "Error al agregar la habilidad"
+    );
   }
 }
 
@@ -167,7 +164,7 @@ export const removeWorkerSkill = async (skillId: string) => {
   try {
     const response = await ApiClient.delete(`/worker/skills/${skillId}`);
     console.log(`/worker/skills/${skillId}`);
-    
+
     console.log("API DELETE success:", response.data);
     return response.data;
   } catch (error: any) {
@@ -183,6 +180,89 @@ export async function updateWorkerProfile(workerId: string, data: any) {
     return result.data;
   } catch (error) {
     console.error("Error updating worker profile:", error);
+    throw error;
+  }
+}
+
+export async function getAvailableWorkersByEmployerCountry() {
+  try {
+    console.log("🔍 Calling getAvailableWorkersByEmployerCountry:");
+    // Asegurar que la URL sea correcta
+    const result = await ApiClient.get(`/worker/available-by-country`);
+    console.log("✅ Available workers by employer country response:", result);
+    console.log("📊 Response data structure:", {
+      status: result.status,
+      dataKeys: result.data ? Object.keys(result.data) : "No data",
+      // ✅ CORRECCIÓN: Acceder a result.data.data.workers
+      workersCount: result.data?.data?.workers?.length || 0,
+    });
+
+    // ✅ CORRECCIÓN: Manejar la estructura de respuesta correcta
+    if (result.data && result.data.success && result.data.data) {
+      // Los datos están en result.data.data, no en result.data
+      const responseData = result.data.data;
+
+      return {
+        workers: responseData.workers || [],
+        total: responseData.total || 0,
+        employerCountry: responseData.employerCountry || "No especificado",
+      };
+    } else if (result.status === 200) {
+      return {
+        workers: [],
+        total: 0,
+        employerCountry: "No especificado",
+      };
+    } else {
+      throw new Error(`Respuesta inesperada del servidor: ${result.status}`);
+    }
+  } catch (error) {
+    console.error(
+      "❌ Error fetching available workers by employer country:",
+      error
+    );
+    // Log más detallado del error
+    if (error.response) {
+      console.error("📋 Error details:", {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data,
+        url: error.config?.url,
+      });
+    } else if (error.request) {
+      console.error("🌐 Network error - no response received:", error.request);
+    } else {
+      console.error("⚙️ Request setup error:", error.message);
+    }
+    // Throw con información más específica
+    throw {
+      message:
+        error.response?.data?.msg || error.message || "Error de conexión",
+      status: error.response?.status || 500,
+      data: error.response?.data || null,
+    };
+  }
+}
+
+
+export async function getWorkerEmployers(workerId: string){
+  try {
+    const result = await ApiClient.get(`/worker/${workerId}/employers`);
+    console.log("Worker employers response:", result.data);
+    return result.data;
+  } catch (error) {
+    console.error("Error fetching worker employers:", error);
+    throw error;
+  }
+}
+
+export async function getWorkerEmployersSimple(workerId: string) {
+  try {
+    const result = await ApiClient.get(`/worker/${workerId}/employers/simple`);
+    console.log("Worker employers simple response:", result.data);
+    return result.data;
+  } catch (error) {
+    console.error("Error fetching worker employers (simple):", error);
     throw error;
   }
 }

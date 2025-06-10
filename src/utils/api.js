@@ -40,7 +40,6 @@ class ApiClient {
     // Clear auth data and redirect to login
     await AsyncStorage.removeItem("@user_token");
     await AsyncStorage.removeItem("@user_data");
-    
     if (this.authContext && this.authContext.signOut) {
       await this.authContext.signOut();
     }
@@ -49,7 +48,6 @@ class ApiClient {
   async request(url, options = {}, includeAuth = true) {
     try {
       const headers = await this.getHeaders(includeAuth);
-      
       const response = await fetch(url, {
         ...options,
         headers: {
@@ -67,13 +65,23 @@ class ApiClient {
         data = await response.text();
       }
 
-      // Handle auth errors
+      // ✅ MODIFICADO: Solo manejo errores de token realmente inválidos
       if (response.status === 401) {
         const errorCode = data.code || data.response?.code;
-        if (errorCode === "TOKEN_EXPIRED" || errorCode === "TOKEN_INVALID" || errorCode === "AUTH_HEADER_MISSING") {
+        
+        // ❌ ELIMINADO: TOKEN_EXPIRED del manejo automático
+        // Solo hacer logout si el token es inválido o falta, NO por expiración
+        if (errorCode === "TOKEN_INVALID" || 
+            errorCode === "AUTH_HEADER_MISSING" || 
+            errorCode === "TOKEN_MISSING") {
+          
+          console.log("🚨 Token inválido detectado, cerrando sesión...");
           await this.handleAuthError();
-          throw new Error("Session expired. Please login again.");
+          throw new Error("Invalid token. Please login again.");
         }
+        
+        // Para otros errores 401 (como TOKEN_EXPIRED), simplemente lanzar el error
+        // sin hacer logout automático
       }
 
       if (!response.ok) {
@@ -89,13 +97,12 @@ class ApiClient {
         data,
         status: response.status,
       };
+
     } catch (error) {
       console.error("API request error:", error);
       
-      // If it's an auth error, make sure to handle it
-      if (error.status === 401) {
-        await this.handleAuthError();
-      }
+      // ❌ ELIMINADO: El manejo automático de errores 401 genéricos
+      // Ya no hacemos logout automático por cualquier error 401
       
       throw error;
     }

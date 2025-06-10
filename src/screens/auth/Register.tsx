@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -12,16 +12,10 @@ import {
   ActivityIndicator,
   Modal,
   Image,
+  FlatList,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import CustomHeaderNoAuth from "../../components/CustomHeaderNoAuth";
 import { SignupNavigationProp } from "../../navigation/types";
-import {
-  getCountries,
-  getDepartmentsByCountry,
-  getMunicipalitiesByDepartment,
-  getVillagesByMunicipality,
-} from "../../services/locationService";
 import { getRoles } from "../../services/rolesService";
 import PhoneInput from "../../components/PhoneInput";
 import {
@@ -30,6 +24,13 @@ import {
   resendVerificationCode,
 } from "../../services/authService";
 import Icon from "react-native-vector-icons/MaterialIcons";
+import { 
+  getCountries, 
+  getDepartmentsByCountry, 
+  getMunicipalitiesByDepartment, 
+  getVillagesByMunicipality 
+} from "../../services/locationService";
+import { Animated } from "react-native";
 
 interface RegisterScreenProps {
   navigation: SignupNavigationProp;
@@ -65,244 +66,198 @@ const ORGANIZATION_OPTIONS = [
   { title: "Otra", value: "Otra" },
 ];
 
-interface LocationOption {
-  id: string;
-  name: string;
-  value: string;
-  label: string;
-}
-
 interface RoleOption {
   value: string;
   title: string;
 }
 
+// Componente CustomPicker
+const CustomPicker = ({
+  selectedValue,
+  onValueChange,
+  options,
+  placeholder,
+  label,
+}) => {
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const getSelectedLabel = () => {
+    const selected = options.find(
+      (option) => option.value === selectedValue || option.id === selectedValue
+    );
+    return selected ? selected.nombre || selected.title : placeholder;
+  };
+
+  const handleSelect = (value) => {
+    onValueChange(value);
+    setModalVisible(false);
+  };
+
+  return (
+    <View style={styles.inputContainer}>
+      <Text style={styles.label}>{label}</Text>
+      <TouchableOpacity
+        style={styles.customPickerButton}
+        onPress={() => setModalVisible(true)}>
+        <Text
+          style={[
+            styles.customPickerText,
+            !selectedValue && styles.placeholderText,
+          ]}>
+          {getSelectedLabel()}
+        </Text>
+        <Icon name="keyboard-arrow-down" size={24} color="#666" />
+      </TouchableOpacity>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}>
+        <View style={styles.pickerModalOverlay}>
+          <View style={styles.pickerModalContent}>
+            <View style={styles.pickerModalHeader}>
+              <Text style={styles.pickerModalTitle}>{label}</Text>
+              <TouchableOpacity
+                onPress={() => setModalVisible(false)}
+                style={styles.pickerCloseButton}>
+                <Icon name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={options}
+              keyExtractor={(item) => item.id || item.value}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.pickerOption,
+                    (selectedValue === item.id ||
+                      selectedValue === item.value) &&
+                      styles.selectedOption,
+                  ]}
+                  onPress={() => handleSelect(item.id || item.value)}>
+                  <Text
+                    style={[
+                      styles.pickerOptionText,
+                      (selectedValue === item.id ||
+                        selectedValue === item.value) &&
+                        styles.selectedOptionText,
+                    ]}>
+                    {item.nombre || item.title}
+                  </Text>
+                  {(selectedValue === item.id ||
+                    selectedValue === item.value) && (
+                    <Icon name="check" size={20} color="#284F66" />
+                  )}
+                </TouchableOpacity>
+              )}
+              showsVerticalScrollIndicator={false}
+            />
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+};
+
+const COLORS = {
+  primary: "#2C5F7B",
+  primaryLight: "#E8F1F5",
+  primaryDark: "#1A3B4A",
+  secondary: "#C49B61",
+  secondaryLight: "#F7F2E8",
+  tertiary: "#0F52A0",
+  tertiaryLight: "#E6EDF8",
+  success: "#22C55E",
+  successLight: "#DCFCE7",
+  warning: "#F59E0B",
+  warningLight: "#FEF3C7",
+  error: "#E35353",
+  errorLight: "#FEF2F2",
+  text: {
+    primary: "#1F2937",
+    secondary: "#6B7280",
+    tertiary: "#9CA3AF",
+    white: "#FFFFFF",
+  },
+  background: {
+    primary: "#F9FAFB",
+    secondary: "#FFFFFF",
+    tertiary: "#F3F4F6",
+  },
+  border: {
+    light: "#E5E7EB",
+    medium: "#D1D5DB",
+    dark: "#9CA3AF",
+  },
+};
+
 const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
   const handleLoginPress = () => {
     navigation.navigate("Login");
   };
+
+  // Estados básicos del formulario
   const [name, setName] = useState("");
   const [lastname, setLastname] = useState("");
   const [email, setEmail] = useState("");
   const [documentType, setDocumentType] = useState("");
   const [documentNumber, setDocumentNumber] = useState("");
-  const [countryCode, setCountryCode] = useState("CO");
-  const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [availableCountries, setAvailableCountries] = useState<
-    LocationOption[]
-  >([]);
-  const [availableVillages, setAvailableVillages] = useState<LocationOption[]>(
-    []
-  );
-  const [village, setVillage] = useState("");
-  const [nationality, setNationality] = useState("");
   const [role, setRole] = useState("");
-  const [availableDepartments, setAvailableDepartments] = useState<
-    LocationOption[]
-  >([]);
-  const [availableMunicipalities, setAvailableMunicipalities] = useState<
-    LocationOption[]
-  >([]);
+  const [organization, setOrganization] = useState("");
+
+  // Estados para teléfono
+  const [phoneCountryCode, setPhoneCountryCode] = useState("CO");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  
+  // Estados de UI
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  // Estados para ubicación
+  const [countries, setCountries] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [municipalities, setMunicipalities] = useState([]);
+  const [villages, setVillages] = useState([]);
+  const [selectedCountry, setSelectedCountry] = useState(null);
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
+  const [selectedMunicipality, setSelectedMunicipality] = useState(null);
+  const [selectedVillage, setSelectedVillage] = useState(null);
+  
+  // Estados de carga y modales
+  const [loadingLocationData, setLoadingLocationData] = useState(false);
   const [availableRoles, setAvailableRoles] = useState<RoleOption[]>([]);
-  const [isLoadingDepartments, setIsLoadingDepartments] = useState(false);
-  const [isLoadingMunicipalities, setIsLoadingMunicipalities] = useState(false);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [organization, setOrganization] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Estados para modales de ubicación
+  const [showCountryModal, setShowCountryModal] = useState(false);
+  const [showDepartmentModal, setShowDepartmentModal] = useState(false);
+  const [showMunicipalityModal, setShowMunicipalityModal] = useState(false);
+  const [showVillageModal, setShowVillageModal] = useState(false);
+
+  // Estados para verificación
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState("");
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  const [countryId, setCountryId] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
-  const [cityId, setCityId] = useState("");
-
-  useEffect(() => {
-    const fetchCountries = async () => {
-      try {
-        const response = await getCountries();
-        console.log("Countries API response:", response);
-
-        // Check if the response has the expected structure
-        if (response && response.success && Array.isArray(response.data)) {
-          // Extract the actual countries array from the nested structure
-          const countriesArray = response.data;
-
-          const countryOptions = countriesArray.map((c) => ({
-            id: c.id,
-            value: c.id,
-            label: c.name,
-            name: c.name,
-          }));
-
-          console.log("Mapped country options:", countryOptions);
-          setAvailableCountries(countryOptions);
-        } else {
-          console.error("Unexpected countries response format:", response);
-          Alert.alert(
-            "Error",
-            "Formato de respuesta inesperado al cargar países"
-          );
-        }
-      } catch (error) {
-        console.error("Error fetching countries:", error);
-        Alert.alert("Error", "No se pudieron cargar los países");
-      }
-    };
-    fetchCountries();
-  }, []);
-
-  // Improved useEffect for fetching departments
-  useEffect(() => {
-    let isMounted = true; // Flag to prevent state updates after unmount
-
-    const fetchDepartments = async () => {
-      console.log("fetchDepartments called with countryId:", countryId);
-      console.log("Type of countryId in useEffect:", typeof countryId);
-
-      if (!countryId) {
-        console.log("No countryId provided, clearing departments");
-        if (isMounted) {
-          setAvailableDepartments([]);
-        }
-        return;
-      }
-
-      if (isMounted) {
-        setIsLoadingDepartments(true);
-      }
-
-      try {
-        console.log(
-          "Making API call to fetch departments for countryId:",
-          countryId
-        );
-
-        // Make sure we're passing a string
-        const cleanCountryId = String(countryId).trim();
-        console.log("Cleaned countryId for API call:", cleanCountryId);
-
-        const response = await getDepartmentsByCountry(cleanCountryId);
-        console.log(
-          "Departments API response for countryId",
-          cleanCountryId,
-          ":",
-          response
-        );
-
-        // Break early if component unmounted
-        if (!isMounted) return;
-
-        if (response && response.success && Array.isArray(response.data)) {
-          // Extract the actual departments array from the nested structure
-          const departmentsArray = response.data;
-
-          console.log(
-            "Raw departments data array length:",
-            departmentsArray.length
-          );
-          console.log(
-            "Sample department (first item):",
-            departmentsArray.length > 0 ? departmentsArray[0] : "No departments"
-          );
-
-          const departmentOptions = departmentsArray.map((d) => ({
-            id: d.id || d._id || "",
-            value: d.id || d._id || "",
-            label: d.name || d.nombre || String(d),
-            name: d.name || d.nombre || String(d),
-          }));
-
-          console.log("Mapped department options:", departmentOptions);
-
-          if (isMounted) {
-            setAvailableDepartments(departmentOptions);
-          }
-        } else {
-          console.error("Unexpected departments response format:", response);
-
-          if (isMounted) {
-            setAvailableDepartments([]);
-
-            // Show an alert if there's an error message
-            if (response && response.message) {
-              Alert.alert("Error", response.message);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching departments:", error);
-
-        // More detailed error logging
-        if (error.response) {
-          console.error("Error response status:", error.response.status);
-          console.error("Error response data:", error.response.data);
-        }
-
-        if (isMounted) {
-          Alert.alert(
-            "Error",
-            `No se pudieron cargar los departamentos. ${error.message || ""}`
-          );
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoadingDepartments(false);
-        }
-      }
-    };
-
-    fetchDepartments();
-
-    // Cleanup function
-    return () => {
-      isMounted = false;
-    };
-  }, [countryId]);
-
-  useEffect(() => {
-    const fetchMunicipalities = async () => {
-      if (!departmentId) {
-        setAvailableMunicipalities([]);
-        return;
-      }
-      setIsLoadingMunicipalities(true);
-      try {
-        const response = await getMunicipalitiesByDepartment(departmentId);
-        console.log("Municipalities API response:", response);
-
-        // Check if the response has the expected structure
-        if (response && response.success && Array.isArray(response.data)) {
-          // Extract the actual municipalities array from the nested structure
-          const municipalitiesArray = response.data;
-
-          const municipalityOptions = municipalitiesArray.map((m) => ({
-            id: m.id || m._id || "",
-            value: m.id || m._id || "",
-            label: m.name || m.nombre || String(m),
-            name: m.name || m.nombre || String(m),
-          }));
-
-          console.log("Mapped municipality options:", municipalityOptions);
-          setAvailableMunicipalities(municipalityOptions);
-        } else {
-          console.error("Unexpected municipalities response format:", response);
-          setAvailableMunicipalities([]);
-        }
-      } catch (error) {
-        console.error("Error fetching municipalities:", error);
-        Alert.alert("Error", "No se pudieron cargar los municipios");
-      } finally {
-        setIsLoadingMunicipalities(false);
-      }
-    };
-    fetchMunicipalities();
-  }, [departmentId]);
+  // ✅ AGREGADO: Estado formData que faltaba
+  const [formData, setFormData] = useState({
+    country: "",
+    state: "",
+    city: "",
+    village: "",
+  });
 
   useEffect(() => {
     const loadRoles = async () => {
@@ -319,45 +274,283 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
         setIsLoadingRoles(false);
       }
     };
-
     loadRoles();
   }, []);
 
-  // Parte 1: Modificar la función loadRoles con mejor manejo y logging
-
-  const loadRoles = async () => {
-    setIsLoadingRoles(true);
-    try {
-      const rolesData = await getRoles();
-      if (rolesData) {
-        setAvailableRoles(rolesData);
-      } else {
-        console.error("No roles data received");
-        Alert.alert("Error", "No se pudieron cargar los roles");
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const countriesResponse = await getCountries();
+        let countriesData = [];
+        if (countriesResponse?.data) {
+          countriesData = countriesResponse.data;
+        } else if (countriesResponse && Array.isArray(countriesResponse)) {
+          countriesData = countriesResponse;
+        }
+        setCountries(countriesData);
+      } catch (error) {
+        console.error("Error loading initial data:", error);
+        Alert.alert("Error", "No se pudieron cargar los datos iniciales");
+      } finally {
+        setLoading(false);
       }
+    };
+
+    loadData();
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // ✅ CORREGIDO: useEffect para actualizar formData
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      country: selectedCountry?.id || "",
+      state: selectedDepartment?.id || "",
+      city: selectedMunicipality?.id || "",
+      village: selectedVillage?.id || "",
+    }));
+  }, [selectedCountry, selectedDepartment, selectedMunicipality, selectedVillage]);
+
+  const shouldShowOrganizationSelector = (selectedRole) => {
+    if (!selectedRole || !availableRoles || availableRoles.length === 0)
+      return false;
+    const selectedRoleObj = availableRoles.find(
+      (r) => r.value === selectedRole
+    );
+    if (!selectedRoleObj) return false;
+    const roleTitle = selectedRoleObj.title?.toLowerCase() || "";
+    return roleTitle === "productor";
+  };
+
+  const handlePhoneCountryChange = (countryCode: string) => {
+    console.log("Phone country changed to:", countryCode);
+    setPhoneCountryCode(countryCode);
+  };
+
+  const handlePhoneNumberChange = (number: string) => {
+    console.log("Phone number changed to:", number);
+    setPhoneNumber(number);
+  };
+
+  const loadDepartments = async (countryId) => {
+    try {
+      setLoadingLocationData(true);
+      const response = await getDepartmentsByCountry(countryId);
+
+      let departmentsData = [];
+      if (response?.data) {
+        departmentsData = response.data;
+      } else if (Array.isArray(response)) {
+        departmentsData = response;
+      }
+
+      setDepartments(departmentsData);
     } catch (error) {
-      console.error("Error loading roles:", error);
-      Alert.alert("Error", "No se pudieron cargar los roles");
+      console.warn("Error loading departments:", error);
     } finally {
-      setIsLoadingRoles(false);
+      setLoadingLocationData(false);
     }
   };
 
-  const shouldShowOrganizationSelector = (selectedRole) => {
-    if (!selectedRole || !availableRoles || availableRoles.length === 0) return false;
-    
-    const selectedRoleObj = availableRoles.find(r => r.value === selectedRole);
-    if (!selectedRoleObj) return false;
-    
-    // Obtener el título del rol (en minúsculas para comparación)
-    const roleTitle = selectedRoleObj.title?.toLowerCase() || '';
-    
-    // Verificar si el rol es "productor" o "trabajador"
-    return roleTitle === 'productor';
+  const loadMunicipalities = async (departmentId) => {
+    try {
+      setLoadingLocationData(true);
+      const response = await getMunicipalitiesByDepartment(departmentId);
+      let municipalitiesData = [];
+      if (response?.data) {
+        municipalitiesData = response.data;
+      } else if (Array.isArray(response)) {
+        municipalitiesData = response;
+      }
+      setMunicipalities(municipalitiesData);
+    } catch (error) {
+      console.warn("Error loading municipalities:", error);
+    } finally {
+      setLoadingLocationData(false);
+    }
   };
-  
+
+  const loadVillages = async (municipalityId) => {
+    try {
+      setLoadingLocationData(true);
+      const response = await getVillagesByMunicipality(municipalityId);
+      let villagesData = [];
+      if (response?.data) {
+        villagesData = response.data;
+      } else if (Array.isArray(response)) {
+        villagesData = response;
+      }
+      setVillages(villagesData);
+    } catch (error) {
+      console.warn("Error loading villages:", error);
+    } finally {
+      setLoadingLocationData(false);
+    }
+  };
+
+  // ✅ MEJORADO: Componente LocationModal con mejor diseño
+  const LocationModal = ({
+    visible,
+    onClose,
+    title,
+    data,
+    onSelect,
+    loading,
+  }) => (
+    <Modal
+      animationType="slide"
+      transparent
+      visible={visible}
+      onRequestClose={onClose}
+      statusBarTranslucent={true}>
+      <View style={styles.locationModalOverlay}>
+        <View style={styles.locationModalContainer}>
+          {/* Indicador visual superior */}
+          <View style={styles.modalHandleContainer}>
+            <View style={styles.modalHandle} />
+          </View>
+          
+          {/* Header mejorado */}
+          <View style={styles.locationModalHeader}>
+            <View style={styles.locationModalHeaderContent}>
+              <Icon name="location-on" size={24} color="#284F66" style={styles.locationHeaderIcon} />
+              <Text style={styles.locationModalTitle}>{title}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.locationModalCloseButton}>
+              <Icon name="close" size={24} color="#666" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Content */}
+          <View style={styles.locationModalContent}>
+            {loading ? (
+              <View style={styles.locationLoadingState}>
+                <View style={styles.loadingIndicatorContainer}>
+                  <ActivityIndicator size="large" color="#284F66" />
+                </View>
+                <Text style={styles.locationLoadingText}>
+                  Cargando opciones...
+                </Text>
+                <Text style={styles.locationLoadingSubtext}>
+                  Por favor espera un momento
+                </Text>
+              </View>
+            ) : data && data.length > 0 ? (
+              <ScrollView
+                style={styles.locationModalList}
+                showsVerticalScrollIndicator={false}
+                bounces={true}>
+                {data.map((item, index) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.locationModalItem,
+                      index === data.length - 1 && styles.locationModalItemLast
+                    ]}
+                    onPress={() => onSelect(item)}
+                    activeOpacity={0.6}
+                    onPressIn={() => {}}
+                    onPressOut={() => {}}>
+                    <View style={styles.locationModalItemContent}>
+                      <View style={styles.locationModalItemIcon}>
+                        <Icon name="place" size={20} color="#284F66" />
+                      </View>
+                      <Text style={styles.locationModalItemText}>{item.name}</Text>
+                    </View>
+                    <View style={styles.locationModalItemArrow}>
+                      <Icon
+                        name="arrow-forward-ios"
+                        size={16}
+                        color="#999"
+                      />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.locationEmptyState}>
+                <View style={styles.emptyStateIconContainer}>
+                  <Icon name="location-off" size={64} color="#ccc" />
+                </View>
+                <Text style={styles.locationEmptyStateTitle}>
+                  No hay opciones disponibles
+                </Text>
+                <Text style={styles.locationEmptyStateText}>
+                  No se encontraron ubicaciones para mostrar en este momento.
+                </Text>
+                <TouchableOpacity style={styles.retryButton} onPress={onClose}>
+                  <Text style={styles.retryButtonText}>Intentar de nuevo</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const handleLocationSelect = async (type, item) => {
+    switch (type) {
+      case "country":
+        setSelectedCountry(item);
+        setSelectedDepartment(null);
+        setSelectedMunicipality(null);
+        setSelectedVillage(null);
+        setDepartments([]);
+        setMunicipalities([]);
+        setVillages([]);
+        setShowCountryModal(false);
+
+        if (item.id) {
+          await loadDepartments(item.id);
+        }
+        break;
+
+      case "department":
+        setSelectedDepartment(item);
+        setSelectedMunicipality(null);
+        setSelectedVillage(null);
+        setMunicipalities([]);
+        setVillages([]);
+        setShowDepartmentModal(false);
+
+        if (item.id) {
+          await loadMunicipalities(item.id);
+        }
+        break;
+
+      case "municipality":
+        setSelectedMunicipality(item);
+        setSelectedVillage(null);
+        setVillages([]);
+        setShowMunicipalityModal(false);
+
+        if (item.id) {
+          await loadVillages(item.id);
+        }
+        break;
+
+      case "village":
+        setSelectedVillage(item);
+        setShowVillageModal(false);
+        break;
+    }
+  };
+
   const handleRegister = async () => {
-    // Check all required fields
+    // ✅ CORREGIDO: Validaciones usando los estados correctos
     if (
       !name ||
       !lastname ||
@@ -367,9 +560,9 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
       !phoneNumber ||
       !password ||
       !confirmPassword ||
-      !countryId ||
-      !departmentId ||
-      !cityId ||
+      !selectedCountry ||
+      !selectedDepartment ||
+      !selectedMunicipality ||
       !role
     ) {
       Alert.alert("Error", "Por favor completa todos los campos obligatorios");
@@ -384,11 +577,16 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
     }
 
     // Phone validation
-    const selectedCountry = COUNTRY_CODES.find((c) => c.id === countryCode);
-    if (selectedCountry && phoneNumber.length !== selectedCountry.phoneLength) {
+    const selectedPhoneCountry = COUNTRY_CODES.find(
+      (c) => c.id === phoneCountryCode
+    );
+    if (
+      selectedPhoneCountry &&
+      phoneNumber.length !== selectedPhoneCountry.phoneLength
+    ) {
       Alert.alert(
         "Error",
-        `El número de teléfono debe tener ${selectedCountry.phoneLength} dígitos para ${selectedCountry.name}`
+        `El número de teléfono debe tener ${selectedPhoneCountry.phoneLength} dígitos para ${selectedPhoneCountry.name}`
       );
       return;
     }
@@ -412,70 +610,20 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
     setIsLoading(true);
 
     try {
-      // Get the selected department and municipality objects with their properties
-      const selectedDepartment = availableDepartments.find(
-        (d) => d.id === departmentId
-      );
-      const selectedMunicipality = availableMunicipalities.find(
-        (m) => m.id === cityId
-      );
-
-      console.log("Selected department:", selectedDepartment);
-      console.log("Selected municipality:", selectedMunicipality);
-
-      // Map nationality to the expected format
-      const nationalityMapping = {
-        "Colombiano(a)": "COLOMBIANO",
-        "Venezolano(a)": "VENEZOLANO",
-        "ColomboVenezolano(a)": "COLOMBOVENEZOLANO",
-        Otro: "Otra",
-      };
-
-      // Get nationality based on selected country
-      let nationalityValue = nationality;
-      if (!nationalityValue) {
-        const selectedCountry = availableCountries.find(
-          (c) => c.id === countryId
-        );
-        if (selectedCountry) {
-          if (selectedCountry.name === "Colombia") {
-            nationalityValue = "Colombiano(a)";
-          } else if (selectedCountry.name === "Venezuela") {
-            nationalityValue = "Venezolano(a)";
-          } else if (selectedCountry.name === "Colombovenezuela") {
-            nationalityValue = "ColomboVenezolano(a)";
-          } else {
-            nationalityValue = "Otro";
-          }
-        } else {
-          nationalityValue = "Otro";
-        }
-      }
-
-      // Map to the expected backend format
-      const backendNationality = nationalityMapping[nationalityValue] || "Otra";
-
-      // Based on the API response, municipalities have a 'value' field that is lowercase
+      // ✅ CORREGIDO: Usar los IDs correctos de los estados seleccionados
       const registerData = {
         name,
         lastname,
         email,
         documentId: documentNumber,
         documentType,
-        nationality: backendNationality, // Use the mapped value
+        nationality: "COLOMBIANO",
         phone: phoneNumber,
         password,
         roleId: role,
-        // Use the 'value' property which is lowercase in the API response
-        city:
-          selectedMunicipality?.value ||
-          selectedMunicipality?.name?.toLowerCase() ||
-          cityId,
-        state:
-          selectedDepartment?.value ||
-          selectedDepartment?.name?.toLowerCase() ||
-          departmentId,
-        // Include organization if selected
+        city: selectedMunicipality.id,
+        state: selectedDepartment.id,
+        country: selectedCountry.id,
         ...(organization && { organization }),
       };
 
@@ -488,18 +636,15 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
         setRegisteredEmail(email);
         setShowVerificationModal(true);
       } else {
-        // API returned a non-success response
         const message = response?.message || "Error desconocido al registrarse";
         Alert.alert("Error", message);
       }
     } catch (error) {
       console.error("Error en registro:", error);
 
-      // Enhanced error handling with detailed logging
       if (error.response) {
         console.log("Error response:", JSON.stringify(error.response, null, 2));
 
-        // Try to extract error messages from different response formats
         if (error.response.data) {
           console.log(
             "Error response data:",
@@ -555,13 +700,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
       if (verifyResponse.success) {
         setShowVerificationModal(false);
         setVerificationCode("");
-
-        Alert.alert("Éxito", "Cuenta verificada correctamente", [
-          {
-            text: "OK",
-            onPress: () => navigation.navigate("Login"),
-          },
-        ]);
+        setShowSuccessModal(true);
       } else {
         Alert.alert("Error", verifyResponse.message || "Código inválido");
       }
@@ -593,20 +732,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
     }
   };
 
-  const getDepartmentLabel = () => {
-    if (nationality === "Colombiano(a)") return "Departamento";
-    if (nationality === "Venezolano(a)") return "Estado";
-    if (nationality === "ColomboVenezolano(a)") return "Departamento / Estado";
-    return "Departamento / Estado";
-  };
-
-  const getMunicipalityLabel = () => {
-    if (nationality === "Colombiano(a)") return "Municipio";
-    if (nationality === "Venezolano(a)") return "Municipio";
-    if (nationality === "ColomboVenezolano(a)") return "Municipio / Ciudad";
-    return "Municipio / Ciudad";
-  };
-
   return (
     <View style={styles.container}>
       <CustomHeaderNoAuth navigation={navigation} />
@@ -623,6 +748,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
             </View>
 
             <View style={styles.formContainer}>
+              {/* Campos básicos */}
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Nombre(s)</Text>
                 <TextInput
@@ -658,27 +784,13 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
                 />
               </View>
 
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>Tipo de documento</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={documentType}
-                    onValueChange={setDocumentType}
-                    style={styles.picker}>
-                    <Picker.Item
-                      label="Selecciona tipo de documento"
-                      value=""
-                    />
-                    {DOCUMENT_TYPES.map((type) => (
-                      <Picker.Item
-                        key={type.id}
-                        label={type.nombre}
-                        value={type.id}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-              </View>
+              <CustomPicker
+                selectedValue={documentType}
+                onValueChange={setDocumentType}
+                options={DOCUMENT_TYPES}
+                placeholder="Selecciona tipo de documento"
+                label="Tipo de documento"
+              />
 
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Número de documento</Text>
@@ -694,211 +806,146 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
 
               <PhoneInput
                 label="Número de celular"
-                countryCode={countryCode}
+                countryCode={phoneCountryCode}
                 phoneNumber={phoneNumber}
-                onCountryChange={setCountryCode}
-                onPhoneChange={setPhoneNumber}
+                onCountryChange={handlePhoneCountryChange}
+                onPhoneChange={handlePhoneNumberChange}
                 countries={COUNTRY_CODES}
               />
 
+              {/* ✅ AGREGADO: Botones para seleccionar ubicación */}
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>País*</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={countryId}
-                    onValueChange={(itemValue) => {
-                      console.log("Country selected with ID:", itemValue);
-                      setCountryId(itemValue);
-                      setDepartmentId("");
-                      setCityId("");
-                      setVillage("");
-                    }}
-                    style={styles.picker}
-                    dropdownIconColor="#284F66">
-                    <Picker.Item
-                      label="Selecciona un país"
-                      value=""
-                      style={styles.pickerItem}
-                    />
-                    {availableCountries.map((c) => (
-                      <Picker.Item
-                        key={c.id}
-                        label={c.label}
-                        value={c.value}
-                        style={styles.pickerItem}
-                      />
-                    ))}
-                  </Picker>
-                </View>
+                <TouchableOpacity
+                  style={styles.locationButton}
+                  onPress={() => setShowCountryModal(true)}>
+                  <Text style={[
+                    styles.locationButtonText,
+                    !selectedCountry && styles.placeholderText
+                  ]}>
+                    {selectedCountry ? selectedCountry.name : "Seleccionar país"}
+                  </Text>
+                  <Icon name="keyboard-arrow-down" size={24} color="#666" />
+                </TouchableOpacity>
               </View>
 
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>{getDepartmentLabel()}*</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={departmentId}
-                    onValueChange={(itemValue) => setDepartmentId(itemValue)}
-                    style={styles.picker}
-                    dropdownIconColor="#284F66"
-                    enabled={!!countryId}>
-                    <Picker.Item
-                      label={
-                        countryId
-                          ? `Selecciona ${getDepartmentLabel().toLowerCase()}`
-                          : "Selecciona un país primero"
-                      }
-                      value=""
-                      style={styles.pickerItem}
-                    />
-                    {availableDepartments.map((d) => (
-                      <Picker.Item
-                        key={d.id || `dep-${Math.random()}`}
-                        label={d.label || "Opción sin nombre"}
-                        value={d.value || ""}
-                        style={styles.pickerItem}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-                {isLoadingDepartments && (
-                  <ActivityIndicator size="small" color="#284F66" />
-                )}
-              </View>
-
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>{getMunicipalityLabel()}*</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={cityId}
-                    onValueChange={(itemValue) => setCityId(itemValue)}
-                    style={styles.picker}
-                    dropdownIconColor="#284F66"
-                    enabled={!!departmentId}>
-                    <Picker.Item
-                      label={
-                        departmentId
-                          ? `Selecciona ${getMunicipalityLabel().toLowerCase()}`
-                          : "Selecciona un departamento primero"
-                      }
-                      value=""
-                      style={styles.pickerItem}
-                    />
-                    {availableMunicipalities.map((m) => (
-                      <Picker.Item
-                        key={m.id || `mun-${Math.random()}`}
-                        label={m.label || "Opción sin nombre"}
-                        value={m.value || ""}
-                        style={styles.pickerItem}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-                {isLoadingMunicipalities && (
-                  <ActivityIndicator size="small" color="#284F66" />
-                )}
-              </View>
-
-              {/* Selector de Vereda (condicional) */}
-              {availableVillages.length > 0 && (
+              {selectedCountry && (
                 <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Vereda</Text>
-                  <View style={styles.pickerContainer}>
-                    <Picker
-                      selectedValue={village}
-                      onValueChange={(itemValue) => setVillage(itemValue)}
-                      style={styles.picker}
-                      dropdownIconColor="#284F66">
-                      <Picker.Item
-                        label="Selecciona una vereda"
-                        value=""
-                        style={styles.pickerItem}
-                      />
-                      {availableVillages.map((v) => (
-                        <Picker.Item
-                          key={v.id}
-                          label={v.label}
-                          value={v.value}
-                          style={styles.pickerItem}
-                        />
-                      ))}
-                    </Picker>
-                  </View>
+                  <Text style={styles.label}>Departamento / Estado*</Text>
+                  <TouchableOpacity
+                    style={styles.locationButton}
+                    onPress={() => setShowDepartmentModal(true)}
+                    disabled={departments.length === 0}>
+                    <Text style={[
+                      styles.locationButtonText,
+                      !selectedDepartment && styles.placeholderText
+                    ]}>
+                      {selectedDepartment ? selectedDepartment.name : "Seleccionar departamento"}
+                    </Text>
+                    <Icon name="keyboard-arrow-down" size={24} color="#666" />
+                  </TouchableOpacity>
                 </View>
               )}
+
+              {selectedDepartment && (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Municipio / Ciudad*</Text>
+                  <TouchableOpacity
+                    style={styles.locationButton}
+                    onPress={() => setShowMunicipalityModal(true)}
+                    disabled={municipalities.length === 0}>
+                    <Text style={[
+                      styles.locationButtonText,
+                      !selectedMunicipality && styles.placeholderText
+                    ]}>
+                      {selectedMunicipality ? selectedMunicipality.name : "Seleccionar municipio"}
+                    </Text>
+                    <Icon name="keyboard-arrow-down" size={24} color="#666" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {selectedMunicipality && villages.length > 0 && (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Vereda (Opcional)</Text>
+                  <TouchableOpacity
+                    style={styles.locationButton}
+                    onPress={() => setShowVillageModal(true)}>
+                    <Text style={[
+                      styles.locationButtonText,
+                      !selectedVillage && styles.placeholderText
+                    ]}>
+                      {selectedVillage ? selectedVillage.name : "Seleccionar vereda"}
+                    </Text>
+                    <Icon name="keyboard-arrow-down" size={24} color="#666" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Contraseña</Text>
-                <TextInput
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="********"
-                  secureTextEntry
-                  placeholderTextColor="#999"
-                />
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="********"
+                    secureTextEntry={!showPassword}
+                    placeholderTextColor="#999"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.passwordToggle}>
+                    <Icon
+                      name={showPassword ? "visibility-off" : "visibility"}
+                      size={24}
+                      color="#666"
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Confirmar contraseña</Text>
-                <TextInput
-                  style={styles.input}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  placeholder="********"
-                  secureTextEntry
-                  placeholderTextColor="#999"
-                />
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    placeholder="********"
+                    secureTextEntry={!showConfirmPassword}
+                    placeholderTextColor="#999"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={styles.passwordToggle}>
+                    <Icon
+                      name={
+                        showConfirmPassword ? "visibility-off" : "visibility"
+                      }
+                      size={24}
+                      color="#666"
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={role}
-                  onValueChange={(itemValue) => {
-                    console.log("Rol seleccionado:", itemValue);
-                    setRole(itemValue);
-                  }}
-                  style={styles.picker}
-                  dropdownIconColor="#284F66">
-                  <Picker.Item
-                    label="Selecciona tu perfil"
-                    value=""
-                    style={styles.pickerPlaceholder}
-                  />
-                  {availableRoles.map((roleItem, index) => (
-                    <Picker.Item
-                      key={roleItem.value || `role-${index}`}
-                      label={roleItem.title || `Perfil ${index + 1}`}
-                      value={roleItem.value || `role-${index}`}
-                      style={styles.pickerItem}
-                    />
-                  ))}
-                </Picker>
-              </View>
+              <CustomPicker
+                selectedValue={role}
+                onValueChange={setRole}
+                options={availableRoles}
+                placeholder="Selecciona tu perfil"
+                label="Perfil*"
+              />
 
               {shouldShowOrganizationSelector(role) && (
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Organización</Text>
-                  <View style={styles.pickerContainer}>
-                    <Picker
-                      selectedValue={organization}
-                      onValueChange={(itemValue) => setOrganization(itemValue)}
-                      style={styles.picker}
-                      dropdownIconColor="#284F66">
-                      <Picker.Item
-                        label="Selecciona una organización"
-                        value=""
-                        style={styles.pickerItem}
-                      />
-                      {ORGANIZATION_OPTIONS.map((org) => (
-                        <Picker.Item
-                          key={org.value}
-                          label={org.title}
-                          value={org.value}
-                          style={styles.pickerItem}
-                        />
-                      ))}
-                    </Picker>
-                  </View>
-                </View>
+                <CustomPicker
+                  selectedValue={organization}
+                  onValueChange={setOrganization}
+                  options={ORGANIZATION_OPTIONS}
+                  placeholder="Selecciona una organización"
+                  label="Organización"
+                />
               )}
 
               <TouchableOpacity
@@ -960,6 +1007,44 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
           </View>
         </ScrollView>
 
+        {/* Modales de ubicación */}
+        <LocationModal
+          visible={showCountryModal}
+          onClose={() => setShowCountryModal(false)}
+          title="Seleccionar País"
+          data={countries}
+          onSelect={(item) => handleLocationSelect("country", item)}
+          loading={false}
+        />
+
+        <LocationModal
+          visible={showDepartmentModal}
+          onClose={() => setShowDepartmentModal(false)}
+          title="Seleccionar Departamento"
+          data={departments}
+          onSelect={(item) => handleLocationSelect("department", item)}
+          loading={loadingLocationData}
+        />
+
+        <LocationModal
+          visible={showMunicipalityModal}
+          onClose={() => setShowMunicipalityModal(false)}
+          title="Seleccionar Municipio"
+          data={municipalities}
+          onSelect={(item) => handleLocationSelect("municipality", item)}
+          loading={loadingLocationData}
+        />
+
+        <LocationModal
+          visible={showVillageModal}
+          onClose={() => setShowVillageModal(false)}
+          title="Seleccionar Vereda"
+          data={villages}
+          onSelect={(item) => handleLocationSelect("village", item)}
+          loading={loadingLocationData}
+        />
+
+        {/* Modal de verificación */}
         <Modal
           visible={showVerificationModal}
           animationType="fade"
@@ -968,7 +1053,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
           onRequestClose={() => setShowVerificationModal(false)}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              {/* Header with brand-colored icon */}
               <View style={{ alignItems: "center", marginBottom: 16 }}>
                 <Icon name="verified-user" size={48} color="#284F66" />
               </View>
@@ -981,7 +1065,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
 
               <Text style={styles.modalEmail}>{registeredEmail}</Text>
 
-              {/* Enhanced code input */}
               <TextInput
                 style={styles.codeInput}
                 value={verificationCode}
@@ -1025,150 +1108,351 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
                 </Text>
               </TouchableOpacity>
 
-              {/* Timer indicator for code expiration */}
               <Text style={{ color: "#777", fontSize: 12, marginTop: 8 }}>
                 El código expirará en 15 minutos
               </Text>
             </View>
           </View>
         </Modal>
+
+        {/* Modal de términos */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showTermsModal}
+          onRequestClose={() => setShowTermsModal(false)}>
+          <View style={styles.fullScreenModal}>
+            <View style={styles.newModalContainer}>
+              <View style={styles.newModalHeader}>
+                <View style={styles.headerTitleContainer}>
+                  <Icon
+                    name="agriculture"
+                    size={24}
+                    color="#fff"
+                    style={styles.headerIcon}
+                  />
+                  <Text style={styles.newModalTitle}>
+                    Términos y Condiciones
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowTermsModal(false)}
+                  style={styles.newCloseButton}>
+                  <Icon name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                style={styles.newModalScroll}
+                showsVerticalScrollIndicator={false}>
+                <View style={styles.documentContainer}>
+                  <Text style={styles.documentTitle}>
+                    TÉRMINOS Y CONDICIONES DE USO
+                  </Text>
+
+                  <Text style={styles.lastUpdated}>
+                    Última actualización: 29 de mayo, 2025
+                  </Text>
+
+                  <Text style={styles.documentIntro}>
+                    Bienvenido a{" "}
+                    <Text style={styles.brandName}>Jornaleando</Text>, una
+                    plataforma digital que conecta a{" "}
+                    <Text style={styles.highlight}>productores agrícolas</Text>{" "}
+                    y <Text style={styles.highlight}>trabajadores rurales</Text>{" "}
+                    para facilitar la oferta y demanda de trabajo en cultivos
+                    como sacha inchi, miel y cacao.
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>1. Aceptación</Text>
+                  <Text style={styles.sectionContent}>
+                    Al registrarte y utilizar la aplicación, aceptas los
+                    presentes Términos y Condiciones. Si no estás de acuerdo con
+                    ellos, no utilices la plataforma.
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>
+                    2. Uso de la Plataforma
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • <Text style={styles.highlight}>Productores</Text> pueden
+                    crear publicaciones para contratar jornaleros.
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • <Text style={styles.highlight}>Trabajadores</Text> pueden
+                    postular a trabajos disponibles en su zona.
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • La app solo se debe usar para fines lícitos y relacionados
+                    con el objetivo de Jornaleando.
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>
+                    3. Registro de Usuario
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Debes proporcionar información veraz, actualizada y
+                    completa.
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Jornaleando se reserva el derecho de suspender o eliminar
+                    cuentas que incumplan las normas.
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>
+                    4. Responsabilidad de las Partes
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Jornaleando actúa como{" "}
+                    <Text style={styles.highlight}>intermediario</Text> entre
+                    las partes, pero no garantiza la contratación ni la calidad
+                    del servicio entre productor y trabajador.
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Los acuerdos laborales y pagos son responsabilidad directa
+                    entre ambas partes.
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>
+                    5. Comportamiento Prohibido
+                  </Text>
+                  <Text style={styles.sectionContent}>Está prohibido:</Text>
+                  <Text style={styles.bulletPoint}>
+                    • Usar datos falsos o suplantar identidad.
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Publicar contenido ofensivo o discriminatorio.
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Utilizar la plataforma con fines ajenos al trabajo
+                    agrícola.
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>
+                    6. Suspensión y Terminación
+                  </Text>
+                  <Text style={styles.sectionContent}>
+                    Podemos suspender o eliminar cuentas que infrinjan estos
+                    términos, sin previo aviso.
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>
+                    7. Cambios a los Términos
+                  </Text>
+                  <Text style={styles.sectionContent}>
+                    Podemos modificar estos términos en cualquier momento. Te
+                    notificaremos por la app o correo electrónico.
+                  </Text>
+                </View>
+              </ScrollView>
+
+              <View style={styles.newModalFooter}>
+                <TouchableOpacity
+                  style={styles.newAcceptButton}
+                  onPress={() => setShowTermsModal(false)}>
+                  <Text style={styles.newAcceptButtonText}>
+                    Aceptar y Continuar
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Modal de privacidad */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showPrivacyModal}
+          onRequestClose={() => setShowPrivacyModal(false)}>
+          <View style={styles.fullScreenModal}>
+            <View style={styles.newModalContainer}>
+              <View style={styles.newModalHeader}>
+                <View style={styles.headerTitleContainer}>
+                  <Icon
+                    name="security"
+                    size={24}
+                    color="#fff"
+                    style={styles.headerIcon}
+                  />
+                  <Text style={styles.newModalTitle}>
+                    Política de Privacidad
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowPrivacyModal(false)}
+                  style={styles.newCloseButton}>
+                  <Icon name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                style={styles.newModalScroll}
+                showsVerticalScrollIndicator={false}>
+                <View style={styles.documentContainer}>
+                  <Text style={styles.documentTitle}>
+                    POLÍTICA DE PRIVACIDAD
+                  </Text>
+
+                  <Text style={styles.lastUpdated}>
+                    Última actualización: 29 de mayo, 2025
+                  </Text>
+
+                  <Text style={styles.documentIntro}>
+                    En <Text style={styles.brandName}>Jornaleando</Text>, tu
+                    privacidad es muy importante para nosotros. Esta política
+                    explica qué datos recolectamos y cómo los usamos.
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>
+                    1. Información que recopilamos
+                  </Text>
+                  <Text style={styles.sectionContent}>
+                    Recopilamos información como:
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Datos personales (nombre, DNI, ubicación, correo, número
+                    de celular)
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Información del perfil (tipo de usuario: productor o
+                    trabajador)
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Ubicación geográfica (para mostrar trabajos cercanos)
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Actividad en la app (postulaciones, publicaciones,
+                    calificaciones)
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>
+                    2. Uso de la información
+                  </Text>
+                  <Text style={styles.sectionContent}>
+                    Utilizamos los datos para:
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Facilitar la conexión entre productores y trabajadores.
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Mejorar el funcionamiento de la app.
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Enviar notificaciones importantes sobre tu actividad.
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>
+                    3. Compartición de datos
+                  </Text>
+                  <Text style={styles.sectionContent}>
+                    No vendemos tus datos. Solo los compartimos cuando es
+                    necesario para el funcionamiento del servicio (por ejemplo,
+                    mostrar tu perfil en una oferta laboral).
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>4. Seguridad</Text>
+                  <Text style={styles.sectionContent}>
+                    Implementamos medidas técnicas y organizativas para proteger
+                    tu información.
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>
+                    5. Derechos del usuario
+                  </Text>
+                  <Text style={styles.sectionContent}>Tienes derecho a:</Text>
+                  <Text style={styles.bulletPoint}>
+                    • Acceder, actualizar o eliminar tu información personal.
+                  </Text>
+                  <Text style={styles.bulletPoint}>
+                    • Retirar tu consentimiento y cerrar tu cuenta en cualquier
+                    momento.
+                  </Text>
+
+                  <Text style={styles.sectionTitle}>6. Contacto</Text>
+                  <Text style={styles.sectionContent}>
+                    Para consultas sobre privacidad, puedes escribirnos a:{" "}
+                    <Text style={styles.highlight}>
+                      jornaleando.arauca@gmail.com
+                    </Text>
+                  </Text>
+                </View>
+              </ScrollView>
+
+              <View style={styles.newModalFooter}>
+                <TouchableOpacity
+                  style={styles.newAcceptButton}
+                  onPress={() => setShowPrivacyModal(false)}>
+                  <Text style={styles.newAcceptButtonText}>
+                    Aceptar y Continuar
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Modal de éxito */}
+        <Modal
+          visible={showSuccessModal}
+          animationType="fade"
+          transparent={true}
+          statusBarTranslucent={true}
+          onRequestClose={() => setShowSuccessModal(false)}>
+          <View style={styles.successModalOverlay}>
+            <View style={styles.successModalContent}>
+              <View style={styles.successIconContainer}>
+                <View style={styles.successIconCircle}>
+                  <Icon name="check" size={40} color="#fff" />
+                </View>
+                <View style={[styles.decorativeCircle, styles.circle1]} />
+                <View style={[styles.decorativeCircle, styles.circle2]} />
+                <View style={[styles.decorativeCircle, styles.circle3]} />
+              </View>
+
+              <Text style={styles.successTitle}>¡Cuenta Verificada!</Text>
+              <Text style={styles.successMessage}>
+                Tu cuenta ha sido verificada exitosamente.{"\n"}
+                Ya puedes iniciar sesión y comenzar a usar Jornaleando.
+              </Text>
+
+              <View style={styles.benefitsContainer}>
+                <View style={styles.benefitItem}>
+                  <Icon name="work" size={24} color="#284F66" />
+                  <Text style={styles.benefitText}>Encuentra trabajo</Text>
+                </View>
+                <View style={styles.benefitItem}>
+                  <Icon name="people" size={24} color="#284F66" />
+                  <Text style={styles.benefitText}>Conecta con otros</Text>
+                </View>
+                <View style={styles.benefitItem}>
+                  <Icon name="star" size={24} color="#284F66" />
+                  <Text style={styles.benefitText}>Califica y opina</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.continueButton}
+                onPress={() => {
+                  setShowSuccessModal(false);
+                  navigation.navigate("Login");
+                }}>
+                <Text style={styles.continueButtonText}>Continuar a Login</Text>
+                <Icon
+                  name="arrow-forward"
+                  size={20}
+                  color="#fff"
+                  style={{ marginLeft: 8 }}
+                />
+              </TouchableOpacity>
+
+              <Text style={styles.welcomeText}>
+                ¡Bienvenido a la comunidad de Jornaleando!
+              </Text>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showTermsModal}
-        onRequestClose={() => setShowTermsModal(false)}>
-        <View style={styles.modalContainer}>
-          <View style={styles.termsModalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.termsModalTitle}>Términos de servicio</Text>
-              <TouchableOpacity
-                onPress={() => setShowTermsModal(false)}
-                style={styles.closeButton}>
-                <Icon name="close" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalScroll}>
-              <Text style={styles.modalText}>
-                {`1. Aceptación de los términos
-
-Al acceder y utilizar esta aplicación, aceptas estar sujeto a estos términos de servicio.
-
-2. Uso de la aplicación
-
-La aplicación está diseñada para la gestión de fincas y empleados agrícolas.
-
-3. Cuenta de usuario
-
-Eres responsable de mantener la confidencialidad de tu cuenta y contraseña.
-
-4. Contenido del usuario
-
-Eres el único responsable del contenido que publicas a través de la aplicación.
-
-5. Privacidad
-
-Tu uso de nuestra aplicación está también regido por nuestra Política de Privacidad.
-
-6. Modificaciones
-
-Nos reservamos el derecho de modificar estos términos en cualquier momento.
-
-7. Terminación
-
-Podemos terminar o suspender tu cuenta en cualquier momento.
-
-8. Limitación de responsabilidad
-
-La aplicación se proporciona "tal cual" sin garantías de ningún tipo.
-
-9. Ley aplicable
-
-Estos términos se regirán por las leyes de Colombia.
-
-10. Contacto
-
-Si tienes preguntas sobre estos términos, contáctanos en info@agroapp.com`}
-              </Text>
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => setShowTermsModal(false)}>
-              <Text style={styles.modalButtonText}>Aceptar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showPrivacyModal}
-        onRequestClose={() => setShowPrivacyModal(false)}>
-        <View style={styles.modalContainer}>
-          <View style={styles.termsModalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.termsModalTitle}>Política de privacidad</Text>
-              <TouchableOpacity
-                onPress={() => setShowPrivacyModal(false)}
-                style={styles.closeButton}>
-                <Icon name="close" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalScroll}>
-              <Text style={styles.modalText}>
-                {`1. Información que recopilamos
-
-Recopilamos información que nos proporcionas directamente, como tu nombre, email, y datos de la finca.
-
-2. Cómo usamos la información
-
-Utilizamos la información para:
-- Proporcionar y mantener nuestros servicios
-- Comunicarnos contigo
-- Mejorar nuestros servicios
-
-3. Compartir información
-
-No vendemos ni alquilamos tu información personal a terceros.
-
-4. Seguridad de los datos
-
-Implementamos medidas de seguridad para proteger tu información.
-
-5. Retención de datos
-
-Conservamos tu información mientras tu cuenta esté activa.
-
-6. Tus derechos
-
-Tienes derecho a acceder, actualizar o eliminar tu información personal.
-
-7. Cookies
-
-Utilizamos cookies para mejorar tu experiencia en la aplicación.
-
-8. Cambios en la política
-
-Podemos actualizar esta política periódicamente.
-
-9. Menores de edad
-
-No recopilamos intencionalmente información de menores de 13 años.
-
-10. Contacto
-
-Si tienes preguntas sobre esta política, contáctanos en privacy@agroapp.com`}
-              </Text>
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => setShowPrivacyModal(false)}>
-              <Text style={styles.modalButtonText}>Aceptar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 };
@@ -1183,8 +1467,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 30,
+    paddingHorizontal: 25,
+    paddingTop: 20,
   },
   headerContainer: {
     marginBottom: 30,
@@ -1212,6 +1496,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginBottom: 8,
+    fontWeight: "500",
   },
   input: {
     borderWidth: 1,
@@ -1221,35 +1506,120 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     color: "#333",
+    backgroundColor: "#fff",
   },
-  pickerContainer: {
+  passwordInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: "#E0E0E0",
     borderRadius: 8,
+    backgroundColor: "#fff",
     overflow: "hidden",
   },
-  picker: {
-    height: 50,
-    paddingHorizontal: 10,
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#333",
   },
-  phoneContainer: {
+  passwordToggle: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  customPickerButton: {
     flexDirection: "row",
-    gap: 10,
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#fff",
+    minHeight: 48,
   },
-  countryCodePicker: {
-    width: 140,
-  },
-  phoneInput: {
+  customPickerText: {
+    fontSize: 16,
+    color: "#333",
     flex: 1,
   },
-  helperText: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 4,
-    marginLeft: 4,
+  placeholderText: {
+    color: "#999",
   },
-  loader: {
+  // ✅ AGREGADO: Estilos para botones de ubicación
+  locationButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#fff",
+    minHeight: 48,
+  },
+  locationButtonText: {
+    fontSize: 16,
+    color: "#333",
+    flex: 1,
+  },
+  pickerModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pickerModalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    maxHeight: "70%",
+    width: "90%",
+    maxWidth: 400,
+    overflow: "hidden",
+  },
+  pickerModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
     paddingVertical: 15,
+    backgroundColor: "#f8f9fa",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+  },
+  pickerModalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#284F66",
+  },
+  pickerCloseButton: {
+    padding: 5,
+  },
+  pickerOption: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  selectedOption: {
+    backgroundColor: "#E8F4F8",
+  },
+  pickerOptionText: {
+    fontSize: 16,
+    color: "#333",
+    flex: 1,
+  },
+  selectedOptionText: {
+    color: "#284F66",
+    fontWeight: "600",
   },
   registerButton: {
     backgroundColor: "#284F66",
@@ -1304,15 +1674,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 20,
   },
-  loginText: {
-    color: "#666",
-    fontSize: 14,
-  },
-  loginLink: {
-    color: "#2196F3",
-    fontSize: 14,
-    fontWeight: "bold",
-  },
   termsContainer: {
     marginBottom: 30,
   },
@@ -1327,7 +1688,6 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
     fontWeight: "bold",
   },
-
   signupText: {
     color: "#284F66",
     fontSize: 14,
@@ -1336,21 +1696,119 @@ const styles = StyleSheet.create({
     color: "#284F66",
     fontWeight: "bold",
   },
-  modalContainer: {
+  fullScreenModal: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
   },
-
-  modalHeader: {
+  newModalContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+    marginTop: 50,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  newModalHeader: {
+    backgroundColor: "#284F66",
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 15,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  headerTitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  headerIcon: {
+    marginRight: 12,
+  },
+  newModalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  newCloseButton: {
+    padding: 5,
+  },
+  newModalScroll: {
+    flex: 1,
+  },
+  documentContainer: {
+    padding: 20,
+  },
+  documentTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#284F66",
+    textAlign: "center",
+    marginBottom: 15,
+  },
+  lastUpdated: {
+    fontSize: 12,
+    color: "#666",
+    fontStyle: "italic",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  documentIntro: {
+    fontSize: 16,
+    color: "#333",
+    lineHeight: 24,
+    marginBottom: 25,
+    textAlign: "justify",
+  },
+  brandName: {
+    fontWeight: "bold",
+    color: "#284F66",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#284F66",
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  sectionContent: {
+    fontSize: 16,
+    color: "#333",
+    lineHeight: 22,
+    marginBottom: 10,
+  },
+  bulletPoint: {
+    fontSize: 16,
+    color: "#333",
+    lineHeight: 22,
+    marginBottom: 8,
+    marginLeft: 10,
+  },
+  highlight: {
+    fontWeight: "600",
+    color: "#284F66",
+  },
+  newModalFooter: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#E8E8E8",
+  },
+  newAcceptButton: {
+    backgroundColor: "#284F66",
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  newAcceptButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
   },
   modalOverlay: {
     flex: 1,
@@ -1460,30 +1918,333 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     textDecorationLine: "underline",
   },
-  closeButton: {
-    padding: 5,
-  },
-  modalScroll: {
-    maxHeight: 400,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  modalText: {
-    fontSize: 14,
-    color: "#333",
-    lineHeight: 22,
-  },
-  modalButton: {
-    backgroundColor: "#284F66",
-    marginHorizontal: 20,
-    marginVertical: 15,
-    paddingVertical: 12,
-    borderRadius: 8,
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    justifyContent: "center",
     alignItems: "center",
   },
-  modalButtonText: {
+  successModalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 30,
+    width: "90%",
+    maxWidth: 400,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  successIconContainer: {
+    position: "relative",
+    marginBottom: 25,
+    alignItems: "center",
+    justifyContent: "center",
+    width: 120,
+    height: 120,
+  },
+  successIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#284F66",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#284F70",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 15,
+    elevation: 10,
+    zIndex: 2,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 25,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+    backgroundColor: "#f8fafc",
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+  },
+  modalTitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  decorativeCircle: {
+    position: "absolute",
+    borderRadius: 50,
+    opacity: 0.3,
+  },
+  circle1: {
+    width: 30,
+    height: 30,
+    backgroundColor: "#284F66",
+    top: 10,
+    right: 5,
+    zIndex: 1,
+  },
+  circle2: {
+    width: 20,
+    height: 20,
+    backgroundColor: "#284F54",
+    bottom: 15,
+    left: 10,
+    zIndex: 1,
+  },
+  circle3: {
+    width: 25,
+    height: 25,
+    backgroundColor: "#284F80",
+    top: 30,
+    left: -5,
+    zIndex: 1,
+  },
+  successTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#284F66",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  successMessage: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 24,
+    marginBottom: 25,
+  },
+  benefitsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    width: "100%",
+    marginBottom: 30,
+    paddingHorizontal: 10,
+  },
+  benefitItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  benefitText: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 5,
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  continueButton: {
+    backgroundColor: "#284F66",
+    paddingVertical: 16,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+    minWidth: 200,
+    shadowColor: "#284F60",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  continueButtonText: {
     color: "#fff",
     fontSize: 16,
+    fontWeight: "bold",
+  },
+  welcomeText: {
+    fontSize: 14,
+    color: "#284F90",
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  // ✅ NUEVOS ESTILOS MEJORADOS PARA MODALES DE UBICACIÓN
+  locationModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "flex-end",
+  },
+  locationModalContainer: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "85%",
+    minHeight: "50%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  modalHandleContainer: {
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#d1d5db",
+    borderRadius: 2,
+  },
+  locationModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f4f8",
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  locationModalHeaderContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  locationHeaderIcon: {
+    marginRight: 12,
+    backgroundColor: "#f0f4f8",
+    padding: 8,
+    borderRadius: 8,
+  },
+  locationModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#284F66",
+    flex: 1,
+  },
+  locationModalCloseButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "#f8f9fa",
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  locationModalContent: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  locationModalList: {
+    flex: 1,
+    paddingHorizontal: 4,
+  },
+  locationModalItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginHorizontal: 12,
+    marginVertical: 2,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#f0f4f8",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  locationModalItemLast: {
+    marginBottom: 20,
+  },
+  locationModalItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  locationModalItemIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#f0f4f8",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  locationModalItemText: {
+    fontSize: 16,
+    color: "#374151",
+    fontWeight: "500",
+    flex: 1,
+  },
+  locationModalItemArrow: {
+    padding: 4,
+  },
+  // Estados de carga y vacío mejorados
+  locationLoadingState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  loadingIndicatorContainer: {
+    marginBottom: 24,
+  },
+  locationLoadingText: {
+    fontSize: 18,
+    color: "#284F66",
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  locationLoadingSubtext: {
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  locationEmptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyStateIconContainer: {
+    marginBottom: 24,
+    opacity: 0.7,
+  },
+  locationEmptyStateTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#374151",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  locationEmptyStateText: {
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: "#284F66",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 14,
     fontWeight: "600",
   },
 });

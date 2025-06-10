@@ -5,7 +5,7 @@ const SplashScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Paso Colombia</Text>
+        <Text style={styles.title}>Jornaleando</Text>
         <ActivityIndicator size="large" color="#007AFF" style={styles.loader} />
         <Text style={styles.loadingText}>Cargando...</Text>
       </View>

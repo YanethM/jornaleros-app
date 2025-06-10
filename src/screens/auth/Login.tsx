@@ -11,12 +11,15 @@ import {
   ScrollView,
   Alert,
   Image,
+  Modal,
+  ActivityIndicator,
 } from "react-native";
 import { LoginNavigationProp } from "../../navigation/types";
-import { login } from "../../services/authService";
+import { login, resendVerificationCode } from "../../services/authService";
 import { checkStoredData } from "../../utils/storage";
 import { useAuth } from "../../context/AuthContext";
 import CustomHeaderNoAuth from "../../components/CustomHeaderNoAuth";
+import Icon from "react-native-vector-icons/MaterialIcons";
 
 interface LoginScreenProps {
   navigation: LoginNavigationProp;
@@ -24,12 +27,23 @@ interface LoginScreenProps {
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const handleSignupPress = () => {
-    console.log("Navigating to Signup"); // Añade esto
+    console.log("Navigating to Signup");
     navigation.navigate("Signup");
   };
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Estados para modal de verificación (solo mantenemos este)
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [showVerificationSuccessModal, setShowVerificationSuccessModal] = useState(false);
+  
+  // Estados para formulario de verificación
+  const [verificationEmail, setVerificationEmail] = useState("");
+  const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
+
   const { signIn } = useAuth();
 
   const handleLogin = async () => {
@@ -43,20 +57,71 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       const result = await login({ email, password });
       
       if (result.success) {
-        console.log("Login result:", result); // Para debugging
+        console.log("Login result:", result);
         console.log("User data from login:", result.data); 
         await signIn(result.data);
       } else {
-        Alert.alert("Error", result.message);
+        // Verificar si el error es por cuenta no verificada
+        if (result.message?.toLowerCase().includes('verificad') || 
+            result.message?.toLowerCase().includes('verif')) {
+          setVerificationEmail(email);
+          setShowVerificationModal(true);
+        } else {
+          Alert.alert("Error", result.message);
+        }
       }
     } catch (error) {
       console.error("Error en login:", error);
-      Alert.alert("Error", "Error de conexión");
+      
+      // Manejar errores específicos
+      if (error.response?.data?.message?.toLowerCase().includes('verificad')) {
+        setVerificationEmail(email);
+        setShowVerificationModal(true);
+      } else {
+        Alert.alert("Error", "Error de conexión");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ✅ Navegación a pantalla de recuperación completa
+  const handleForgotPassword = () => {
+    navigation.navigate("PasswordReset");
+  };
+
+  // ✅ Implementación de reenvío de código de verificación
+  const handleResendVerification = async () => {
+    if (!verificationEmail) {
+      Alert.alert("Error", "Por favor ingresa tu correo electrónico");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(verificationEmail)) {
+      Alert.alert("Error", "Por favor ingresa un correo electrónico válido");
+      return;
+    }
+
+    setIsSubmittingVerification(true);
+    try {
+      const response = await resendVerificationCode(verificationEmail);
+      
+      if (response.success) {
+        setIsSubmittingVerification(false);
+        setShowVerificationModal(false);
+        setShowVerificationSuccessModal(true);
+        setVerificationEmail("");
+      } else {
+        setIsSubmittingVerification(false);
+        Alert.alert("Error", response.message || "No se pudo reenviar el código");
+      }
+    } catch (error) {
+      setIsSubmittingVerification(false);
+      console.error("Error reenviando código:", error);
+      Alert.alert("Error", "No se pudo reenviar el código de verificación");
+    }
+  };
 
   useEffect(() => {
     checkStoredData();
@@ -91,23 +156,51 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                 />
               </View>
 
+              {/* ✅ Campo de contraseña con toggle de visibilidad */}
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Contraseña</Text>
-                <TextInput
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="********"
-                  secureTextEntry
-                  placeholderTextColor="#999"
-                />
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="********"
+                    secureTextEntry={!showPassword}
+                    placeholderTextColor="#999"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(!showPassword)}
+                    style={styles.passwordToggle}
+                  >
+                    <Icon
+                      name={showPassword ? "visibility-off" : "visibility"}
+                      size={24}
+                      color="#666"
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              <TouchableOpacity style={styles.forgotPassword}>
-                <Text style={styles.forgotPasswordText}>
-                  ¿Olvidaste tu contraseña?
-                </Text>
-              </TouchableOpacity>
+              {/* ✅ Enlaces mejorados */}
+              <View style={styles.linksContainer}>
+                <TouchableOpacity 
+                  style={styles.forgotPassword}
+                  onPress={handleForgotPassword}
+                >
+                  <Text style={styles.forgotPasswordText}>
+                    ¿Olvidaste tu contraseña?
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.verificationLink}
+                  onPress={() => setShowVerificationModal(true)}
+                >
+                  <Text style={styles.verificationLinkText}>
+                    ¿No has verificado tu cuenta?
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
               <TouchableOpacity
                 style={[styles.loginButton, isLoading && styles.disabledButton]}
@@ -145,6 +238,96 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             </View>
           </View>
         </ScrollView>
+
+        {/* ✅ Solo modal de verificación de cuenta (simplificado) */}
+        <Modal
+          visible={showVerificationModal}
+          animationType="fade"
+          transparent={true}
+          statusBarTranslucent={true}
+          onRequestClose={() => setShowVerificationModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalIconContainer}>
+                <Icon name="mark-email-unread" size={48} color="#2196F3" />
+              </View>
+
+              <Text style={styles.modalTitle}>Verificar Cuenta</Text>
+              <Text style={styles.modalDescription}>
+                Tu cuenta aún no ha sido verificada. Ingresa tu correo para reenviar el código de verificación.
+              </Text>
+
+              <View style={styles.modalInputContainer}>
+                <Text style={styles.modalLabel}>Correo electrónico</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={verificationEmail}
+                  onChangeText={setVerificationEmail}
+                  placeholder="ejemplo@correo.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.primaryButton, isSubmittingVerification && styles.disabledButton]}
+                  onPress={handleResendVerification}
+                  disabled={isSubmittingVerification}>
+                  {isSubmittingVerification ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Reenviar Código</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => {
+                    setShowVerificationModal(false);
+                    setVerificationEmail("");
+                  }}
+                  disabled={isSubmittingVerification}>
+                  <Text style={styles.secondaryButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* ✅ Modal de éxito - Verificación reenviada */}
+        <Modal
+          visible={showVerificationSuccessModal}
+          animationType="fade"
+          transparent={true}
+          statusBarTranslucent={true}
+          onRequestClose={() => setShowVerificationSuccessModal(false)}>
+          <View style={styles.successModalOverlay}>
+            <View style={styles.successModalContent}>
+              <View style={styles.successIconContainer}>
+                <View style={[styles.successIconCircle, { backgroundColor: "#2196F3" }]}>
+                  <Icon name="send" size={40} color="#fff" />
+                </View>
+              </View>
+
+              <Text style={styles.successTitle}>¡Código Reenviado!</Text>
+              <Text style={styles.successMessage}>
+                Hemos enviado un nuevo código de verificación a tu correo electrónico.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.successButton, { backgroundColor: "#2196F3" }]}
+                onPress={() => setShowVerificationSuccessModal(false)}>
+                <Text style={styles.successButtonText}>Entendido</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.successNote}>
+                El código expirará en 15 minutos
+              </Text>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </View>
   );
@@ -191,6 +374,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginBottom: 8,
+    fontWeight: "500",
   },
   input: {
     borderWidth: 1,
@@ -200,13 +384,48 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     color: "#333",
+    backgroundColor: "#fff",
+  },
+  passwordInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#333",
+  },
+  passwordToggle: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  linksContainer: {
+    marginBottom: 30,
   },
   forgotPassword: {
     alignSelf: "flex-end",
-    marginBottom: 30,
+    marginBottom: 10,
   },
   forgotPasswordText: {
     color: "#284F66",
+    fontSize: 14,
+    fontWeight: "500",
+    textDecorationLine: "underline",
+  },
+  verificationLink: {
+    alignSelf: "flex-end",
+  },
+  verificationLinkText: {
+    color: "#FF9800",
     fontSize: 14,
     fontWeight: "500",
     textDecorationLine: "underline",
@@ -273,6 +492,178 @@ const styles = StyleSheet.create({
   signupLink: {
     color: "#284F66",
     fontWeight: "bold",
+  },
+  // Estilos para modales (solo verificación)
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 28,
+    width: "90%",
+    maxWidth: 400,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 12,
+  },
+  modalIconContainer: {
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#284F66",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  modalDescription: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 25,
+    lineHeight: 22,
+  },
+  modalInputContainer: {
+    width: "100%",
+    marginBottom: 25,
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 8,
+    fontWeight: "500",
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#333",
+    backgroundColor: "#fff",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 16,
+    width: "100%",
+  },
+  primaryButton: {
+    backgroundColor: "#284F66",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    flex: 1,
+    alignItems: "center",
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  primaryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  secondaryButton: {
+    backgroundColor: "#f0f0f0",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    flex: 1,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  secondaryButtonText: {
+    color: "#555",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  successModalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 30,
+    width: "90%",
+    maxWidth: 380,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  successIconContainer: {
+    marginBottom: 25,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  successIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#FF9800",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#FF9800",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  successTitle: {
+    fontSize: 26,
+    fontWeight: "bold",
+    color: "#284F66",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  successMessage: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 25,
+  },
+  successButton: {
+    backgroundColor: "#FF9800",
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    borderRadius: 25,
+    alignItems: "center",
+    marginBottom: 15,
+    minWidth: 180,
+    shadowColor: "#FF9800",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  successButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  successNote: {
+    fontSize: 12,
+    color: "#999",
+    textAlign: "center",
+    fontStyle: "italic",
   },
 });
 

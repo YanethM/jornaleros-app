@@ -27,7 +27,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>com.cdi.pasocolombiaapp</string>
+          <string>com.yanethm.PasoColombiaApp</string>
         </array>
       </dict>
       <dict>

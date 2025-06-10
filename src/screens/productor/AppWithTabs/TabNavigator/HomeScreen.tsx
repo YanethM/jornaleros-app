@@ -1,4 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useReducer,
+  useRef,
+} from "react";
 import {
   Text,
   View,
@@ -10,9 +17,15 @@ import {
   RefreshControl,
   TextInput,
   Alert,
+  SafeAreaView,
+  StatusBar,
+  Animated,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from 'expo-linear-gradient';
+
+// Services imports
 import { getUserData } from "../../../../services/userService";
 import { useAuth } from "../../../../context/AuthContext";
 import {
@@ -24,45 +37,180 @@ import { getFarmByemployerId } from "../../../../services/farmService";
 import { getCropType } from "../../../../services/cropTypeService";
 import ScreenLayout from "../../../../components/ScreenLayout";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 
-const COLORS = {
-  background: "#FFFFFF",
-  cardBackground: "#FFFFFF",
-  surface: "#F8FAFC",
-  primary: "#284E66",
-  secondary: "#B6883E",
-  accent: "#009AB3",
-  success: "#51CF66",
-  warning: "#F59E0B",
-  error: "#EF4444",
-  text: "#1A202C",
-  textSecondary: "#4A5568",
-  textLight: "#718096",
-  border: "#E2E8F0",
-  shadow: "#000000",
-  lightBlue: "#E8F1F5",
-  lightGold: "#F5F1E8",
-  lightTurquoise: "#E6F7F9",
-  cream: "#F3F0E8",
+// Enhanced Design System
+const DESIGN_SYSTEM = {
+  colors: {
+    primary: {
+      50: "#f0f4f7",
+      100: "#dae4ea", 
+      500: "#284F66",
+      600: "#1e3d52",
+      700: "#162d3d",
+      900: "#0d1a24",
+    },
+    secondary: {
+      50: "#faf8f3",
+      100: "#f2ebe0",
+      500: "#B5883E",
+      600: "#a07635",
+      700: "#7d5c2a",
+      900: "#4a3719",
+    },
+    accent: {
+      50: "#fef7ed",
+      100: "#fed7aa",
+      500: "#f97316",
+      600: "#ea580c",
+      700: "#c2410c",
+    },
+    gray: {
+      50: "#f8fafc",
+      100: "#f1f5f9",
+      200: "#e2e8f0",
+      300: "#cbd5e1",
+      400: "#94a3b8",
+      500: "#64748b",
+      600: "#475569",
+      700: "#334155",
+      800: "#1e293b",
+      900: "#0f172a",
+    },
+    success: {
+      50: "#f0fdf4",
+      100: "#dcfce7",
+      500: "#22c55e",
+      600: "#16a34a",
+      700: "#15803d",
+    },
+    warning: {
+      50: "#faf8f3",
+      100: "#fef3c7",
+      500: "#B5883E",
+      600: "#a07635",
+    },
+    error: {
+      50: "#fef2f2",
+      100: "#fee2e2",
+      500: "#ef4444",
+      600: "#dc2626",
+    },
+    white: "#ffffff",
+    black: "#000000",
+    overlay: "rgba(0,0,0,0.1)",
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 32,
+    xxl: 48,
+  },
+  borderRadius: {
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 24,
+    full: 9999,
+  },
+  shadows: {
+    sm: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    md: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    lg: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 8,
+    },
+    xl: {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.2,
+      shadowRadius: 16,
+      elevation: 12,
+    },
+  },
+  typography: {
+    h1: { fontSize: 32, fontWeight: "700", lineHeight: 40 },
+    h2: { fontSize: 24, fontWeight: "600", lineHeight: 32 },
+    h3: { fontSize: 20, fontWeight: "600", lineHeight: 28 },
+    h4: { fontSize: 18, fontWeight: "600", lineHeight: 24 },
+    body: { fontSize: 16, fontWeight: "400", lineHeight: 24 },
+    bodyMedium: { fontSize: 14, fontWeight: "500", lineHeight: 20 },
+    caption: { fontSize: 12, fontWeight: "400", lineHeight: 16 },
+    captionMedium: { fontSize: 12, fontWeight: "500", lineHeight: 16 },
+  },
 };
 
-export default function ModernProducerDashboard({ navigation }) {
-  // Estados existentes
-  const [userData, setUserData] = useState(null);
-  const [myJobOffers, setMyJobOffers] = useState([]);
-  const [activeJobOffers, setActiveJobOffers] = useState([]);
-  const [availableWorkers, setAvailableWorkers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
-  const { user } = useAuth();
+// Enhanced crop type configurations
+const CROP_CONFIGS = {
+  Cacao: {
+    gradient: ["#8B4513", "#A0522D"],
+    icon: "leaf-outline",
+    lightColor: "#F5E6D3",
+    darkColor: "#8B4513",
+  },
+  Café: {
+    gradient: ["#6B4423", "#8B4513"],
+    icon: "cafe-outline",
+    lightColor: "#F0E6D2",
+    darkColor: "#6B4423",
+  },
+  Aguacate: {
+    gradient: ["#228B22", "#32CD32"],
+    icon: "nutrition-outline",
+    lightColor: "#F0FFF0",
+    darkColor: "#228B22",
+  },
+  Plátano: {
+    gradient: ["#FFD700", "#FFA500"],
+    icon: "flower-outline",
+    lightColor: "#FFFACD",
+    darkColor: "#FFD700",
+  },
+  Maíz: {
+    gradient: ["#DAA520", "#FFD700"],
+    icon: "storefront-outline",
+    lightColor: "#FFFACD",
+    darkColor: "#DAA520",
+  },
+  Arroz: {
+    gradient: ["#F5DEB3", "#D2B48C"],
+    icon: "grain-outline",
+    lightColor: "#FFF8DC",
+    darkColor: "#D2B48C",
+  },
+};
 
-  // Estados para el sistema de tabs
-  const [activeTab, setActiveTab] = useState("dashboard");
+const TABS = {
+  DASHBOARD: "dashboard",
+  OFFERS: "offers",
+};
 
-  // Estados para estadísticas del dashboard
-  const [dashboardStats, setDashboardStats] = useState({
+// State Management (same as before)
+const initialState = {
+  userData: null,
+  myJobOffers: [],
+  allJobOffers: [],
+  availableWorkers: [],
+  farmsData: [],
+  cropTypes: [],
+  dashboardStats: {
     employerRating: 4.5,
     totalOffers: 0,
     activeOffers: 0,
@@ -73,26 +221,447 @@ export default function ModernProducerDashboard({ navigation }) {
     workersPerFarm: 0,
     offersPerFarm: 0,
     monthlyOffers: 0,
-  });
+  },
+  loading: true,
+  refreshing: false,
+  error: null,
+};
 
-  // Estado para datos de fincas
-  const [farmsData, setFarmsData] = useState([]);
+const actionTypes = {
+  SET_LOADING: "SET_LOADING",
+  SET_REFRESHING: "SET_REFRESHING", 
+  SET_ERROR: "SET_ERROR",
+  SET_USER_DATA: "SET_USER_DATA",
+  SET_JOB_OFFERS: "SET_JOB_OFFERS",
+  SET_ALL_JOB_OFFERS: "SET_ALL_JOB_OFFERS",
+  SET_FARMS_DATA: "SET_FARMS_DATA",
+  SET_CROP_TYPES: "SET_CROP_TYPES",
+  SET_AVAILABLE_WORKERS: "SET_AVAILABLE_WORKERS",
+  SET_DASHBOARD_STATS: "SET_DASHBOARD_STATS",
+  RESET_STATE: "RESET_STATE",
+};
 
-  // Estados para explorar ofertas
-  const [cropTypes, setCropTypes] = useState([]);
-  const [allJobOffers, setAllJobOffers] = useState([]);
-  const [filteredOffers, setFilteredOffers] = useState([]);
-  const [selectedCropType, setSelectedCropType] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState("");
-  const [showMyOffers, setShowMyOffers] = useState(true);
+function dashboardReducer(state, action) {
+  switch (action.type) {
+    case actionTypes.SET_LOADING:
+      return { ...state, loading: action.payload };
+    case actionTypes.SET_REFRESHING:
+      return { ...state, refreshing: action.payload };
+    case actionTypes.SET_ERROR:
+      return { ...state, error: action.payload };
+    case actionTypes.SET_USER_DATA:
+      return { ...state, userData: action.payload };
+    case actionTypes.SET_JOB_OFFERS:
+      return { ...state, myJobOffers: action.payload };
+    case actionTypes.SET_ALL_JOB_OFFERS:
+      return { ...state, allJobOffers: action.payload };
+    case actionTypes.SET_FARMS_DATA:
+      return { ...state, farmsData: action.payload };
+    case actionTypes.SET_CROP_TYPES:
+      return { ...state, cropTypes: action.payload };
+    case actionTypes.SET_AVAILABLE_WORKERS:
+      return { ...state, availableWorkers: action.payload };
+    case actionTypes.SET_DASHBOARD_STATS:
+      return { ...state, dashboardStats: action.payload };
+    case actionTypes.RESET_STATE:
+      return initialState;
+    default:
+      return state;
+  }
+}
 
-  const fetchUserData = async () => {
+// Enhanced Components
+const ModernHeader = React.memo(({ user, onProfilePress }) => (
+  <View style={styles.header}>
+    <StatusBar barStyle="dark-content" backgroundColor={DESIGN_SYSTEM.colors.white} />
+    <LinearGradient
+      colors={[DESIGN_SYSTEM.colors.white, DESIGN_SYSTEM.colors.gray[50]]}
+      style={styles.headerGradient}
+    >
+      <View style={styles.headerContent}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.greetingText}>
+            Hola, <Text style={styles.userName}>{user?.name || "Productor"}</Text>
+          </Text>
+          <Text style={styles.roleText}>
+            <Ionicons name="shield-checkmark" size={14} color={DESIGN_SYSTEM.colors.success[600]} />
+            {" "}{user?.role?.name || "Empleador"} • Panel de Control
+          </Text>
+        </View>
+        <TouchableOpacity style={styles.profileButton} onPress={onProfilePress}>
+          <LinearGradient
+            colors={[DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600]]}
+            style={styles.profileAvatar}
+          >
+            <Text style={styles.profileInitial}>
+              {user?.name?.charAt(0)?.toUpperCase() || "P"}
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    </LinearGradient>
+  </View>
+));
+
+const ModernTabs = React.memo(({ activeTab, setActiveTab }) => (
+  <View style={styles.tabsContainer}>
+    <View style={styles.tabsWrapper}>
+      {Object.values(TABS).map((tab) => {
+        const isActive = activeTab === tab;
+        return (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.tab, isActive && styles.tabActive]}
+            onPress={() => setActiveTab(tab)}
+            activeOpacity={0.7}
+          >
+            {isActive && <View style={styles.tabActiveIndicator} />}
+            <Ionicons
+              name={tab === TABS.DASHBOARD ? "home" : "briefcase"}
+              size={18}
+              color={isActive ? DESIGN_SYSTEM.colors.primary[600] : DESIGN_SYSTEM.colors.gray[500]}
+            />
+            <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+              {tab === TABS.DASHBOARD ? "Dashboard" : "Ofertas"}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  </View>
+));
+
+const EnhancedStatsCard = React.memo(({ title, value, subtitle, icon, color, trend }) => (
+  <View style={styles.enhancedStatsCard}>
+    <LinearGradient
+      colors={[DESIGN_SYSTEM.colors.white, DESIGN_SYSTEM.colors.gray[50]]}
+      style={styles.statsCardGradient}
+    >
+      <View style={styles.statsCardHeader}>
+        <View style={[styles.statsIconContainer, { backgroundColor: color + "15" }]}>
+          <LinearGradient
+            colors={[color + "20", color + "10"]}
+            style={styles.statsIconGradient}
+          >
+            <Ionicons name={icon} size={24} color={color} />
+          </LinearGradient>
+        </View>
+        <View style={styles.statsInfo}>
+          <Text style={styles.statsValue}>{value}</Text>
+          <Text style={styles.statsTitle}>{title}</Text>
+        </View>
+      </View>
+      
+      {subtitle && (
+        <Text style={styles.statsSubtitle}>{subtitle}</Text>
+      )}
+      
+      {trend && (
+        <View style={styles.statsTrend}>
+          <View style={[styles.trendIndicator, { 
+            backgroundColor: trend.direction === "up" ? DESIGN_SYSTEM.colors.success[50] : DESIGN_SYSTEM.colors.error[50] 
+          }]}>
+            <Ionicons 
+              name={trend.direction === "up" ? "trending-up" : "trending-down"} 
+              size={12} 
+              color={trend.direction === "up" ? DESIGN_SYSTEM.colors.success[600] : DESIGN_SYSTEM.colors.error[600]} 
+            />
+          </View>
+          <Text style={[
+            styles.statsTrendText,
+            { color: trend.direction === "up" ? DESIGN_SYSTEM.colors.success[600] : DESIGN_SYSTEM.colors.error[600] }
+          ]}>
+            {trend.text}
+          </Text>
+        </View>
+      )}
+    </LinearGradient>
+  </View>
+));
+
+const EnhancedRatingCard = React.memo(({ rating, totalReviews }) => (
+  <View style={styles.enhancedRatingCard}>
+    <LinearGradient
+      colors={[DESIGN_SYSTEM.colors.secondary[500], DESIGN_SYSTEM.colors.secondary[600], DESIGN_SYSTEM.colors.secondary[700]]}
+      style={styles.ratingGradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
+      <View style={styles.ratingOverlay}>
+        <View style={styles.ratingContent}>
+          <View style={styles.ratingHeader}>
+            <View style={styles.ratingIconContainer}>
+              <Ionicons name="star" size={28} color={DESIGN_SYSTEM.colors.white} />
+            </View>
+            <Text style={styles.ratingTitle}>Mi Calificación</Text>
+          </View>
+          
+          <View style={styles.ratingScore}>
+            <Text style={styles.ratingNumber}>{rating.toFixed(1)}</Text>
+            <View style={styles.ratingStars}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <View key={star} style={styles.starContainer}>
+                  <Ionicons
+                    name={star <= Math.floor(rating) ? "star" : "star-outline"}
+                    size={18}
+                    color={DESIGN_SYSTEM.colors.white}
+                    style={{ opacity: star <= Math.floor(rating) ? 1 : 0.6 }}
+                  />
+                </View>
+              ))}
+            </View>
+          </View>
+          
+          <Text style={styles.ratingSubtext}>
+            Basado en {totalReviews} evaluaciones de trabajadores
+          </Text>
+        </View>
+      </View>
+    </LinearGradient>
+  </View>
+));
+
+const EnhancedQuickActionButton = React.memo(({ title, icon, color, onPress }) => (
+  <TouchableOpacity
+    style={styles.enhancedQuickActionButton}
+    onPress={onPress}
+    activeOpacity={0.8}
+  >
+    <LinearGradient
+      colors={[color, color + "DD", color + "BB"]}
+      style={styles.quickActionGradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
+      <View style={styles.quickActionIconContainer}>
+        <Ionicons name={icon} size={28} color={DESIGN_SYSTEM.colors.white} />
+      </View>
+      <Text style={styles.quickActionText}>{title}</Text>
+      <View style={styles.quickActionArrow}>
+        <Ionicons name="arrow-forward" size={16} color={DESIGN_SYSTEM.colors.white} />
+      </View>
+    </LinearGradient>
+  </TouchableOpacity>
+));
+
+// Enhanced Offer Card - The main improvement
+const EnhancedOfferCard = React.memo(({ offer, onPress, isMyOffer = false }) => {
+  const cropConfig = CROP_CONFIGS[offer.cropType?.name || offer.cropType] || {
+    gradient: [DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600]],
+    icon: "leaf-outline",
+    lightColor: DESIGN_SYSTEM.colors.primary[50],
+    darkColor: DESIGN_SYSTEM.colors.primary[500],
+  };
+
+  const animatedValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(animatedValue, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  return (
+    <Animated.View style={[
+      styles.enhancedOfferCard,
+      isMyOffer && styles.myOfferCard,
+      {
+        opacity: animatedValue,
+        transform: [{
+          translateY: animatedValue.interpolate({
+            inputRange: [0, 1],
+            outputRange: [20, 0],
+          }),
+        }],
+      },
+    ]}>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.9}
+        style={styles.offerCardTouchable}
+      >
+        {/* Background Gradient */}
+        <LinearGradient
+          colors={[DESIGN_SYSTEM.colors.white, DESIGN_SYSTEM.colors.gray[25] || "#fefefe"]}
+          style={styles.offerCardBackground}
+        >
+          {/* Header with crop type and my offer badge */}
+          <View style={styles.enhancedOfferHeader}>
+            <LinearGradient
+              colors={cropConfig.gradient}
+              style={styles.cropTypeHeader}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <View style={styles.cropTypeContent}>
+                <View style={styles.cropIconContainer}>
+                  <Ionicons name={cropConfig.icon} size={20} color={DESIGN_SYSTEM.colors.white} />
+                </View>
+                <Text style={styles.cropTypeText}>
+                  {offer.cropType?.name || offer.cropType}
+                </Text>
+              </View>
+              {isMyOffer && (
+                <View style={styles.myOfferBadgeHeader}>
+                  <Ionicons name="checkmark-circle" size={16} color={DESIGN_SYSTEM.colors.white} />
+                  <Text style={styles.myOfferBadgeHeaderText}>Mi Oferta</Text>
+                </View>
+              )}
+            </LinearGradient>
+          </View>
+
+          {/* Main Content */}
+          <View style={styles.enhancedOfferContent}>
+            {/* Title */}
+            <Text style={styles.enhancedOfferTitle} numberOfLines={2}>
+              {offer.title}
+            </Text>
+
+            {/* Location with enhanced styling */}
+            <View style={styles.enhancedOfferLocation}>
+              <View style={styles.locationIconContainer}>
+                <Ionicons name="location" size={16} color={cropConfig.darkColor} />
+              </View>
+              <Text style={styles.enhancedLocationText}>
+                {offer.displayLocation?.city || offer.city}, {offer.displayLocation?.department || offer.state}
+              </Text>
+            </View>
+
+            {/* Details - Simple Layout */}
+            <View style={styles.enhancedOfferDetails}>
+              <View style={styles.offerDetailItem}>
+                <Ionicons name="calendar-outline" size={16} color={DESIGN_SYSTEM.colors.gray[500]} />
+                <Text style={styles.offerDetailText}>{offer.duration} días</Text>
+              </View>
+              
+              <View style={styles.offerDetailItem}>
+                <Ionicons name="cash-outline" size={16} color={DESIGN_SYSTEM.colors.gray[500]} />
+                <Text style={styles.offerDetailText}>${offer.salary?.toLocaleString()}/día</Text>
+              </View>
+              
+              {isMyOffer && (
+                <View style={styles.offerDetailItem}>
+                  <Ionicons name="people-outline" size={16} color={DESIGN_SYSTEM.colors.gray[500]} />
+                  <Text style={styles.offerDetailText}>{offer.applicationsCount || 0} aplicaciones</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Benefits */}
+            {(offer.includesFood || offer.includesLodging) && (
+              <View style={styles.enhancedOfferBenefits}>
+                <Text style={styles.benefitsTitle}>Beneficios incluidos:</Text>
+                <View style={styles.benefitsContainer}>
+                  {offer.includesFood && (
+                    <View style={styles.enhancedBenefitBadge}>
+                      <LinearGradient
+                        colors={[DESIGN_SYSTEM.colors.success[500], DESIGN_SYSTEM.colors.success[600]]}
+                        style={styles.benefitBadgeGradient}
+                      >
+                        <Ionicons name="restaurant" size={14} color={DESIGN_SYSTEM.colors.white} />
+                        <Text style={styles.enhancedBenefitText}>Comida</Text>
+                      </LinearGradient>
+                    </View>
+                  )}
+                  {offer.includesLodging && (
+                    <View style={styles.enhancedBenefitBadge}>
+                      <LinearGradient
+                        colors={[DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600]]}
+                        style={styles.benefitBadgeGradient}
+                      >
+                        <Ionicons name="home" size={14} color={DESIGN_SYSTEM.colors.white} />
+                        <Text style={styles.enhancedBenefitText}>Hospedaje</Text>
+                      </LinearGradient>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* Footer with action indicator */}
+            <View style={styles.offerCardFooter}>
+              <Text style={styles.offerTimeAgo}>Publicado hace 2 días</Text>
+              <View style={styles.actionIndicator}>
+                <Text style={styles.actionText}>Ver detalles</Text>
+                <Ionicons name="arrow-forward" size={16} color={cropConfig.darkColor} />
+              </View>
+            </View>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
+// Enhanced Search Bar
+const EnhancedSearchBar = React.memo(({ value, onChangeText, placeholder }) => (
+  <View style={styles.enhancedSearchContainer}>
+    <LinearGradient
+      colors={[DESIGN_SYSTEM.colors.white, DESIGN_SYSTEM.colors.gray[50]]}
+      style={styles.searchGradient}
+    >
+      <View style={styles.searchIconContainer}>
+        <Ionicons name="search" size={20} color={DESIGN_SYSTEM.colors.primary[600]} />
+      </View>
+      <TextInput
+        style={styles.enhancedSearchInput}
+        placeholder={placeholder}
+        value={value}
+        onChangeText={onChangeText}
+        placeholderTextColor={DESIGN_SYSTEM.colors.gray[400]}
+      />
+      {value ? (
+        <TouchableOpacity onPress={() => onChangeText('')} style={styles.clearButton}>
+          <Ionicons name="close-circle" size={20} color={DESIGN_SYSTEM.colors.gray[400]} />
+        </TouchableOpacity>
+      ) : null}
+    </LinearGradient>
+  </View>
+));
+
+// Enhanced Filter Chip
+const EnhancedFilterChip = React.memo(({ title, isActive, onPress }) => (
+  <TouchableOpacity
+    style={styles.enhancedFilterChip}
+    onPress={onPress}
+    activeOpacity={0.7}
+  >
+    <LinearGradient
+      colors={isActive 
+        ? [DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600]]
+        : [DESIGN_SYSTEM.colors.white, DESIGN_SYSTEM.colors.gray[50]]
+      }
+      style={styles.filterChipGradient}
+    >
+      <Text style={[styles.enhancedFilterChipText, isActive && styles.filterChipTextActive]}>
+        {title}
+      </Text>
+      {isActive && (
+        <Ionicons name="checkmark" size={16} color={DESIGN_SYSTEM.colors.white} />
+      )}
+    </LinearGradient>
+  </TouchableOpacity>
+));
+
+// Custom Hook (same as before)
+const useEmployerData = (user) => {
+  const [state, dispatch] = useReducer(dashboardReducer, initialState);
+  const isInitializedRef = useRef(false);
+  const userIdRef = useRef(user?.id);
+
+  useEffect(() => {
+    userIdRef.current = user?.id;
+  }, [user?.id]);
+
+  const fetchUserData = useCallback(async () => {
     try {
-      if (!user || !user.id) {
+      if (!userIdRef.current) {
         throw new Error("No hay usuario autenticado");
       }
-      const userData = await getUserData(user.id);
-      setUserData(userData);
+      const userData = await getUserData(userIdRef.current);
+      dispatch({ type: actionTypes.SET_USER_DATA, payload: userData });
       await AsyncStorage.setItem("@user_data", JSON.stringify(userData));
       return userData;
     } catch (error) {
@@ -100,19 +669,20 @@ export default function ModernProducerDashboard({ navigation }) {
       const storedUserData = await AsyncStorage.getItem("@user_data");
       if (storedUserData) {
         const parsedData = JSON.parse(storedUserData);
-        setUserData(parsedData);
+        dispatch({ type: actionTypes.SET_USER_DATA, payload: parsedData });
+        return parsedData;
       }
       throw error;
     }
-  };
+  }, []);
 
-  const getEmployerId = async () => {
+  const getEmployerId = useCallback(async (userData = null) => {
     try {
-      let employerData = userData;
+      let employerData = userData || state.userData;
       if (!employerData) {
         employerData = await fetchUserData();
       }
-      if (!employerData.employerProfile) {
+      if (!employerData?.employerProfile) {
         throw new Error("El usuario no tiene perfil de empleador");
       }
       return employerData.employerProfile.id;
@@ -120,16 +690,15 @@ export default function ModernProducerDashboard({ navigation }) {
       console.error("Error obteniendo ID del empleador:", error);
       throw error;
     }
-  };
+  }, [state.userData, fetchUserData]);
 
-  const loadEmployerFarms = async () => {
+  const loadEmployerFarms = useCallback(async (userData = null) => {
     try {
-      const employerId = await getEmployerId();
+      const employerId = await getEmployerId(userData);
       try {
         const farmsResponse = await getFarmByemployerId(employerId);
-        setFarmsData(farmsResponse?.data || []);
+        dispatch({ type: actionTypes.SET_FARMS_DATA, payload: farmsResponse?.data || [] });
       } catch (apiError) {
-        console.log("Using simulated farms data (API not available)");
         const simulatedFarms = [
           {
             id: "1",
@@ -142,7 +711,7 @@ export default function ModernProducerDashboard({ navigation }) {
             locationString: "Fortul, Arauca, Colombia",
           },
           {
-            id: "2",
+            id: "2", 
             name: "Finca El Progreso",
             size: 18.2,
             plantCount: 850,
@@ -152,1446 +721,1096 @@ export default function ModernProducerDashboard({ navigation }) {
             locationString: "Tame, Arauca, Colombia",
           },
         ];
-        setFarmsData(simulatedFarms);
+        dispatch({ type: actionTypes.SET_FARMS_DATA, payload: simulatedFarms });
       }
     } catch (error) {
       console.error("Error cargando fincas del empleador:", error);
-      setFarmsData([]);
+      dispatch({ type: actionTypes.SET_FARMS_DATA, payload: [] });
     }
-  };
+  }, [getEmployerId]);
 
-  const loadCropTypes = async () => {
+  const loadMyJobOffers = useCallback(async (userData = null) => {
+    try {
+      const employerId = await getEmployerId(userData);
+      const jobOffersData = await getJobOffersByEmployerId(employerId);
+      dispatch({ type: actionTypes.SET_JOB_OFFERS, payload: jobOffersData || [] });
+    } catch (error) {
+      console.error("Error cargando mis ofertas:", error);
+      dispatch({ type: actionTypes.SET_ERROR, payload: error.message });
+    }
+  }, [getEmployerId]);
+
+  const loadAllJobOffers = useCallback(async () => {
+    try {
+      let allOffersData = [];
+      try {
+        allOffersData = await getActiveJobOffersByLoggedEmployerId();
+      } catch (error) {
+        console.error("Error cargando todas las ofertas:", error);
+        allOffersData = [
+          {
+            id: "1",
+            title: "Recolección de Cacao en Finca La Esperanza",
+            cropType: "Cacao",
+            city: "Fortul",
+            state: "Arauca",
+            duration: 15,
+            salary: 50000,
+            includesFood: true,
+            includesLodging: false,
+            applicationsCount: 5,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: "2",
+            title: "Cosecha de Café Orgánico",
+            cropType: "Café",
+            city: "Tame",
+            state: "Arauca",
+            duration: 20,
+            salary: 60000,
+            includesFood: true,
+            includesLodging: true,
+            applicationsCount: 8,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: "3",
+            title: "Mantenimiento de Cultivo de Aguacate",
+            cropType: "Aguacate",
+            city: "Saravena",
+            state: "Arauca",
+            duration: 10,
+            salary: 45000,
+            includesFood: false,
+            includesLodging: false,
+            applicationsCount: 3,
+            createdAt: new Date().toISOString(),
+          },
+        ];
+      }
+      dispatch({ type: actionTypes.SET_ALL_JOB_OFFERS, payload: allOffersData || [] });
+    } catch (error) {
+      console.error("Error cargando todas las ofertas:", error);
+      dispatch({ type: actionTypes.SET_ALL_JOB_OFFERS, payload: [] });
+    }
+  }, []);
+
+  const loadCropTypes = useCallback(async () => {
     try {
       const data = await getCropType();
-      console.log("Crop Types API response:", JSON.stringify(data));
-      if (data && data.success && Array.isArray(data.data)) {
-        setCropTypes(data.data);
-      } else if (data && data.cropTypes && Array.isArray(data.cropTypes)) {
-        // Format with cropTypes property
-        setCropTypes(data.cropTypes);
+      let cropTypesData = [];
+
+      if (data?.success && Array.isArray(data.data)) {
+        cropTypesData = data.data;
+      } else if (data?.cropTypes && Array.isArray(data.cropTypes)) {
+        cropTypesData = data.cropTypes;
       } else if (Array.isArray(data)) {
-        // Direct array format
-        setCropTypes(data);
-      } else {
-        console.error("Unexpected crop types response format:", data);
-        setCropTypes([]);
+        cropTypesData = data;
       }
+
+      dispatch({ type: actionTypes.SET_CROP_TYPES, payload: cropTypesData });
     } catch (error) {
       console.error("Error loading crop types:", error);
-      Alert.alert("Error", "No se pudieron cargar los tipos de cultivo");
-      setCropTypes([]);
+      dispatch({ type: actionTypes.SET_CROP_TYPES, payload: [] });
     }
-  };
+  }, []);
 
-  const loadAllJobOffers = async () => {
+  const loadAvailableWorkers = useCallback(async () => {
     try {
-      // Simulación - reemplazar con endpoint real
-      const employerId = await getEmployerId();
-      // Filtrar ofertas del usuario actual en datos reales
-      setAllJobOffers([]);
-      setFilteredOffers([]);
+      const workers = await getAvailableWorkers();
+      dispatch({ type: actionTypes.SET_AVAILABLE_WORKERS, payload: workers || [] });
     } catch (error) {
-      console.error("Error cargando ofertas de otros productores:", error);
-      setAllJobOffers([]);
-      setFilteredOffers([]);
+      console.error("Error cargando trabajadores:", error);
     }
-  };
+  }, []);
 
-  const filterOffers = () => {
-    let filtered = showMyOffers ? [...myJobOffers] : [...allJobOffers];
+  const loadAllData = useCallback(async (isRefreshing = false) => {
+    try {
+      if (!isRefreshing) {
+        dispatch({ type: actionTypes.SET_LOADING, payload: true });
+      }
+      dispatch({ type: actionTypes.SET_ERROR, payload: null });
+
+      const userData = await fetchUserData();
+      await loadEmployerFarms(userData);
+      await Promise.all([
+        loadAvailableWorkers(),
+        loadCropTypes(),
+        loadMyJobOffers(userData),
+        loadAllJobOffers(),
+      ]);
+    } catch (error) {
+      console.error("Error cargando datos:", error);
+      dispatch({
+        type: actionTypes.SET_ERROR,
+        payload: error.message || "Error al cargar los datos",
+      });
+    } finally {
+      dispatch({ type: actionTypes.SET_LOADING, payload: false });
+      dispatch({ type: actionTypes.SET_REFRESHING, payload: false });
+    }
+  }, [fetchUserData, loadEmployerFarms, loadAvailableWorkers, loadCropTypes, loadMyJobOffers, loadAllJobOffers]);
+
+  useEffect(() => {
+    if (state.myJobOffers && state.farmsData && state.userData) {
+      const calculateDashboardStats = (jobOffers, farms, userData) => {
+        const offersArray = Array.isArray(jobOffers) ? jobOffers : [];
+        
+        const totalOffers = offersArray.length;
+        const activeOffers = offersArray.filter(
+          (offer) => offer.status === "Activo" || offer.status === "activo"
+        ).length;
+        const totalApplications = offersArray.reduce(
+          (sum, offer) => sum + (offer.applicationsCount || 0), 0
+        );
+
+        const currentMonth = new Date().getMonth();
+        const monthlyOffers = offersArray.filter((offer) => {
+          if (!offer.createdAt) return false;
+          const offerMonth = new Date(offer.createdAt).getMonth();
+          return offerMonth === currentMonth;
+        }).length;
+
+        const farmsArray = Array.isArray(farms) ? farms : [];
+        const totalFarms = farmsArray.length;
+        const totalHectares = farmsArray.reduce((sum, farm) => sum + (farm.size || 0), 0);
+        const totalPlants = farmsArray.reduce((sum, farm) => sum + (farm.plantCount || 0), 0);
+        const totalWorkers = farmsArray.reduce((sum, farm) => sum + (farm.workers || 0), 0);
+
+        const farmOffers = offersArray.filter((offer) => offer.farmId);
+        const offersPerFarm = totalFarms > 0 ? Math.round(farmOffers.length / totalFarms) : 0;
+        const workersPerFarm = totalFarms > 0 ? Math.round(totalWorkers / totalFarms) : 0;
+
+        return {
+          employerRating: userData?.employerProfile?.rating || 4.5,
+          totalOffers,
+          activeOffers,
+          totalApplications,
+          totalFarms,
+          totalHectares,
+          totalPlants,
+          workersPerFarm,
+          offersPerFarm,
+          monthlyOffers,
+        };
+      };
+
+      const newStats = calculateDashboardStats(state.myJobOffers, state.farmsData, state.userData);
+      dispatch({ type: actionTypes.SET_DASHBOARD_STATS, payload: newStats });
+    }
+  }, [state.myJobOffers, state.farmsData, state.userData]);
+
+  useEffect(() => {
+    if (userIdRef.current && !isInitializedRef.current) {
+      isInitializedRef.current = true;
+      loadAllData().catch((error) => {
+        console.error("Error cargando datos iniciales:", error);
+        dispatch({
+          type: actionTypes.SET_ERROR,
+          payload: "Error al cargar los datos. Por favor, intenta de nuevo.",
+        });
+        dispatch({ type: actionTypes.SET_LOADING, payload: false });
+        isInitializedRef.current = false;
+      });
+    }
+  }, [loadAllData]);
+
+  const onRefresh = useCallback(() => {
+    dispatch({ type: actionTypes.SET_REFRESHING, payload: true });
+    loadAllData(true);
+  }, [loadAllData]);
+
+  return { state, dispatch, onRefresh };
+};
+
+// Main Component
+export default function ModernProducerDashboard({ navigation }) {
+  const { user } = useAuth();
+  const { state, onRefresh } = useEmployerData(user);
+  const [activeTab, setActiveTab] = useState(TABS.DASHBOARD);
+  const [selectedCropType, setSelectedCropType] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const combinedOffers = useMemo(() => {
+    const myOffers = Array.isArray(state.myJobOffers) ? state.myJobOffers : [];
+    const allOffers = Array.isArray(state.allJobOffers) ? state.allJobOffers : [];
+    
+    const myOfferIds = new Set(myOffers.map(offer => offer.id));
+    
+    const processedOffers = allOffers.map(offer => ({
+      ...offer,
+      isMyOffer: myOfferIds.has(offer.id)
+    }));
+
+    myOffers.forEach(myOffer => {
+      if (!allOffers.some(offer => offer.id === myOffer.id)) {
+        processedOffers.push({
+          ...myOffer,
+          isMyOffer: true
+        });
+      }
+    });
+
+    return processedOffers;
+  }, [state.myJobOffers, state.allJobOffers]);
+
+  const filteredOffers = useMemo(() => {
+    const offers = Array.isArray(combinedOffers) ? combinedOffers : [];
+    let filtered = [...offers];
+
+    if (searchQuery) {
+      filtered = filtered.filter(offer =>
+        offer.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        offer.cropType?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        offer.cropType?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
 
     if (selectedCropType) {
       filtered = filtered.filter(
         (offer) =>
-          offer.cropType?.name === selectedCropType ||
-          offer.cropType === selectedCropType
+          offer.cropType?.name === selectedCropType || offer.cropType === selectedCropType
       );
     }
 
     if (selectedLocation) {
       filtered = filtered.filter(
         (offer) =>
-          offer.displayLocation?.city
-            ?.toLowerCase()
-            .includes(selectedLocation.toLowerCase()) ||
+          offer.displayLocation?.city?.toLowerCase().includes(selectedLocation.toLowerCase()) ||
           offer.city?.toLowerCase().includes(selectedLocation.toLowerCase()) ||
-          offer.displayLocation?.department
-            ?.toLowerCase()
-            .includes(selectedLocation.toLowerCase()) ||
+          offer.displayLocation?.department?.toLowerCase().includes(selectedLocation.toLowerCase()) ||
           offer.state?.toLowerCase().includes(selectedLocation.toLowerCase())
       );
     }
 
-    setFilteredOffers(filtered);
-  };
+    return filtered.sort((a, b) => {
+      if (a.isMyOffer && !b.isMyOffer) return -1;
+      if (!a.isMyOffer && b.isMyOffer) return 1;
+      return 0;
+    });
+  }, [combinedOffers, selectedCropType, selectedLocation, searchQuery]);
 
-  const loadAvailableWorkers = async () => {
-    try {
-      const workers = await getAvailableWorkers();
-      setAvailableWorkers(workers || []);
-    } catch (error) {
-      console.error("Error cargando trabajadores:", error);
-    }
-  };
+  const quickActions = useMemo(() => [
+    {
+      title: "Nueva Oferta",
+      icon: "add-circle",
+      color: DESIGN_SYSTEM.colors.primary[600],
+      route: "CreateJobOffer",
+    },
+    {
+      title: "Agregar Finca", 
+      icon: "map",
+      color: DESIGN_SYSTEM.colors.success[600],
+      route: "AddTerrain",
+    },
+    {
+      title: "Trabajadores",
+      icon: "people",
+      color: DESIGN_SYSTEM.colors.accent[600],
+      route: "WorkerList",
+    },
+    {
+      title: "Aplicaciones",
+      icon: "document-text",
+      color: DESIGN_SYSTEM.colors.secondary[600],
+      route: "JobApplications",
+    },
+  ], []);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadAllData(true);
-  };
+  const statsData = useMemo(() => [
+    {
+      title: "Ofertas Totales",
+      value: state.dashboardStats.totalOffers,
+      subtitle: `${state.dashboardStats.activeOffers} activas`,
+      icon: "briefcase",
+      color: DESIGN_SYSTEM.colors.primary[600],
+      trend: { direction: "up", text: `+${state.dashboardStats.monthlyOffers} este mes` },
+    },
+    {
+      title: "Fincas",
+      value: state.dashboardStats.totalFarms,
+      subtitle: `${state.dashboardStats.totalHectares.toFixed(1)} hectáreas`,
+      icon: "leaf",
+      color: DESIGN_SYSTEM.colors.success[600],
+    },
+    {
+      title: "Plantas",
+      value: state.dashboardStats.totalPlants > 999 
+        ? `${(state.dashboardStats.totalPlants / 1000).toFixed(1)}K`
+        : state.dashboardStats.totalPlants,
+      subtitle: "Total cultivado",
+      icon: "flower",
+      color: DESIGN_SYSTEM.colors.secondary[600],
+    },
+    {
+      title: "Trabajadores",
+      value: state.dashboardStats.workersPerFarm,
+      subtitle: "Promedio por finca",
+      icon: "people",
+      color: DESIGN_SYSTEM.colors.accent[600],
+    },
+  ], [state.dashboardStats]);
 
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        await fetchUserData();
-        await loadAllData();
-      } catch (error) {
-        console.error("Error cargando datos iniciales:", error);
-        setError("Error al cargar los datos. Por favor, intenta de nuevo.");
-        setLoading(false);
-      }
-    };
+  const cropTypeFilters = useMemo(() => {
+    const offers = Array.isArray(combinedOffers) ? combinedOffers : [];
+    const cropTypes = [...new Set(offers.map(offer => offer.cropType?.name || offer.cropType))];
+    return cropTypes.filter(Boolean);
+  }, [combinedOffers]);
 
-    if (user?.id) {
-      loadInitialData();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    filterOffers();
-  }, [
-    selectedCropType,
-    selectedLocation,
-    allJobOffers,
-    myJobOffers,
-    showMyOffers,
-  ]);
-
-  // Componente de navegación por tabs
-  const TabNavigation = () => (
-    <View style={styles.tabContainer}>
-      <TouchableOpacity
-        style={[
-          styles.tabButton,
-          activeTab === "dashboard" && styles.tabButtonActive,
-        ]}
-        onPress={() => setActiveTab("dashboard")}>
-        <Ionicons
-          name="home"
-          size={20}
-          color={activeTab === "dashboard" ? COLORS.primary : COLORS.textLight}
-        />
-        <Text
-          style={[
-            styles.tabButtonText,
-            activeTab === "dashboard" && styles.tabButtonTextActive,
-          ]}>
-          Dashboard
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[
-          styles.tabButton,
-          activeTab === "offers" && styles.tabButtonActive,
-        ]}
-        onPress={() => setActiveTab("offers")}>
-        <Ionicons
-          name="briefcase"
-          size={20}
-          color={activeTab === "offers" ? COLORS.primary : COLORS.textLight}
-        />
-        <Text
-          style={[
-            styles.tabButtonText,
-            activeTab === "offers" && styles.tabButtonTextActive,
-          ]}>
-          Ofertas
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  // Componentes del dashboard (mantener todos los componentes existentes)
-  const EmployerRating = () => (
-    <View style={styles.ratingCardCompact}>
-      <View style={styles.ratingHeaderCompact}>
-        <View style={styles.ratingInfo}>
-          <Text style={styles.ratingTitle}>Mi Calificación</Text>
-          <View style={styles.ratingStarsCompact}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <Ionicons
-                key={star}
-                name={
-                  star <= Math.floor(dashboardStats.employerRating)
-                    ? "star"
-                    : "star-outline"
-                }
-                size={18}
-                color={
-                  star <= Math.floor(dashboardStats.employerRating)
-                    ? COLORS.warning
-                    : COLORS.border
-                }
-              />
-            ))}
-          </View>
-        </View>
-        <View style={styles.ratingBadgeCompact}>
-          <Text style={styles.ratingTextCompact}>
-            {dashboardStats.employerRating.toFixed(1)}
-          </Text>
-        </View>
-      </View>
-      <Text style={styles.ratingSubtextCompact}>
-        {dashboardStats.totalApplications} evaluaciones
-      </Text>
-    </View>
-  );
-
-  const MainMetrics = () => (
-    <View style={styles.metricsGrid}>
-      {/* Card de Ofertas */}
-      <View style={styles.metricCard}>
-        <View style={styles.metricCardDecorationOffers} />
-        <View style={styles.metricCardHeader}>
-          <View style={[styles.metricIcon, { backgroundColor: "#4F46E5" }]}>
-            <Ionicons name="briefcase" size={28} color="#FFFFFF" />
-          </View>
-          <View
-            style={[
-              styles.metricBadge,
-              {
-                backgroundColor: "#4F46E5" + "15",
-                borderColor: "#4F46E5" + "30",
-              },
-            ]}>
-            <Text style={[styles.metricBadgeText, { color: "#4F46E5" }]}>
-              {dashboardStats.activeOffers} activas
-            </Text>
-          </View>
-        </View>
-        <Text style={styles.metricNumber}>{dashboardStats.totalOffers}</Text>
-        <Text style={styles.metricLabel}>Total Ofertas</Text>
-        <View style={styles.metricProgress}>
-          <View
-            style={[
-              styles.metricProgressBar,
-              {
-                width: `${Math.min(
-                  (dashboardStats.activeOffers /
-                    Math.max(dashboardStats.totalOffers, 1)) *
-                    100,
-                  100
-                )}%`,
-                backgroundColor: "#4F46E5",
-              },
-            ]}
-          />
-        </View>
-        <View style={styles.metricFooter}>
-          <Ionicons name="trending-up" size={16} color="#4F46E5" />
-          <Text style={[styles.metricFooterText, { color: "#4F46E5" }]}>
-            Este mes: {dashboardStats.monthlyOffers}
-          </Text>
-        </View>
-      </View>
-
-      {/* Card de Fincas */}
-      <View style={styles.metricCard}>
-        <View style={styles.metricCardDecorationFarms} />
-        <View style={styles.metricCardHeader}>
-          <View style={[styles.metricIcon, { backgroundColor: "#10B981" }]}>
-            <Ionicons name="leaf" size={28} color="#FFFFFF" />
-          </View>
-          <View
-            style={[
-              styles.metricBadge,
-              {
-                backgroundColor: "#10B981" + "15",
-                borderColor: "#10B981" + "30",
-              },
-            ]}>
-            <Text style={[styles.metricBadgeText, { color: "#10B981" }]}>
-              {dashboardStats.totalHectares.toFixed(1)} ha
-            </Text>
-          </View>
-        </View>
-        <Text style={styles.metricNumber}>{dashboardStats.totalFarms}</Text>
-        <Text style={styles.metricLabel}>Fincas</Text>
-        <View style={styles.metricProgress}>
-          <View
-            style={[
-              styles.metricProgressBar,
-              {
-                width: dashboardStats.totalFarms > 0 ? "100%" : "0%",
-                backgroundColor: "#10B981",
-              },
-            ]}
-          />
-        </View>
-        <View style={styles.metricFooter}>
-          <Ionicons name="stats-chart" size={16} color="#10B981" />
-          <Text style={[styles.metricFooterText, { color: "#10B981" }]}>
-            Promedio:{" "}
-            {dashboardStats.totalFarms > 0
-              ? (
-                  dashboardStats.totalHectares / dashboardStats.totalFarms
-                ).toFixed(1)
-              : 0}{" "}
-            ha/finca
-          </Text>
-        </View>
-      </View>
-
-      {/* Card de Plantas */}
-      <View style={styles.metricCard}>
-        <View style={styles.metricCardDecorationPlants} />
-        <View style={styles.metricCardHeader}>
-          <View style={[styles.metricIcon, { backgroundColor: "#F59E0B" }]}>
-            <Ionicons name="flower" size={28} color="#FFFFFF" />
-          </View>
-          <View
-            style={[
-              styles.metricBadge,
-              {
-                backgroundColor: "#F59E0B" + "15",
-                borderColor: "#F59E0B" + "30",
-              },
-            ]}>
-            <Text style={[styles.metricBadgeText, { color: "#F59E0B" }]}>
-              TOTAL
-            </Text>
-          </View>
-        </View>
-        <Text style={styles.metricNumber}>
-          {dashboardStats.totalPlants > 999
-            ? `${(dashboardStats.totalPlants / 1000).toFixed(1)}K`
-            : dashboardStats.totalPlants.toLocaleString()}
-        </Text>
-        <Text style={styles.metricLabel}>Plantas</Text>
-        <View style={styles.metricProgress}>
-          <View
-            style={[
-              styles.metricProgressBar,
-              {
-                width: dashboardStats.totalPlants > 0 ? "100%" : "0%",
-                backgroundColor: "#F59E0B",
-              },
-            ]}
-          />
-        </View>
-        <View style={styles.metricFooter}>
-          <Ionicons name="leaf-outline" size={16} color="#F59E0B" />
-          <Text style={[styles.metricFooterText, { color: "#F59E0B" }]}>
-            {dashboardStats.totalFarms > 0
-              ? Math.round(
-                  dashboardStats.totalPlants / dashboardStats.totalFarms
-                ).toLocaleString()
-              : 0}{" "}
-            por finca
-          </Text>
-        </View>
-      </View>
-
-      {/* Card de Trabajadores */}
-      <View style={styles.metricCard}>
-        <View style={styles.metricCardDecorationWorkers} />
-        <View style={styles.metricCardHeader}>
-          <View style={[styles.metricIcon, { backgroundColor: "#8B5CF6" }]}>
-            <Ionicons name="people" size={28} color="#FFFFFF" />
-          </View>
-          <View
-            style={[
-              styles.metricBadge,
-              {
-                backgroundColor: "#8B5CF6" + "15",
-                borderColor: "#8B5CF6" + "30",
-              },
-            ]}>
-            <Text style={[styles.metricBadgeText, { color: "#8B5CF6" }]}>
-              PROMEDIO
-            </Text>
-          </View>
-        </View>
-        <Text style={styles.metricNumber}>{dashboardStats.workersPerFarm}</Text>
-        <Text style={styles.metricLabel}>Trabajadores</Text>
-        <View style={styles.metricProgress}>
-          <View
-            style={[
-              styles.metricProgressBar,
-              {
-                width:
-                  dashboardStats.workersPerFarm > 0
-                    ? `${Math.min(dashboardStats.workersPerFarm * 10, 100)}%`
-                    : "0%",
-                backgroundColor: "#8B5CF6",
-              },
-            ]}
-          />
-        </View>
-        <View style={styles.metricFooter}>
-          <Ionicons name="person-add" size={16} color="#8B5CF6" />
-          <Text style={[styles.metricFooterText, { color: "#8B5CF6" }]}>
-            Por finca activa
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-
-  const calculateDashboardStats = (jobOffers, farms, userData) => {
-    const totalOffers = jobOffers?.length || 0;
-    const activeOffers =
-      jobOffers?.filter(
-        (offer) => offer.status === "Activo" || offer.status === "activo"
-      ).length || 0;
-    const totalApplications =
-      jobOffers?.reduce(
-        (sum, offer) => sum + (offer.applicationsCount || 0),
-        0
-      ) || 0;
-
-    const currentMonth = new Date().getMonth();
-    const monthlyOffers =
-      jobOffers?.filter((offer) => {
-        if (!offer.createdAt) return false;
-        const offerMonth = new Date(offer.createdAt).getMonth();
-        return offerMonth === currentMonth;
-      }).length || 0;
-
-    const farmsArray = Array.isArray(farms) ? farms : [];
-    const totalFarms = farmsArray.length;
-    const totalHectares = farmsArray.reduce(
-      (sum, farm) => sum + (farm.size || 0),
-      0
+  if (state.loading) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <LinearGradient
+          colors={[DESIGN_SYSTEM.colors.primary[50], DESIGN_SYSTEM.colors.white]}
+          style={styles.loadingGradient}
+        >
+          <ActivityIndicator size="large" color={DESIGN_SYSTEM.colors.primary[600]} />
+          <Text style={styles.loadingText}>Cargando dashboard...</Text>
+        </LinearGradient>
+      </SafeAreaView>
     );
-    const totalPlants = farmsArray.reduce(
-      (sum, farm) => sum + (farm.plantCount || 0),
-      0
-    );
-    const totalWorkers = farmsArray.reduce(
-      (sum, farm) => sum + (farm.workers || 0),
-      0
-    );
+  }
 
-    const farmOffers = jobOffers?.filter((offer) => offer.farmId) || [];
-    const offersPerFarm =
-      totalFarms > 0 ? Math.round(farmOffers.length / totalFarms) : 0;
-    const workersPerFarm =
-      totalFarms > 0 ? Math.round(totalWorkers / totalFarms) : 0;
-
-    return {
-      employerRating: userData?.employerProfile?.rating || 4.5,
-      totalOffers,
-      activeOffers,
-      totalApplications,
-      totalFarms,
-      totalHectares,
-      totalPlants,
-      workersPerFarm,
-      offersPerFarm,
-      monthlyOffers,
-    };
-  };
-
-  // useEffect para recalcular estadísticas (agregar al componente principal)
-  useEffect(() => {
-    if (myJobOffers.length >= 0 && farmsData.length >= 0) {
-      const newStats = calculateDashboardStats(
-        myJobOffers,
-        farmsData,
-        userData
-      );
-      setDashboardStats(newStats);
-    }
-  }, [myJobOffers, farmsData, userData]);
-
-  const loadMyJobOffers = async () => {
-    try {
-      const employerId = await getEmployerId();
-      const jobOffersData = await getJobOffersByEmployerId(employerId);
-      setMyJobOffers(jobOffersData || []);
-    } catch (error) {
-      console.error("Error cargando mis ofertas:", error);
-      setError(error.message);
-    }
-  };
-
-  // Modificar loadAllData para cargar en secuencia
-  const loadAllData = async (isRefreshing = false) => {
-    try {
-      if (!isRefreshing) {
-        setLoading(true);
-      }
-      setError(null);
-
-      // Primero cargamos las fincas
-      await loadEmployerFarms();
-
-      // Luego cargamos en paralelo el resto
-      await Promise.all([
-        loadAvailableWorkers(),
-        loadCropTypes(),
-        loadAllJobOffers(),
-      ]);
-
-      // Finalmente cargamos las ofertas (que dependen de farmsData)
-      await loadMyJobOffers();
-    } catch (error) {
-      console.error("Error cargando datos:", error);
-      setError(error.message || "Error al cargar los datos");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const AdvancedStats = () => (
-    <View style={styles.statsContainer}>
-      <Text style={styles.sectionTitle}>Estadísticas Detalladas</Text>
-
-      <View style={styles.statsRow}>
-        <View style={styles.statItem}>
-          <View style={styles.statIconContainer}>
-            <Ionicons name="trending-up" size={20} color={COLORS.accent} />
-          </View>
-          <View style={styles.statContent}>
-            <Text style={styles.statValue}>{dashboardStats.offersPerFarm}</Text>
-            <Text style={styles.statLabel}>Ofertas por finca</Text>
-          </View>
-        </View>
-
-        <View style={styles.statItem}>
-          <View style={styles.statIconContainer}>
-            <Ionicons name="calendar" size={20} color={COLORS.primary} />
-          </View>
-          <View style={styles.statContent}>
-            <Text style={styles.statValue}>{dashboardStats.monthlyOffers}</Text>
-            <Text style={styles.statLabel}>Ofertas este mes</Text>
-          </View>
-        </View>
-      </View>
-    </View>
-  );
-
-  const getCropColor = (cropType) => {
-    const colors = {
-      Cacao: COLORS.secondary,
-      Café: "#8B4513",
-      Aguacate: COLORS.accent,
-      Plátano: COLORS.warning,
-      Maíz: "#FFD700",
-      Arroz: "#F5F5DC",
-    };
-    return colors[cropType] || COLORS.primary;
-  };
-
-  const QuickActions = () => (
-    <View style={styles.quickActionsContainer}>
-      <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
-      <View style={styles.actionsGrid}>
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: COLORS.primary }]}
-          onPress={() => navigation.navigate("CreateJobOffer")}>
-          <Ionicons name="add-circle" size={28} color="#FFFFFF" />
-          <Text style={styles.actionButtonText}>Nueva Oferta</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: COLORS.accent }]}
-          onPress={() => navigation.navigate("AddTerrain")}>
-          <Ionicons name="add" size={28} color="#FFFFFF" />
-          <Text style={styles.actionButtonText}>Agregar Finca</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: COLORS.primary }]}
-          onPress={() => navigation.navigate("WorkerList")}>
-          <Ionicons name="search" size={28} color="#FFFFFF" />
-          <Text style={styles.actionButtonText}>Buscar Trabajadores</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: COLORS.primary }]}
-          onPress={() => navigation.navigate("JobApplications")}>
-          <Ionicons name="mail" size={28} color="#FFFFFF" />
-          <Text style={styles.actionButtonText}>Ver Aplicaciones</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  // Nuevo componente para el tab de ofertas
-  const OffersTab = () => (
+  const DashboardContent = () => (
     <ScrollView
-      style={styles.scrollContainer}
+      style={styles.scrollView}
+      showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
-          refreshing={refreshing}
+          refreshing={state.refreshing}
           onRefresh={onRefresh}
-          colors={[COLORS.primary]}
-          tintColor={COLORS.primary}
+          colors={[DESIGN_SYSTEM.colors.primary[600]]}
+          tintColor={DESIGN_SYSTEM.colors.primary[600]}
         />
       }
-      showsVerticalScrollIndicator={false}>
-      {/* Toggle para mis ofertas vs todas las ofertas */}
-      <View style={styles.offersToggleContainer}>
-        <View style={styles.toggleButtons}>
-          <TouchableOpacity
-            style={[
-              styles.toggleButton,
-              showMyOffers && styles.toggleButtonActive,
-            ]}
-            onPress={() => setShowMyOffers(true)}>
-            <Text
-              style={[
-                styles.toggleButtonText,
-                showMyOffers && styles.toggleButtonTextActive,
-              ]}>
-              Mis Ofertas
-            </Text>
-          </TouchableOpacity>
+    >
+      <EnhancedRatingCard 
+        rating={state.dashboardStats.employerRating}
+        totalReviews={state.dashboardStats.totalApplications}
+      />
 
-          <TouchableOpacity
-            style={[
-              styles.toggleButton,
-              !showMyOffers && styles.toggleButtonActive,
-            ]}
-            onPress={() => setShowMyOffers(false)}>
-            <Text
-              style={[
-                styles.toggleButtonText,
-                !showMyOffers && styles.toggleButtonTextActive,
-              ]}>
-              Explorar Ofertas
-            </Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.statsGrid}>
+        {Array.isArray(statsData) && statsData.map((stat, index) => (
+          <EnhancedStatsCard key={index} {...stat} />
+        ))}
       </View>
 
-      {/* Filtros */}
-      <View style={styles.filtersContainer}>
-        <View style={styles.filterRow}>
-          <View style={styles.filterItem}>
-            <Text style={styles.filterLabel}>Tipo de Cultivo</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.cropTypeFilters}>
-                <TouchableOpacity
-                  style={[
-                    styles.cropTypeFilter,
-                    selectedCropType === "" && styles.cropTypeFilterActive,
-                  ]}
-                  onPress={() => setSelectedCropType("")}>
-                  <Text
-                    style={[
-                      styles.cropTypeFilterText,
-                      selectedCropType === "" &&
-                        styles.cropTypeFilterTextActive,
-                    ]}>
-                    Todos
-                  </Text>
-                </TouchableOpacity>
-                {cropTypes.map((cropType) => (
-                  <TouchableOpacity
-                    key={cropType.id}
-                    style={[
-                      styles.cropTypeFilter,
-                      selectedCropType === cropType.name &&
-                        styles.cropTypeFilterActive,
-                    ]}
-                    onPress={() => setSelectedCropType(cropType.name)}>
-                    <Text
-                      style={[
-                        styles.cropTypeFilterText,
-                        selectedCropType === cropType.name &&
-                          styles.cropTypeFilterTextActive,
-                      ]}>
-                      {cropType.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-
-        <View style={styles.searchContainer}>
-          <Ionicons
-            name="search"
-            size={20}
-            color={COLORS.textLight}
-            style={styles.searchIcon}
-          />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar por ciudad o departamento..."
-            value={selectedLocation}
-            onChangeText={setSelectedLocation}
-            placeholderTextColor={COLORS.textLight}
-          />
+      <View style={styles.quickActionsSection}>
+        <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
+        <View style={styles.quickActionsGrid}>
+          {Array.isArray(quickActions) && quickActions.map((action, index) => (
+            <EnhancedQuickActionButton
+              key={index}
+              title={action.title}
+              icon={action.icon}
+              color={action.color}
+              onPress={() => navigation.navigate(action.route)}
+            />
+          ))}
         </View>
       </View>
+    </ScrollView>
+  );
 
-      {/* Lista de ofertas */}
-      <View style={styles.offersListContainer}>
-        <Text style={styles.offersCountText}>
-          {filteredOffers.length} ofertas encontradas
+  const OffersContent = () => (
+    <ScrollView
+      style={styles.scrollView}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={state.refreshing}
+          onRefresh={onRefresh}
+          colors={[DESIGN_SYSTEM.colors.primary[600]]}
+          tintColor={DESIGN_SYSTEM.colors.primary[600]}
+        />
+      }
+    >
+      {/* Enhanced Filters */}
+      <View style={styles.enhancedFiltersSection}>
+        <EnhancedSearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Buscar ofertas por título o cultivo..."
+        />
+        
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipScroll}
+          contentContainerStyle={styles.chipsContainer}
+        >
+          <EnhancedFilterChip
+            title="Todos"
+            isActive={!selectedCropType}
+            onPress={() => setSelectedCropType("")}
+          />
+          {cropTypeFilters.map((cropType) => (
+            <EnhancedFilterChip
+              key={cropType}
+              title={cropType}
+              isActive={selectedCropType === cropType}
+              onPress={() => setSelectedCropType(selectedCropType === cropType ? "" : cropType)}
+            />
+          ))}
+        </ScrollView>
+      </View>
+
+      <View style={styles.offersSection}>
+        <Text style={styles.offersCount}>
+          {Array.isArray(filteredOffers) ? filteredOffers.length : 0} ofertas disponibles
         </Text>
-
-        {filteredOffers.map((offer) => (
-          <TouchableOpacity
+        
+        {Array.isArray(filteredOffers) && filteredOffers.map((offer) => (
+          <EnhancedOfferCard
             key={offer.id}
-            style={styles.exploreOfferCard}
-            onPress={() =>
-              navigation.navigate("JobOfferDetail", { jobOfferId: offer.id })
-            }>
-            <View style={styles.exploreOfferHeader}>
-              <Text style={styles.exploreOfferTitle}>{offer.title}</Text>
-              <View
-                style={[
-                  styles.exploreStatusBadge,
-                  {
-                    backgroundColor: getCropColor(
-                      offer.cropType?.name || offer.cropType
-                    ),
-                  },
-                ]}>
-                <Text style={styles.exploreStatusText}>
-                  {offer.cropType?.name || offer.cropType}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.exploreOfferLocation}>
-              📍 {offer.displayLocation?.city || offer.city},{" "}
-              {offer.displayLocation?.department || offer.state}
-            </Text>
-
-            <View style={styles.exploreOfferDetails}>
-              <View style={styles.exploreOfferDetailItem}>
-                <Ionicons
-                  name="calendar-outline"
-                  size={16}
-                  color={COLORS.textSecondary}
-                />
-                <Text style={styles.exploreOfferDetailText}>
-                  {offer.duration} días
-                </Text>
-              </View>
-              <View style={styles.exploreOfferDetailItem}>
-                <Ionicons
-                  name="cash-outline"
-                  size={16}
-                  color={COLORS.textSecondary}
-                />
-                <Text style={styles.exploreOfferDetailText}>
-                  ${offer.salary?.toLocaleString()}/día
-                </Text>
-              </View>
-              {showMyOffers && (
-                <View style={styles.exploreOfferDetailItem}>
-                  <Ionicons
-                    name="people-outline"
-                    size={16}
-                    color={COLORS.textSecondary}
-                  />
-                  <Text style={styles.exploreOfferDetailText}>
-                    {offer.applicationsCount || 0} aplicaciones
-                  </Text>
-                </View>
-              )}
-              {!showMyOffers && (
-                <View style={styles.exploreOfferDetailItem}>
-                  <Ionicons
-                    name="business-outline"
-                    size={16}
-                    color={COLORS.textSecondary}
-                  />
-                  <Text style={styles.exploreOfferDetailText}>
-                    {offer.employer?.user?.name || "Empleador"}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {(offer.includesFood || offer.includesLodging) && (
-              <View style={styles.exploreOfferBenefits}>
-                {offer.includesFood && (
-                  <View style={styles.benefitBadge}>
-                    <Ionicons
-                      name="restaurant"
-                      size={12}
-                      color={COLORS.success}
-                    />
-                    <Text style={styles.benefitText}>Comida</Text>
-                  </View>
-                )}
-                {offer.includesLodging && (
-                  <View style={styles.benefitBadge}>
-                    <Ionicons name="home" size={12} color={COLORS.accent} />
-                    <Text style={styles.benefitText}>Hospedaje</Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </TouchableOpacity>
+            offer={offer}
+            isMyOffer={offer.isMyOffer}
+            onPress={() => navigation.navigate("JobOfferDetail", { jobOfferId: offer.id })}
+          />
         ))}
 
-        {filteredOffers.length === 0 && (
-          <View style={styles.noOffersContainer}>
-            <Ionicons
-              name="search-outline"
-              size={48}
-              color={COLORS.textLight}
-            />
-            <Text style={styles.noOffersText}>
-              {showMyOffers
-                ? "No tienes ofertas que coincidan con los filtros"
-                : "No se encontraron ofertas con los filtros seleccionados"}
-            </Text>
+        {(!Array.isArray(filteredOffers) || filteredOffers.length === 0) && (
+          <View style={styles.enhancedEmptyState}>
+            <LinearGradient
+              colors={[DESIGN_SYSTEM.colors.gray[50], DESIGN_SYSTEM.colors.white]}
+              style={styles.emptyStateGradient}
+            >
+              <View style={styles.emptyStateIconContainer}>
+                <Ionicons name="search-outline" size={48} color={DESIGN_SYSTEM.colors.gray[400]} />
+              </View>
+              <Text style={styles.emptyStateTitle}>No se encontraron ofertas</Text>
+              <Text style={styles.emptyStateSubtitle}>
+                Intenta cambiar los filtros de búsqueda o crea una nueva oferta
+              </Text>
+              <TouchableOpacity
+                style={styles.emptyStateButton}
+                onPress={() => navigation.navigate("CreateJobOffer")}
+              >
+                <LinearGradient
+                  colors={[DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600]]}
+                  style={styles.emptyStateButtonGradient}
+                >
+                  <Ionicons name="add" size={20} color={DESIGN_SYSTEM.colors.white} />
+                  <Text style={styles.emptyStateButtonText}>Crear Nueva Oferta</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </LinearGradient>
           </View>
         )}
       </View>
     </ScrollView>
   );
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Cargando dashboard...</Text>
-      </View>
-    );
-  }
-
   return (
     <ScreenLayout navigation={navigation}>
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.welcomeText}>
-              ¡Hola, {userData?.name || "Productor"}!
-            </Text>
-            <Text style={styles.roleText}>
-              Panel de Control • {userData?.role?.name || "Empleador"}
-            </Text>
-          </View>
-        </View>
-
-        {/* Navegación por tabs */}
-        <TabNavigation />
-
-        {/* Contenido según tab activo */}
-        {activeTab === "dashboard" ? (
-          <ScrollView
-            style={styles.scrollContainer}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                colors={[COLORS.primary]}
-                tintColor={COLORS.primary}
-              />
-            }
-            showsVerticalScrollIndicator={false}>
-            <EmployerRating />
-            <MainMetrics />
-            <AdvancedStats />
-            <QuickActions />
-          </ScrollView>
-        ) : (
-          <OffersTab />
-        )}
-      </View>
+      <SafeAreaView style={styles.container}>
+        <ModernHeader 
+          user={state.userData} 
+          onProfilePress={() => navigation.navigate("Profile")} 
+        />
+        
+        <ModernTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+        
+        {activeTab === TABS.DASHBOARD ? <DashboardContent /> : <OffersContent />}
+      </SafeAreaView>
     </ScreenLayout>
   );
 }
 
+// Enhanced Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: DESIGN_SYSTEM.colors.gray[50],
   },
   loadingContainer: {
     flex: 1,
+  },
+  loadingGradient: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: COLORS.background,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: COLORS.textSecondary,
+    marginTop: DESIGN_SYSTEM.spacing.md,
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.gray[600],
   },
+
+  // Enhanced Header
   header: {
+    backgroundColor: DESIGN_SYSTEM.colors.white,
+    ...DESIGN_SYSTEM.shadows.md,
+  },
+  headerGradient: {
+    paddingTop: DESIGN_SYSTEM.spacing.lg,
+    paddingHorizontal: DESIGN_SYSTEM.spacing.lg,
+    paddingBottom: DESIGN_SYSTEM.spacing.md,
+  },
+  headerContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    paddingTop: 50,
-    backgroundColor: COLORS.background,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  welcomeText: {
-    fontSize: 24,
+  headerLeft: {
+    flex: 1,
+  },
+  greetingText: {
+    ...DESIGN_SYSTEM.typography.h3,
+    color: DESIGN_SYSTEM.colors.gray[900],
+  },
+  userName: {
+    color: DESIGN_SYSTEM.colors.primary[600],
     fontWeight: "700",
-    color: COLORS.text,
-    marginBottom: 4,
   },
   roleText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.gray[600],
+    marginTop: DESIGN_SYSTEM.spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
   },
   profileButton: {
-    padding: 4,
+    marginLeft: DESIGN_SYSTEM.spacing.md,
   },
-
-  // Navegación por tabs
-  tabContainer: {
-    flexDirection: "row",
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  tabButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginHorizontal: 4,
-    gap: 8,
-  },
-  tabButtonActive: {
-    backgroundColor: COLORS.lightBlue,
-  },
-  tabButtonText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: COLORS.textLight,
-  },
-  tabButtonTextActive: {
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
-
-  scrollContainer: {
-    flex: 1,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: 16,
-  },
-
-  // Card de calificación compacto
-  ratingCardCompact: {
-    backgroundColor: COLORS.background,
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  ratingHeaderCompact: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  ratingInfo: {
-    flex: 1,
-  },
-  ratingTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: 6,
-  },
-  ratingStarsCompact: {
-    flexDirection: "row",
-    gap: 4,
-  },
-  ratingBadgeCompact: {
-    backgroundColor: COLORS.lightGold,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.warning + "20",
-  },
-  ratingTextCompact: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.warning,
-  },
-  ratingSubtextCompact: {
-    fontSize: 11,
-    color: COLORS.textLight,
-    textAlign: "center",
-  },
-
-  // Métricas principales
-  metricsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    paddingHorizontal: 16,
-    gap: 12,
-    marginBottom: 20,
-  },
-  metricCard: {
-    flex: 1,
-    minWidth: (width - 48) / 2,
-    padding: 16,
-    borderRadius: 16,
-    alignItems: "center",
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  metricIcon: {
+  profileAvatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    ...DESIGN_SYSTEM.shadows.md,
   },
-  metricNumber: {
-    fontSize: 24,
+  profileInitial: {
+    ...DESIGN_SYSTEM.typography.h4,
+    color: DESIGN_SYSTEM.colors.white,
     fontWeight: "700",
-    color: COLORS.text,
-    marginBottom: 4,
-  },
-  metricLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-    marginBottom: 4,
-  },
-  metricSubtext: {
-    fontSize: 12,
-    color: COLORS.textLight,
   },
 
-  // Estadísticas avanzadas
-  statsContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 20,
+  // Enhanced Tabs
+  tabsContainer: {
+    backgroundColor: DESIGN_SYSTEM.colors.white,
+    paddingHorizontal: DESIGN_SYSTEM.spacing.lg,
+    paddingBottom: DESIGN_SYSTEM.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: DESIGN_SYSTEM.colors.gray[100],
   },
-  statsRow: {
+  tabsWrapper: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 12,
+    backgroundColor: DESIGN_SYSTEM.colors.gray[100],
+    borderRadius: DESIGN_SYSTEM.borderRadius.md,
+    padding: DESIGN_SYSTEM.spacing.xs,
+    position: "relative",
   },
-  statItem: {
+  tab: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.background,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 12,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  statIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
     justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    paddingVertical: DESIGN_SYSTEM.spacing.md,
+    borderRadius: DESIGN_SYSTEM.borderRadius.sm,
+    gap: DESIGN_SYSTEM.spacing.xs,
+    position: "relative",
   },
-  statContent: {
-    flex: 1,
+  tabActive: {
+    backgroundColor: DESIGN_SYSTEM.colors.white,
+    ...DESIGN_SYSTEM.shadows.sm,
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: COLORS.text,
+  tabActiveIndicator: {
+    position: "absolute",
+    bottom: -2,
+    left: "25%",
+    right: "25%",
+    height: 3,
+    backgroundColor: DESIGN_SYSTEM.colors.primary[600],
+    borderRadius: DESIGN_SYSTEM.borderRadius.full,
   },
-  statLabel: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
+  tabText: {
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.gray[600],
+  },
+  tabTextActive: {
+    color: DESIGN_SYSTEM.colors.primary[600],
+    fontWeight: "600",
   },
 
-  // Fincas
-  farmsContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 20,
-  },
-  farmsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  seeAllText: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
-  farmCard: {
-    width: 240,
-    backgroundColor: COLORS.background,
-    borderRadius: 16,
-    padding: 16,
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  farmHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
-  },
-  farmName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.text,
+  scrollView: {
     flex: 1,
-    marginRight: 8,
   },
-  cropBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
+
+  // Enhanced Rating Card
+  enhancedRatingCard: {
+    margin: DESIGN_SYSTEM.spacing.lg,
+    borderRadius: DESIGN_SYSTEM.borderRadius.xl,
+    overflow: "hidden",
+    ...DESIGN_SYSTEM.shadows.lg,
   },
-  cropText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#FFFFFF",
+  ratingGradient: {
+    position: "relative",
   },
-  farmLocation: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginBottom: 12,
+  ratingOverlay: {
+    padding: DESIGN_SYSTEM.spacing.xl,
+    backgroundColor: "rgba(0,0,0,0.1)",
   },
-  farmStats: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
+  ratingContent: {
+    alignItems: "center",
   },
-  farmStatItem: {
+  ratingHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: DESIGN_SYSTEM.spacing.md,
+    marginBottom: DESIGN_SYSTEM.spacing.lg,
   },
-  farmStatText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  emptyFarmsContainer: {
-    alignItems: "center",
+  ratingIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
-    padding: 40,
-    backgroundColor: COLORS.background,
-    borderRadius: 16,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 4,
+    alignItems: "center",
   },
-  emptyFarmsText: {
-    fontSize: 16,
-    color: COLORS.textLight,
+  ratingTitle: {
+    ...DESIGN_SYSTEM.typography.h3,
+    color: DESIGN_SYSTEM.colors.white,
+    fontWeight: "600",
+  },
+  ratingScore: {
+    alignItems: "center",
+    marginBottom: DESIGN_SYSTEM.spacing.lg,
+  },
+  ratingNumber: {
+    ...DESIGN_SYSTEM.typography.h1,
+    fontSize: 42,
+    color: DESIGN_SYSTEM.colors.white,
+    fontWeight: "700",
+    textShadowColor: "rgba(0,0,0,0.3)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  ratingStars: {
+    flexDirection: "row",
+    gap: DESIGN_SYSTEM.spacing.sm,
+    marginTop: DESIGN_SYSTEM.spacing.md,
+  },
+  starContainer: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: DESIGN_SYSTEM.borderRadius.full,
+    padding: DESIGN_SYSTEM.spacing.xs,
+  },
+  ratingSubtext: {
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.white,
+    opacity: 0.9,
     textAlign: "center",
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  addFarmButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  addFarmButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
   },
 
-  // Acciones rápidas
-  quickActionsContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 20,
-  },
-  actionsGrid: {
+  // Enhanced Stats
+  statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    paddingHorizontal: DESIGN_SYSTEM.spacing.lg,
+    gap: DESIGN_SYSTEM.spacing.md,
   },
-  actionButton: {
+  enhancedStatsCard: {
     flex: 1,
-    minWidth: (width - 48) / 2,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: "center",
-    gap: 8,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
+    minWidth: (width - DESIGN_SYSTEM.spacing.lg * 3) / 2,
+    borderRadius: DESIGN_SYSTEM.borderRadius.lg,
+    overflow: "hidden",
+    ...DESIGN_SYSTEM.shadows.md,
   },
-  actionButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    textAlign: "center",
-  },
-
-  // Tab de ofertas
-  offersToggleContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  toggleButtons: {
-    flexDirection: "row",
-    backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    padding: 4,
-  },
-  toggleButton: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    alignItems: "center",
-  },
-  toggleButtonActive: {
-    backgroundColor: COLORS.background,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  toggleButtonText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: COLORS.textLight,
-  },
-  toggleButtonTextActive: {
-    color: COLORS.primary,
-    fontWeight: "600",
-  },
-
-  // Filtros
-  filtersContainer: {
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 16,
-    marginBottom: 16,
+  statsCardGradient: {
+    padding: DESIGN_SYSTEM.spacing.lg,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    borderColor: DESIGN_SYSTEM.colors.gray[100],
   },
-  filterRow: {
-    marginBottom: 12,
-  },
-  filterItem: {
-    marginBottom: 8,
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: 8,
-  },
-  cropTypeFilters: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  cropTypeFilter: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cropTypeFilterActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  cropTypeFilterText: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: COLORS.textSecondary,
-  },
-  cropTypeFilterTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-  },
-  searchContainer: {
+  statsCardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    gap: DESIGN_SYSTEM.spacing.md,
+    marginBottom: DESIGN_SYSTEM.spacing.md,
   },
-  searchIcon: {
-    marginRight: 8,
+  statsIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: "hidden",
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: COLORS.text,
-  },
-
-  // Lista de ofertas
-  offersListContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 20,
-  },
-  offersCountText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: COLORS.textSecondary,
-    marginBottom: 12,
-  },
-  exploreOfferCard: {
-    backgroundColor: COLORS.background,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  exploreOfferHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  exploreOfferTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.text,
-    flex: 1,
-    marginRight: 8,
-  },
-  exploreStatusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  exploreStatusText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  exploreOfferLocation: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginBottom: 12,
-  },
-  exploreOfferDetails: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  exploreOfferDetailItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  exploreOfferDetailText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  exploreOfferBenefits: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-  },
-  benefitBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: COLORS.surface,
-    borderRadius: 6,
-  },
-  benefitText: {
-    fontSize: 10,
-    color: COLORS.textSecondary,
-  },
-  noOffersContainer: {
-    alignItems: "center",
+  statsIconGradient: {
+    width: "100%",
+    height: "100%",
     justifyContent: "center",
-    padding: 40,
+    alignItems: "center",
   },
-  noOffersText: {
-    fontSize: 14,
-    color: COLORS.textLight,
+  statsInfo: {
+    flex: 1,
+  },
+  statsValue: {
+    ...DESIGN_SYSTEM.typography.h3,
+    color: DESIGN_SYSTEM.colors.gray[900],
+    fontWeight: "700",
+  },
+  statsTitle: {
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.gray[600],
+    marginTop: DESIGN_SYSTEM.spacing.xs,
+  },
+  statsSubtitle: {
+    ...DESIGN_SYSTEM.typography.caption,
+    color: DESIGN_SYSTEM.colors.gray[500],
+    marginBottom: DESIGN_SYSTEM.spacing.sm,
+  },
+  statsTrend: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.sm,
+  },
+  trendIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  statsTrendText: {
+    ...DESIGN_SYSTEM.typography.caption,
+    fontWeight: "600",
+  },
+
+  // Enhanced Quick Actions
+  quickActionsSection: {
+    paddingHorizontal: DESIGN_SYSTEM.spacing.lg,
+    paddingVertical: DESIGN_SYSTEM.spacing.lg,
+  },
+  sectionTitle: {
+    ...DESIGN_SYSTEM.typography.h3,
+    color: DESIGN_SYSTEM.colors.gray[900],
+    marginBottom: DESIGN_SYSTEM.spacing.lg,
+  },
+  quickActionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: DESIGN_SYSTEM.spacing.md,
+  },
+  enhancedQuickActionButton: {
+    flex: 1,
+    minWidth: (width - DESIGN_SYSTEM.spacing.lg * 3) / 2,
+    borderRadius: DESIGN_SYSTEM.borderRadius.lg,
+    overflow: "hidden",
+    ...DESIGN_SYSTEM.shadows.lg,
+  },
+  quickActionGradient: {
+    padding: DESIGN_SYSTEM.spacing.lg,
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.sm,
+    position: "relative",
+  },
+  quickActionIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: DESIGN_SYSTEM.spacing.sm,
+  },
+  quickActionText: {
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.white,
+    fontWeight: "600",
     textAlign: "center",
-    marginTop: 12,
+  },
+  quickActionArrow: {
+    position: "absolute",
+    top: DESIGN_SYSTEM.spacing.md,
+    right: DESIGN_SYSTEM.spacing.md,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  // Enhanced Filters
+  enhancedFiltersSection: {
+    paddingHorizontal: DESIGN_SYSTEM.spacing.lg,
+    paddingVertical: DESIGN_SYSTEM.spacing.lg,
+    gap: DESIGN_SYSTEM.spacing.md,
+  },
+  enhancedSearchContainer: {
+    borderRadius: DESIGN_SYSTEM.borderRadius.lg,
+    overflow: "hidden",
+    ...DESIGN_SYSTEM.shadows.sm,
+  },
+  searchGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: DESIGN_SYSTEM.spacing.md,
+    paddingVertical: DESIGN_SYSTEM.spacing.md,
+    borderWidth: 1,
+    borderColor: DESIGN_SYSTEM.colors.gray[200],
+  },
+  searchIconContainer: {
+    marginRight: DESIGN_SYSTEM.spacing.sm,
+  },
+  enhancedSearchInput: {
+    flex: 1,
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.gray[900],
+  },
+  clearButton: {
+    marginLeft: DESIGN_SYSTEM.spacing.sm,
+  },
+  chipScroll: {
+    marginBottom: DESIGN_SYSTEM.spacing.md,
+  },
+  chipsContainer: {
+    flexDirection: "row",
+    gap: DESIGN_SYSTEM.spacing.sm,
+    paddingRight: DESIGN_SYSTEM.spacing.lg,
+  },
+  enhancedFilterChip: {
+    borderRadius: DESIGN_SYSTEM.borderRadius.full,
+    overflow: "hidden",
+    ...DESIGN_SYSTEM.shadows.sm,
+  },
+  filterChipGradient: {
+    paddingHorizontal: DESIGN_SYSTEM.spacing.lg,
+    paddingVertical: DESIGN_SYSTEM.spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.xs,
+    borderWidth: 1,
+    borderColor: DESIGN_SYSTEM.colors.gray[200],
+  },
+  enhancedFilterChipText: {
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.gray[700],
+    fontWeight: "500",
+  },
+  filterChipTextActive: {
+    color: DESIGN_SYSTEM.colors.white,
+  },
+
+  // Enhanced Offer Cards
+  enhancedOfferCard: {
+    marginBottom: DESIGN_SYSTEM.spacing.lg,
+    borderRadius: DESIGN_SYSTEM.borderRadius.xl,
+    overflow: "hidden",
+    ...DESIGN_SYSTEM.shadows.lg,
+  },
+  myOfferCard: {
+    borderWidth: 2,
+    borderColor: DESIGN_SYSTEM.colors.success[300],
+  },
+  offerCardTouchable: {
+    borderRadius: DESIGN_SYSTEM.borderRadius.xl,
+    overflow: "hidden",
+  },
+  offerCardBackground: {
+    borderRadius: DESIGN_SYSTEM.borderRadius.xl,
+  },
+  enhancedOfferHeader: {
+    borderTopLeftRadius: DESIGN_SYSTEM.borderRadius.xl,
+    borderTopRightRadius: DESIGN_SYSTEM.borderRadius.xl,
+    overflow: "hidden",
+  },
+  cropTypeHeader: {
+    paddingHorizontal: DESIGN_SYSTEM.spacing.lg,
+    paddingVertical: DESIGN_SYSTEM.spacing.md,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  cropTypeContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.md,
+  },
+  cropIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cropTypeText: {
+    ...DESIGN_SYSTEM.typography.h4,
+    color: DESIGN_SYSTEM.colors.white,
+    fontWeight: "600",
+  },
+  myOfferBadgeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.xs,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: DESIGN_SYSTEM.spacing.md,
+    paddingVertical: DESIGN_SYSTEM.spacing.xs,
+    borderRadius: DESIGN_SYSTEM.borderRadius.full,
+  },
+  myOfferBadgeHeaderText: {
+    ...DESIGN_SYSTEM.typography.captionMedium,
+    color: DESIGN_SYSTEM.colors.white,
+    fontWeight: "600",
+  },
+  enhancedOfferContent: {
+    padding: DESIGN_SYSTEM.spacing.lg,
+  },
+  enhancedOfferTitle: {
+    ...DESIGN_SYSTEM.typography.h4,
+    color: DESIGN_SYSTEM.colors.gray[900],
+    marginBottom: DESIGN_SYSTEM.spacing.md,
+    lineHeight: 26,
+  },
+  enhancedOfferLocation: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.sm,
+    marginBottom: DESIGN_SYSTEM.spacing.lg,
+  },
+  locationIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: DESIGN_SYSTEM.colors.gray[100],
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  enhancedLocationText: {
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.gray[600],
+  },
+  enhancedOfferDetails: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: DESIGN_SYSTEM.spacing.lg,
+    marginBottom: DESIGN_SYSTEM.spacing.lg,
+  },
+  offerDetailItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.sm,
+  },
+  offerDetailText: {
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.gray[700],
+    fontWeight: "500",
+  },
+  enhancedOfferBenefits: {
+    marginBottom: DESIGN_SYSTEM.spacing.lg,
+  },
+  benefitsTitle: {
+    ...DESIGN_SYSTEM.typography.captionMedium,
+    color: DESIGN_SYSTEM.colors.gray[600],
+    marginBottom: DESIGN_SYSTEM.spacing.sm,
+  },
+  benefitsContainer: {
+    flexDirection: "row",
+    gap: DESIGN_SYSTEM.spacing.sm,
+  },
+  enhancedBenefitBadge: {
+    borderRadius: DESIGN_SYSTEM.borderRadius.full,
+    overflow: "hidden",
+    ...DESIGN_SYSTEM.shadows.sm,
+  },
+  benefitBadgeGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.xs,
+    paddingHorizontal: DESIGN_SYSTEM.spacing.md,
+    paddingVertical: DESIGN_SYSTEM.spacing.sm,
+  },
+  enhancedBenefitText: {
+    ...DESIGN_SYSTEM.typography.captionMedium,
+    color: DESIGN_SYSTEM.colors.white,
+    fontWeight: "600",
+  },
+  offerCardFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: DESIGN_SYSTEM.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: DESIGN_SYSTEM.colors.gray[100],
+  },
+  offerTimeAgo: {
+    ...DESIGN_SYSTEM.typography.caption,
+    color: DESIGN_SYSTEM.colors.gray[500],
+  },
+  actionIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.xs,
+  },
+  actionText: {
+    ...DESIGN_SYSTEM.typography.captionMedium,
+    color: DESIGN_SYSTEM.colors.primary[600],
+    fontWeight: "600",
+  },
+
+  // Enhanced Offers Section
+  offersSection: {
+    paddingHorizontal: DESIGN_SYSTEM.spacing.lg,
+    paddingBottom: DESIGN_SYSTEM.spacing.xxl,
+  },
+  offersCount: {
+    ...DESIGN_SYSTEM.typography.h4,
+    color: DESIGN_SYSTEM.colors.gray[900],
+    marginBottom: DESIGN_SYSTEM.spacing.lg,
+    fontWeight: "600",
+  },
+
+  // Enhanced Empty State
+  enhancedEmptyState: {
+    marginTop: DESIGN_SYSTEM.spacing.xl,
+    borderRadius: DESIGN_SYSTEM.borderRadius.xl,
+    overflow: "hidden",
+    ...DESIGN_SYSTEM.shadows.md,
+  },
+  emptyStateGradient: {
+    alignItems: "center",
+    padding: DESIGN_SYSTEM.spacing.xxl,
+  },
+  emptyStateIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: DESIGN_SYSTEM.colors.gray[100],
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: DESIGN_SYSTEM.spacing.lg,
+  },
+  emptyStateTitle: {
+    ...DESIGN_SYSTEM.typography.h4,
+    color: DESIGN_SYSTEM.colors.gray[700],
+    marginBottom: DESIGN_SYSTEM.spacing.md,
+    textAlign: "center",
+  },
+  emptyStateSubtitle: {
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.gray[500],
+    textAlign: "center",
+    marginBottom: DESIGN_SYSTEM.spacing.xl,
+    lineHeight: 22,
+  },
+  emptyStateButton: {
+    borderRadius: DESIGN_SYSTEM.borderRadius.full,
+    overflow: "hidden",
+    ...DESIGN_SYSTEM.shadows.md,
+  },
+  emptyStateButtonGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.sm,
+    paddingHorizontal: DESIGN_SYSTEM.spacing.xl,
+    paddingVertical: DESIGN_SYSTEM.spacing.md,
+  },
+  emptyStateButtonText: {
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.white,
+    fontWeight: "600",
   },
 });

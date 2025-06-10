@@ -2,7 +2,7 @@ import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import HomeScreen from "../screens/productor/AppWithTabs/TabNavigator/HomeScreen";
-import NotificationsScreen from "../screens/productor/NotificationsScreen";
+import NotificationsScreen from "../screens/productor/MessagesScreen";
 import ProfileScreen from "../screens/productor/ProfileScreen";
 import TerrainScreen from "../screens/productor/TerrainScreen";
 

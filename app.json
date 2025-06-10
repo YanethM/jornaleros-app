@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cdi.pasocolombiaapp",
+      "bundleIdentifier": "com.yanethm.PasoColombiaApp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

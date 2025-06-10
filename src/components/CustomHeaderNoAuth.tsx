@@ -1,4 +1,4 @@
-// components/CustomHeaderNoAuth.js
+// components/CustomHeaderNoAuth.js - Arreglo rápido
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -10,15 +10,24 @@ import {
   Modal,
   TouchableWithoutFeedback,
   ScrollView,
-  Animated
+  Animated,
+  Alert
 } from 'react-native';
 import { getStatusBarHeight } from '../utils/dimensions';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext'; // ← Agregar esto
 
-const CustomHeaderNoAuth = ({ navigation }) => {
+const CustomHeaderNoAuth = ({ navigation: propNavigation }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [slideAnim] = useState(new Animated.Value(-300));
   const statusBarHeight = getStatusBarHeight();
+  
+  const hookNavigation = useNavigation();
+  const navigation = propNavigation || hookNavigation;
+  
+  // ✅ AGREGAR: Usar AuthContext
+  const { logout, isAuthenticated } = useAuth();
 
   useEffect(() => {
     Animated.timing(slideAnim, {
@@ -29,14 +38,54 @@ const CustomHeaderNoAuth = ({ navigation }) => {
   }, [isMenuOpen]);
 
   const menuItems = [
-    { title: 'Acerca de', icon: 'info', route: 'About' },
+    { title: 'Acerca de Jornaleando', icon: 'info', route: 'About' }, // ← Cambiar a 'About'
     { title: 'Contacto', icon: 'email', route: 'Contact' },
     { title: 'Términos y Condiciones', icon: 'description', route: 'Terms' },
+    { title: 'Iniciar sesión', icon: 'login', route: 'Login' },
   ];
   
+  // ✅ FUNCIÓN CORREGIDA
   const handleMenuItemPress = (route) => {
     setIsMenuOpen(false);
-    navigation.navigate(route);
+    
+    try {
+      console.log(`🧭 Intentando navegar a: ${route}`);
+      
+      if (route === 'Login') {
+        // ✅ CASO ESPECIAL: Login
+        if (isAuthenticated) {
+          // Si está logueado, ofrecer cerrar sesión
+          Alert.alert(
+            'Ya tienes una sesión activa',
+            '¿Deseas cerrar la sesión actual para iniciar con otra cuenta?',
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              { 
+                text: 'Cerrar Sesión', 
+                onPress: async () => {
+                  try {
+                    await logout();
+                    console.log('✅ Sesión cerrada, ahora en pantalla de login');
+                  } catch (error) {
+                    console.error('Error cerrando sesión:', error);
+                  }
+                }
+              }
+            ]
+          );
+        } else {
+          // Si no está logueado, navegar normalmente
+          navigation.navigate(route);
+        }
+      } else {
+        // ✅ OTROS CASOS: Navegar normalmente
+        navigation.navigate(route);
+      }
+      
+    } catch (error) {
+      console.error(`❌ Error navegando a ${route}:`, error);
+      Alert.alert('Error', 'No se pudo abrir la página solicitada.');
+    }
   };
 
   return (
@@ -54,6 +103,29 @@ const CustomHeaderNoAuth = ({ navigation }) => {
             source={require('../../assets/logo.png')}
             style={styles.logo}
           />
+          
+          {/* ✅ BOTÓN CONDICIONAL */}
+          {isAuthenticated ? (
+            <TouchableOpacity 
+              onPress={async () => {
+                try {
+                  await logout();
+                } catch (error) {
+                  console.error('Error cerrando sesión:', error);
+                }
+              }}
+              style={styles.logoutButton}
+            >
+              <Icon name="logout" size={24} color="#EF4444" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              onPress={() => handleMenuItemPress('Login')}
+              style={styles.loginButton}
+            >
+              <Icon name="login" size={24} color="#284F66" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -94,6 +166,24 @@ const CustomHeaderNoAuth = ({ navigation }) => {
                       <Text style={styles.menuItemText}>{item.title}</Text>
                     </TouchableOpacity>
                   ))}
+                  
+                  {/* ✅ AGREGAR: Opción de cerrar sesión si está logueado */}
+                  {isAuthenticated && (
+                    <TouchableOpacity
+                      style={[styles.menuItem, styles.logoutMenuItem]}
+                      onPress={async () => {
+                        setIsMenuOpen(false);
+                        try {
+                          await logout();
+                        } catch (error) {
+                          console.error('Error cerrando sesión:', error);
+                        }
+                      }}
+                    >
+                      <Icon name="logout" size={24} color="#EF4444" />
+                      <Text style={[styles.menuItemText, styles.logoutText]}>Cerrar Sesión</Text>
+                    </TouchableOpacity>
+                  )}
                 </ScrollView>
               </Animated.View>
             </TouchableWithoutFeedback>
@@ -125,6 +215,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 15,
     backgroundColor: '#fff',
+    justifyContent: 'space-between', // ← Cambiar para distribuir elementos
   },
   menuButton: {
     padding: 5,
@@ -136,6 +227,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: '50%',
     marginLeft: -60,
+  },
+  // ✅ AGREGAR: Estilos para botones
+  loginButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#e3f2fd',
+  },
+  logoutButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#ffebee',
   },
   modalOverlay: {
     flex: 1,
@@ -187,6 +289,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     marginLeft: 20,
+  },
+  // ✅ AGREGAR: Estilos para logout
+  logoutMenuItem: {
+    backgroundColor: '#ffebee',
+    borderBottomColor: '#ffcdd2',
+  },
+  logoutText: {
+    color: '#EF4444',
+    fontWeight: '600',
   },
 });
 

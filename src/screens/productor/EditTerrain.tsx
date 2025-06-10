@@ -13,6 +13,7 @@ import {
   Modal,
   KeyboardAvoidingView,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useAuth } from "../../context/AuthContext";
 import { getFarmById, updateFarm } from "../../services/farmService";
@@ -23,11 +24,26 @@ import {
   getVillagesByMunicipality,
 } from "../../services/locationService";
 import ScreenLayout from "../../components/ScreenLayout";
+import { getCropType } from "../../services/cropTypeService"; // ✅ Descomentado
+import { getCultivationPhasesByCropId } from "../../services/cultivationPhaseService";
+import CustomTabBar from "../../components/CustomTabBar";
 
 interface EditTerrainProps {
   navigation: any;
   route: any;
 }
+
+// Paleta de colores para tipos de cultivo
+const cropTypeColors = [
+  "#22C55E", // Verde
+  "#3B82F6", // Azul
+  "#F59E0B", // Naranja
+  "#8B5CF6", // Púrpura
+  "#EF4444", // Rojo
+  "#06B6D4", // Cyan
+  "#84CC16", // Lima
+  "#F97316", // Naranja oscuro
+];
 
 // Paleta de colores consistente
 const COLORS = {
@@ -78,7 +94,9 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
   const [saving, setSaving] = useState(false);
   const [farm, setFarm] = useState<any>(null);
   const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [isEditingCrops, setIsEditingCrops] = useState(false);
   const [loadingLocationData, setLoadingLocationData] = useState(false);
+  const [loadingCropData, setLoadingCropData] = useState(false);
 
   // Estados del formulario
   const [formData, setFormData] = useState({
@@ -87,6 +105,7 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
     plantCount: "",
     specificLocation: "",
     status: true,
+    phaseIds: [] as string[], // Array de IDs de fases seleccionadas
   });
 
   // Estados de ubicación
@@ -99,12 +118,18 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
   const [selectedMunicipality, setSelectedMunicipality] = useState<any>(null);
   const [selectedVillage, setSelectedVillage] = useState<any>(null);
 
+  // Estados para cultivos y fases
+  const [availableCropTypes, setAvailableCropTypes] = useState<any[]>([]);
+  const [selectedCropTypes, setSelectedCropTypes] = useState<any[]>([]);
+  const [phasesByCropType, setPhasesByCropType] = useState<{[key: string]: any[]}>({});
+
   // Estados de modales
   const [showCountryModal, setShowCountryModal] = useState(false);
   const [showDepartmentModal, setShowDepartmentModal] = useState(false);
   const [showMunicipalityModal, setShowMunicipalityModal] = useState(false);
   const [showVillageModal, setShowVillageModal] = useState(false);
   const [showConfirmExit, setShowConfirmExit] = useState(false);
+  const [showCropTypesModal, setShowCropTypesModal] = useState(false);
 
   // Estados de validación
   const [errors, setErrors] = useState<any>({});
@@ -114,22 +139,58 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
+  // ✅ Función simplificada para obtener tipos de cultivo usando el servicio
+  const loadCropTypes = async () => {
+    try {
+      console.log("Loading crop types from service...");
+      const response = await getCropType();
+      
+      let cropTypesData = [];
+      if (response?.data) {
+        cropTypesData = response.data;
+      } else if (Array.isArray(response)) {
+        cropTypesData = response;
+      }
+
+      console.log("Crop types loaded successfully:", cropTypesData.length);
+      setAvailableCropTypes(cropTypesData);
+      return cropTypesData;
+    } catch (error) {
+      console.error("Error loading crop types from service:", error);
+      Alert.alert("Error", "No se pudieron cargar los tipos de cultivo");
+      return [];
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
-      // Primero cargar países y esperar a que se actualice el estado
-      const countriesResponse = await getCountries();
-      let countriesData = [];
-      if (countriesResponse?.data) {
-        countriesData = countriesResponse.data;
-      } else if (countriesResponse && Array.isArray(countriesResponse)) {
-        countriesData = countriesResponse;
+      try {
+        setLoading(true);
+        
+        // ✅ Cargar tipos de cultivo primero y siempre desde el servicio
+        const cropTypesData = await loadCropTypes();
+        
+        // Cargar países
+        const countriesResponse = await getCountries();
+        let countriesData = [];
+        if (countriesResponse?.data) {
+          countriesData = countriesResponse.data;
+        } else if (countriesResponse && Array.isArray(countriesResponse)) {
+          countriesData = countriesResponse;
+        }
+        setCountries(countriesData);
+
+        // Cargar datos de la finca
+        await loadFarmData(countriesData, cropTypesData);
+
+      } catch (error) {
+        console.error("Error loading initial data:", error);
+        Alert.alert("Error", "No se pudieron cargar los datos iniciales");
+      } finally {
+        setLoading(false);
       }
-      
-      setCountries(countriesData);
-      
-      // Luego cargar la finca con los países ya disponibles
-      await loadFarmData(countriesData);
     };
+
     loadData();
 
     // Animación de entrada
@@ -147,9 +208,91 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
     ]).start();
   }, []);
 
-  const loadFarmData = async (countriesData?: any[]) => {
+  // Cargar fases cuando se seleccionen tipos de cultivo
+  useEffect(() => {
+    const loadPhasesForSelectedCrops = async () => {
+      console.log("Loading phases for selected crops:", selectedCropTypes);
+      
+      if (selectedCropTypes.length > 0) {
+        try {
+          setLoadingCropData(true);
+          const newPhasesByCropType: {[key: string]: any[]} = {};
+
+          // Cargar fases para cada tipo de cultivo seleccionado
+          for (const cropType of selectedCropTypes) {
+            try {
+              console.log(`Loading phases for crop type: ${cropType.name} (${cropType.id})`);
+              const phasesResponse = await getCultivationPhasesByCropId(cropType.id);
+              let phasesData = [];
+              
+              if (phasesResponse?.data) {
+                phasesData = phasesResponse.data;
+              } else if (phasesResponse && Array.isArray(phasesResponse)) {
+                phasesData = phasesResponse;
+              }
+
+              console.log(`Loaded ${phasesData.length} phases for ${cropType.name}`);
+              newPhasesByCropType[cropType.id] = phasesData;
+            } catch (error) {
+              console.warn(`Error loading phases for crop ${cropType.name}:`, error);
+              newPhasesByCropType[cropType.id] = []; // Array vacío si falla
+            }
+          }
+
+          console.log("All phases loaded:", newPhasesByCropType);
+          setPhasesByCropType(newPhasesByCropType);
+          const validPhaseIds = Object.values(newPhasesByCropType)
+            .flat()
+            .map(phase => phase.id);
+          
+          console.log("Valid phase IDs for selected crop types:", validPhaseIds);
+          console.log("Current selected phase IDs:", formData.phaseIds);
+          
+          // Solo filtrar si hay fases seleccionadas que ya no son válidas
+          setFormData(prev => {
+            const filteredPhaseIds = prev.phaseIds.filter(phaseId => 
+              validPhaseIds.includes(phaseId)
+            );
+            
+            if (filteredPhaseIds.length !== prev.phaseIds.length) {
+              console.log("Filtered out invalid phases:", 
+                prev.phaseIds.filter(phaseId => !validPhaseIds.includes(phaseId)));
+              setHasChanges(true); // Marcar como cambio si se filtran fases
+            }
+            
+            return {
+              ...prev,
+              phaseIds: filteredPhaseIds
+            };
+          });
+          
+        } catch (error) {
+          console.error("Error loading phases for selected crops:", error);
+        } finally {
+          setLoadingCropData(false);
+        }
+      } else {
+        console.log("No crop types selected, clearing phases but preserving selected phases");
+        setPhasesByCropType({});
+      }
+    };
+
+    loadPhasesForSelectedCrops();
+  }, [selectedCropTypes]); 
+
+  // Nuevo useEffect para debug de cambios en phaseIds
+  useEffect(() => {
+    console.log("formData.phaseIds changed:", formData.phaseIds);
+  }, [formData.phaseIds]);
+
+  // Nuevo useEffect para debug de cambios en selectedCropTypes
+  useEffect(() => {
+    console.log("selectedCropTypes changed:", selectedCropTypes.map(ct => ({id: ct.id, name: ct.name})));
+  }, [selectedCropTypes]);
+
+  // Función actualizada para cargar datos de la finca
+  const loadFarmData = async (countriesData?: any[], cropTypesData?: any[]) => {
     try {
-      setLoading(true);
       const response = await getFarmById(farmId);
       let farmData;
 
@@ -170,19 +313,82 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
         plantCount: farmData.plantCount?.toString() || "",
         specificLocation: farmData.specificLocation || "",
         status: farmData.status !== false,
+        phaseIds: [], // Lo llenaremos después con los datos reales
       });
 
-      // Cargar ubicación actual si existe, pasando los países como parámetro
+      // Cargar ubicación actual si existe
       if (farmData.countryId) {
         await loadExistingLocation(farmData, countriesData || countries);
       }
+
+      // ✅ Cargar tipos de cultivo actuales - MEJORADO con fallback consistente
+      let currentCropTypes = [];
+      if (farmData.cropTypesInfo && Array.isArray(farmData.cropTypesInfo)) {
+        currentCropTypes = farmData.cropTypesInfo;
+        console.log("Using cropTypesInfo:", currentCropTypes);
+      } else if (farmData.cropTypes && Array.isArray(farmData.cropTypes)) {
+        currentCropTypes = farmData.cropTypes.map((ct: any) => 
+          ct.cropType || ct
+        );
+        console.log("Using cropTypes:", currentCropTypes);
+      }
+
+      // ✅ Fusionar tipos de cultivo de la finca con los disponibles para asegurar que estén todos
+      if (cropTypesData && cropTypesData.length > 0) {
+        const mergedTypes = [...cropTypesData];
+        
+        currentCropTypes.forEach((farmType: any) => {
+          if (!mergedTypes.find(type => type.id === farmType.id)) {
+            console.log(`Adding missing crop type from farm: ${farmType.name}`);
+            mergedTypes.push(farmType);
+          }
+        });
+        
+        setAvailableCropTypes(mergedTypes);
+        console.log(`Total available crop types: ${mergedTypes.length}`);
+      } else if (currentCropTypes.length > 0) {
+        // Si no tenemos tipos disponibles pero la finca tiene algunos, usarlos como base
+        console.log("Using farm crop types as available types fallback");
+        setAvailableCropTypes(currentCropTypes);
+      }
+
+      setSelectedCropTypes(currentCropTypes);
+
+      // ✅ Cargar fases actuales - MEJORADO con mejor logging
+      let currentPhaseIds = [];
+      if (farmData.activePhasesInfo && Array.isArray(farmData.activePhasesInfo)) {
+        currentPhaseIds = farmData.activePhasesInfo.map((phase: any) => phase.id);
+        console.log("Using activePhasesInfo for phase IDs:", currentPhaseIds);
+        console.log("activePhasesInfo details:", farmData.activePhasesInfo.map(p => ({id: p.id, name: p.name})));
+      } else if (farmData.phases && Array.isArray(farmData.phases)) {
+        currentPhaseIds = farmData.phases.map((p: any) => {
+          // Manejar diferentes estructuras de datos
+          if (p.cultivationPhase?.id) return p.cultivationPhase.id;
+          if (p.phaseId) return p.phaseId;
+          if (p.id) return p.id;
+          return null;
+        }).filter(Boolean);
+        console.log("Using phases for phase IDs:", currentPhaseIds);
+        console.log("phases details:", farmData.phases);
+      }
+      
+      console.log("Final currentPhaseIds to set:", currentPhaseIds);
+      
+      // ✅ Actualizar el formData con las fases reales DESPUÉS de configurar todo lo demás
+      setFormData(prev => {
+        const updatedData = {
+          ...prev,
+          phaseIds: currentPhaseIds
+        };
+        console.log("Setting formData.phaseIds to:", updatedData.phaseIds);
+        return updatedData;
+      });
+
     } catch (error) {
       console.error("Error loading farm:", error);
       Alert.alert("Error", "No se pudo cargar la información de la finca", [
         { text: "Volver", onPress: () => navigation.goBack() },
       ]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -194,14 +400,12 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
     setHasChanges(true);
   };
 
-  // FUNCIÓN FALTANTE: handleLocationSelect
   const handleLocationSelect = async (type: string, item: any) => {
     setHasChanges(true);
     
     switch (type) {
       case "country":
         setSelectedCountry(item);
-        // Limpiar selecciones dependientes
         setSelectedDepartment(null);
         setSelectedMunicipality(null);
         setSelectedVillage(null);
@@ -210,7 +414,6 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
         setVillages([]);
         setShowCountryModal(false);
         
-        // Cargar departamentos del país seleccionado
         if (item.id) {
           await loadDepartments(item.id);
         }
@@ -218,14 +421,12 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
         
       case "department":
         setSelectedDepartment(item);
-        // Limpiar selecciones dependientes
         setSelectedMunicipality(null);
         setSelectedVillage(null);
         setMunicipalities([]);
         setVillages([]);
         setShowDepartmentModal(false);
         
-        // Cargar municipios del departamento seleccionado
         if (item.id) {
           await loadMunicipalities(item.id);
         }
@@ -233,12 +434,10 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
         
       case "municipality":
         setSelectedMunicipality(item);
-        // Limpiar selecciones dependientes
         setSelectedVillage(null);
         setVillages([]);
         setShowMunicipalityModal(false);
         
-        // Cargar veredas del municipio seleccionado
         if (item.id) {
           await loadVillages(item.id);
         }
@@ -250,6 +449,41 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
         break;
     }
   };
+
+  const handleCropTypeToggle = (cropType: any) => {
+    console.log("Toggling crop type:", cropType.name, cropType.id);
+    setHasChanges(true);
+    setSelectedCropTypes(prev => {
+      const isSelected = prev.some(ct => ct.id === cropType.id);
+      const newSelection = isSelected 
+        ? prev.filter(ct => ct.id !== cropType.id)
+        : [...prev, cropType];
+      
+      console.log(`Crop type ${cropType.name} ${isSelected ? 'removed' : 'added'}`);
+      console.log("New crop types selection:", newSelection.map(ct => ct.name));
+      
+      return newSelection;
+    });
+  };
+
+// Manejar selección de fases
+const togglePhase = (phaseId: string) => {
+  console.log("Toggling phase:", phaseId);
+  setHasChanges(true);
+  setFormData(prev => {
+    const wasSelected = prev.phaseIds.includes(phaseId);
+    const newPhaseIds = wasSelected
+      ? prev.phaseIds.filter(id => id !== phaseId)
+      : [...prev.phaseIds, phaseId];
+    
+    console.log(`Phase ${phaseId} ${wasSelected ? 'removed' : 'added'}. New phases:`, newPhaseIds);
+    
+    return {
+      ...prev,
+      phaseIds: newPhaseIds
+    };
+  });
+};
 
   const handleSave = async () => {
     if (saving) return;
@@ -271,6 +505,9 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
       if (!selectedCountry) {
         newErrors.location = "Debe seleccionar un país.";
       }
+      if (!selectedCropTypes || selectedCropTypes.length === 0) {
+        newErrors.cropTypes = "Debe seleccionar al menos un tipo de cultivo.";
+      }
 
       if (Object.keys(newErrors).length > 0) {
         setErrors(newErrors);
@@ -278,7 +515,6 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
         return;
       }
 
-      // Preparar datos para guardar
       const updatedFarmData = {
         ...formData,
         countryId: selectedCountry?.id,
@@ -286,7 +522,14 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
         municipalityId: selectedMunicipality?.id,
         villageId: selectedVillage?.id,
         specificLocation: formData.specificLocation.trim(),
+        cropTypeIds: selectedCropTypes.map(ct => ct.id),
+        phaseIds: formData.phaseIds, // Enviar array de IDs de fases seleccionadas
+        size: Number(formData.size),
+        plantCount: Number(formData.plantCount),
+        status: formData.status
       };
+
+      console.log("Saving farm with data:", updatedFarmData);
 
       // Actualizar finca
       const response = await updateFarm(farmId, updatedFarmData);
@@ -307,33 +550,19 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
     try {
       console.log("Loading existing location for farm:", farmData);
       
-      // Extraer IDs de ubicación
       const countryId = farmData.countryId || farmData.country?.id;
       const departmentId = farmData.departmentId || farmData.department?.id;
       const municipalityId = farmData.cityId || farmData.municipalityId || farmData.city?.id || farmData.municipality?.id;
       const villageId = farmData.villageId || farmData.village?.id;
 
-      console.log("Extracted location IDs:", {
-        countryId,
-        departmentId,
-        municipalityId,
-        villageId,
-      });
-
       if (!countryId) return;
 
-      // Buscar país seleccionado en los datos pasados como parámetro
       const countryOption = countriesData.find((c) => c.id === countryId);
-      if (!countryOption) {
-        console.log("Country not found in:", countriesData);
-        return;
-      }
+      if (!countryOption) return;
 
       setSelectedCountry(countryOption);
-      console.log("Selected country:", countryOption);
 
       if (departmentId) {
-        // Cargar departamentos
         const deptResponse = await getDepartmentsByCountry(countryId);
         let departmentsData = [];
         if (deptResponse?.data) {
@@ -346,10 +575,8 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
         const departmentOption = departmentsData.find((d) => d.id === departmentId);
         if (departmentOption) {
           setSelectedDepartment(departmentOption);
-          console.log("Selected department:", departmentOption);
 
           if (municipalityId) {
-            // Cargar municipios
             const muniResponse = await getMunicipalitiesByDepartment(departmentId);
             let municipalitiesData = [];
             if (muniResponse?.data) {
@@ -362,10 +589,8 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
             const municipalityOption = municipalitiesData.find((m) => m.id === municipalityId);
             if (municipalityOption) {
               setSelectedMunicipality(municipalityOption);
-              console.log("Selected municipality:", municipalityOption);
 
               if (villageId) {
-                // Cargar veredas
                 const villageResponse = await getVillagesByMunicipality(municipalityId);
                 let villagesData = [];
                 if (villageResponse?.data) {
@@ -378,7 +603,6 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
                 const villageOption = villagesData.find((v) => v.id === villageId);
                 if (villageOption) {
                   setSelectedVillage(villageOption);
-                  console.log("Selected village:", villageOption);
                 }
               }
             }
@@ -398,34 +622,10 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
     }
   };
 
-  const loadCountries = async () => {
-    try {
-      const response = await getCountries();
-      console.log("Countries API response:", response);
-      
-      let countriesData = [];
-      if (response?.data) {
-        countriesData = response.data;
-      } else if (response && Array.isArray(response)) {
-        countriesData = response;
-      }
-      
-      setCountries(countriesData);
-      return countriesData;
-    } catch (error) {
-      console.warn("Error loading countries:", error);
-      return [];
-    }
-  };
-
   const loadDepartments = async (countryId: string) => {
     try {
       setLoadingLocationData(true);
-      console.log("getDepartmentsByCountry called with:", countryId);
-      console.log("Making API request to: /locations/department-states/" + countryId);
-      
       const response = await getDepartmentsByCountry(countryId);
-      console.log("Departments API response data:", response);
       
       let departmentsData = [];
       if (response?.data) {
@@ -539,6 +739,78 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
     </Modal>
   );
 
+  const CropTypesModal = () => (
+    <Modal
+      animationType="slide"
+      transparent
+      visible={showCropTypesModal}
+      onRequestClose={() => setShowCropTypesModal(false)}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.locationModalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Seleccionar Tipos de Cultivo</Text>
+            <TouchableOpacity 
+              onPress={() => setShowCropTypesModal(false)} 
+              style={styles.modalCloseButton}>
+              <Icon name="close" size={20} color={COLORS.text.secondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
+            {availableCropTypes && availableCropTypes.length > 0 ? (
+              availableCropTypes.map((cropType) => {
+                const isSelected = selectedCropTypes.some(ct => ct.id === cropType.id);
+                return (
+                  <TouchableOpacity
+                    key={cropType.id}
+                    style={[styles.modalItem, isSelected && styles.selectedModalItem]}
+                    onPress={() => handleCropTypeToggle(cropType)}
+                    activeOpacity={0.7}>
+                    <View style={styles.modalItemContent}>
+                      <Icon 
+                        name="eco" 
+                        size={20} 
+                        color={isSelected ? COLORS.success : COLORS.text.secondary} 
+                      />
+                      <Text style={[
+                        styles.modalItemText, 
+                        isSelected && styles.selectedModalItemText
+                      ]}>
+                        {cropType.name}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Icon name="check" size={20} color={COLORS.success} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <View style={styles.emptyState}>
+                <Icon name="eco" size={48} color={COLORS.text.tertiary} />
+                <Text style={styles.emptyStateText}>No hay tipos de cultivo disponibles</Text>
+                <TouchableOpacity 
+                  style={styles.retryButton}
+                  onPress={loadCropTypes}>
+                  <Icon name="refresh" size={20} color={COLORS.primary} />
+                  <Text style={styles.retryButtonText}>Reintentar</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.modalConfirmButton}
+              onPress={() => setShowCropTypesModal(false)}>
+              <Text style={styles.modalConfirmButtonText}>
+                Confirmar ({selectedCropTypes.length} seleccionados)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const ConfirmExitModal = () => (
     <Modal
       animationType="fade"
@@ -623,50 +895,262 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
               },
             ]}>
 
-            {/* NUEVA SECCIÓN: Tipos de Cultivo y Fases */}
-            {farm?.cropTypesInfo && farm.cropTypesInfo.length > 0 && (
-              <View style={styles.card}>
-                <View style={styles.sectionHeader}>
-                  <Icon name="eco" size={24} color={COLORS.success} />
-                  <Text style={styles.sectionTitle}>Cultivos y Fases</Text>
-                </View>
-                
-                {/* Tipos de Cultivo */}
-                <View style={styles.subsection}>
-                  <Text style={styles.subsectionTitle}>Tipos de Cultivo</Text>
-                  {farm.cropTypesInfo.map((cropType: any, index: number) => (
-                    <View key={cropType.id || index} style={styles.infoItem}>
-                      <Icon name="grass" size={20} color={COLORS.success} />
-                      <Text style={styles.infoText}>{cropType.name}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                {/* Fases Activas */}
-                {farm?.activePhasesInfo && farm.activePhasesInfo.length > 0 && (
-                  <View style={styles.subsection}>
-                    <Text style={styles.subsectionTitle}>Fases Activas</Text>
-                    {farm.activePhasesInfo.map((phase: any, index: number) => (
-                      <View key={phase.id || index} style={styles.infoItem}>
-                        <Icon name="schedule" size={20} color={COLORS.tertiary} />
-                        <Text style={styles.infoText}>{phase.name}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {/* Fase Principal */}
-                {farm?.primaryPhaseInfo && (
-                  <View style={styles.subsection}>
-                    <Text style={styles.subsectionTitle}>Fase Principal</Text>
-                    <View style={styles.primaryPhaseCard}>
-                      <Icon name="star" size={20} color={COLORS.warning} />
-                      <Text style={styles.primaryPhaseText}>{farm.primaryPhaseInfo.name}</Text>
-                    </View>
-                  </View>
+            {/* Sección de Tipos de Cultivo y Fases - Editable */}
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <Icon name="eco" size={24} color={COLORS.success} />
+                <Text style={styles.sectionTitle}>Cultivos y Fases</Text>
+                {!isEditingCrops && (
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => setIsEditingCrops(true)}>
+                    <Icon name="edit" size={18} color={COLORS.primary} />
+                  </TouchableOpacity>
                 )}
               </View>
-            )}
+
+              {errors.cropTypes && (
+                <Text style={styles.errorText}>{errors.cropTypes}</Text>
+              )}
+
+              {!isEditingCrops ? (
+                // Vista de solo lectura
+                <View style={styles.cropsView}>
+                  {/* Tipos de Cultivo */}
+                  <View style={styles.subsection}>
+                    <Text style={styles.subsectionTitle}>Tipos de Cultivo</Text>
+                    {selectedCropTypes && selectedCropTypes.length > 0 ? (
+                      selectedCropTypes.map((cropType, index) => (
+                        <View key={cropType.id || index} style={styles.infoItem}>
+                          <Icon name="grass" size={20} color={COLORS.success} />
+                          <Text style={styles.infoText}>{cropType.name}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.emptyStateText}>No hay tipos de cultivo seleccionados</Text>
+                    )}
+                  </View>
+
+                  {/* Fases Seleccionadas - MEJORADO */}
+                  <View style={styles.subsection}>
+                    <Text style={styles.subsectionTitle}>Fases Activas</Text>
+                    {formData.phaseIds.length > 0 ? (
+                      <>
+                        {/* Mostrar fases agrupadas por tipo de cultivo si tenemos esa info */}
+                        {farm?.activePhasesInfo && farm.activePhasesInfo.length > 0 ? (
+                          farm.activePhasesInfo.map((phase: any, index: number) => (
+                            <View key={phase.id || index} style={styles.infoItem}>
+                              <Icon name="schedule" size={20} color={COLORS.tertiary} />
+                              <View style={styles.phaseInfo}>
+                                <Text style={styles.infoText}>{phase.name}</Text>
+                                {phase.cropType && (
+                                  <Text style={styles.phaseSubText}>
+                                    Cultivo: {phase.cropType.name}
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+                          ))
+                        ) : (
+                          <View style={styles.selectedPhasesInfo}>
+                            <Icon name="info" size={16} color="#6b7280" />
+                            <Text style={styles.selectedPhasesText}>
+                              {formData.phaseIds.length}{" "}
+                              {formData.phaseIds.length === 1 ? "fase seleccionada" : "fases seleccionadas"}
+                            </Text>
+                          </View>
+                        )}
+                      </>
+                    ) : (
+                      <Text style={styles.emptyStateText}>No hay fases seleccionadas</Text>
+                    )}
+                  </View>
+                </View>
+              ) : (
+                // Vista de edición
+                <>
+                  {/* Selector de Tipos de Cultivo */}
+                  <TouchableOpacity
+                    style={styles.selectButton}
+                    onPress={() => setShowCropTypesModal(true)}>
+                    <View style={styles.selectButtonContent}>
+                      <Icon name="eco" size={20} color={COLORS.text.secondary} />
+                      <View style={styles.selectButtonText}>
+                        <Text style={styles.selectLabel}>Tipos de Cultivo *</Text>
+                        <Text style={styles.selectValue}>
+                          {selectedCropTypes.length > 0 
+                            ? `${selectedCropTypes.length} tipo(s) seleccionado(s)`
+                            : "Seleccionar tipos de cultivo"
+                          }
+                        </Text>
+                      </View>
+                    </View>
+                    <Icon
+                      name="chevron-right"
+                      size={20}
+                      color={COLORS.text.tertiary}
+                    />
+                  </TouchableOpacity>
+
+                  {/* Mostrar tipos seleccionados */}
+                  {selectedCropTypes.length > 0 && (
+                    <View style={styles.selectedItemsContainer}>
+                      {selectedCropTypes.map((cropType, index) => (
+                        <View key={cropType.id || index} style={styles.selectedTag}>
+                          <Icon name="grass" size={16} color={COLORS.success} />
+                          <Text style={styles.selectedTagText}>{cropType.name}</Text>
+                          <TouchableOpacity
+                            onPress={() => handleCropTypeToggle(cropType)}
+                            style={styles.removeTagButton}>
+                            <Icon name="close" size={14} color={COLORS.text.tertiary} />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Selector de Fases por Tipo de Cultivo */}
+                  {selectedCropTypes.length > 0 && (
+                    <View style={styles.phasesSelectorContainer}>
+                      <View style={styles.sectionHeader}>
+                        <Icon name="timeline" size={20} color="#284F66" />
+                        <Text style={styles.sectionTitle}>Fases de Cultivo</Text>
+                      </View>
+                      <Text style={styles.phasesSubtitle}>
+                        Selecciona las fases para cada tipo de cultivo
+                      </Text>
+
+                      {loadingCropData ? (
+                        <View style={styles.loadingModalState}>
+                          <ActivityIndicator size="large" color={COLORS.primary} />
+                          <Text style={styles.loadingModalText}>Cargando fases...</Text>
+                        </View>
+                      ) : (
+                        <>
+                          {Object.entries(phasesByCropType).map(
+                            ([cropTypeId, phases], cropIndex) => {
+                              const cropType = selectedCropTypes.find((ct) => ct.id === cropTypeId);
+                              const cropColor = cropTypeColors[cropIndex % cropTypeColors.length];
+                              
+                              // ✅ Debug logging para verificar el estado
+                              console.log(`Rendering phases for crop ${cropType?.name}:`, {
+                                cropTypeId,
+                                phasesCount: phases.length,
+                                selectedPhases: formData.phaseIds.filter(phaseId => 
+                                  phases.some(phase => phase.id === phaseId)
+                                )
+                              });
+                              
+                              return (
+                                <View key={cropTypeId} style={styles.cropPhaseGroup}>
+                                  <View
+                                    style={[
+                                      styles.cropTypeHeader,
+                                      { backgroundColor: `${cropColor}15` },
+                                    ]}>
+                                    <View
+                                      style={[
+                                        styles.cropTypeIndicator,
+                                        { backgroundColor: cropColor },
+                                      ]}
+                                    />
+                                    <Icon name="eco" size={18} color={cropColor} />
+                                    <Text style={[styles.cropTypeName, { color: cropColor }]}>
+                                      {cropType?.name || "Cultivo"}
+                                    </Text>
+                                    <Text style={styles.phaseCount}>
+                                      {phases.length} {phases.length === 1 ? "fase" : "fases"}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.phasesGrid}>
+                                    {phases.map((phase) => {
+                                      const isSelected = formData.phaseIds.includes(phase.id);
+                                      
+                                      // ✅ Debug para cada fase
+                                      if (cropIndex === 0 && phases.indexOf(phase) === 0) {
+                                        console.log(`Phase ${phase.name} (${phase.id}) selected:`, isSelected);
+                                        console.log("Current formData.phaseIds:", formData.phaseIds);
+                                      }
+                                      
+                                      return (
+                                        <TouchableOpacity
+                                          key={phase.id}
+                                          style={[
+                                            styles.phaseChip,
+                                            isSelected && styles.selectedPhaseChip,
+                                            { borderColor: cropColor },
+                                            isSelected && { backgroundColor: cropColor },
+                                          ]}
+                                          onPress={() => togglePhase(phase.id)}>
+                                          <Icon
+                                            name={
+                                              isSelected
+                                                ? "check-circle"
+                                                : "radio-button-unchecked"
+                                            }
+                                            size={16}
+                                            color={isSelected ? "#fff" : cropColor}
+                                          />
+                                          <Text
+                                            style={[
+                                              styles.phaseChipText,
+                                              { color: isSelected ? "#fff" : cropColor },
+                                            ]}>
+                                            {phase.name}
+                                          </Text>
+                                        </TouchableOpacity>
+                                      );
+                                    })}
+                                  </View>
+                                </View>
+                              );
+                            }
+                          )}
+                          <View style={styles.selectedPhasesInfo}>
+                            <Icon name="info" size={16} color="#6b7280" />
+                            <Text style={styles.selectedPhasesText}>
+                              {formData.phaseIds.length}{" "}
+                              {formData.phaseIds.length === 1
+                                ? "fase seleccionada"
+                                : "fases seleccionadas"}
+                            </Text>
+                            {/* ✅ Botón de debug para limpiar fases */}
+                            <TouchableOpacity
+                              style={styles.debugButton}
+                              onPress={() => {
+                                console.log("Manual clear phases button pressed");
+                                setFormData(prev => ({
+                                  ...prev,
+                                  phaseIds: []
+                                }));
+                                setHasChanges(true);
+                              }}>
+                              <Text style={styles.debugButtonText}>Limpiar</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      )}
+                    </View>
+                  )}
+
+                  <View style={styles.editButtonsContainer}>
+                    <TouchableOpacity
+                      style={[styles.editActionButton, styles.cancelEditButton]}
+                      onPress={() => setIsEditingCrops(false)}>
+                      <Text style={styles.cancelEditButtonText}>Cancelar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.editActionButton, styles.confirmEditButton]}
+                      onPress={() => {
+                        setIsEditingCrops(false);
+                        setHasChanges(true);
+                      }}>
+                      <Text style={styles.editButtonText}>Confirmar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
 
             {/* Información básica */}
             <View style={styles.card}>
@@ -724,19 +1208,6 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
                     <Text style={styles.errorText}>{errors.plantCount}</Text>
                   )}
                 </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Ubicación específica (opcional)</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={formData.specificLocation}
-                  onChangeText={(value) => handleInputChange("specificLocation", value)}
-                  placeholder="Descripción adicional de la ubicación"
-                  placeholderTextColor={COLORS.text.tertiary}
-                  multiline
-                  numberOfLines={3}
-                />
               </View>
             </View>
 
@@ -940,8 +1411,13 @@ const EditTerrain: React.FC<EditTerrainProps> = ({ navigation, route }) => {
           loading={loadingLocationData}
         />
 
+        <CropTypesModal />
         <ConfirmExitModal />
       </KeyboardAvoidingView>
+      <CustomTabBar
+        navigation={navigation}
+        currentRoute="EditTerrain"
+      />
     </ScreenLayout>
   );
 };
@@ -1033,7 +1509,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
-  // NUEVOS ESTILOS para cultivos y fases
   subsection: {
     marginBottom: 16,
   },
@@ -1058,21 +1533,165 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1,
   },
-  primaryPhaseCard: {
+  cropsView: {
+    marginTop: 8,
+  },
+  // Nuevos estilos para el selector de fases
+  phasesSelectorContainer: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border.light,
+  },
+  phasesSubtitle: {
+    fontSize: 14,
+    color: COLORS.text.secondary,
+    marginBottom: 16,
+    marginTop: -8,
+  },
+  cropPhaseGroup: {
+    marginBottom: 20,
+  },
+  cropTypeHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: COLORS.warningLight,
+    padding: 12,
     borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.warning,
+    marginBottom: 12,
   },
-  primaryPhaseText: {
+  cropTypeIndicator: {
+    width: 4,
+    height: 20,
+    borderRadius: 2,
+    marginRight: 8,
+  },
+  cropTypeName: {
     fontSize: 16,
     fontWeight: "600",
-    color: COLORS.text.primary,
+    marginLeft: 8,
+    flex: 1,
+  },
+  phaseCount: {
+    fontSize: 12,
+    color: COLORS.text.secondary,
+    backgroundColor: COLORS.background.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  phasesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  phaseChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    backgroundColor: COLORS.background.secondary,
+    marginBottom: 8,
+  },
+  selectedPhaseChip: {
+    borderWidth: 2,
+  },
+  phaseChipText: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginLeft: 6,
+  },
+  phaseInfo: {
+    flex: 1,
     marginLeft: 12,
+  },
+  phaseSubText: {
+    fontSize: 12,
+    color: COLORS.text.secondary,
+    marginTop: 2,
+  },
+  selectedPhasesInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: COLORS.background.primary,
+    borderRadius: 8,
+  },
+  selectedPhasesText: {
+    fontSize: 14,
+    color: COLORS.text.secondary,
+    marginLeft: 8,
+    flex: 1,
+  },
+  // ✅ Estilos para el botón de debug
+  debugButton: {
+    backgroundColor: COLORS.warning,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  debugButtonText: {
+    fontSize: 12,
+    color: COLORS.text.white,
+    fontWeight: "600",
+  },
+  selectedModalItem: {
+    backgroundColor: COLORS.primaryLight,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+  },
+  selectedModalItemText: {
+    fontWeight: "600",
+    color: COLORS.primary,
+  },
+  modalItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border.light,
+  },
+  modalConfirmButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  modalConfirmButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.text.white,
+  },
+  selectedItemsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 12,
+    gap: 8,
+  },
+  selectedTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.successLight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.success,
+  },
+  selectedTagText: {
+    fontSize: 12,
+    color: COLORS.text.primary,
+    marginLeft: 6,
+    marginRight: 4,
+  },
+  removeTagButton: {
+    padding: 2,
   },
   inputGroup: {
     marginBottom: 20,
@@ -1203,6 +1822,7 @@ const styles = StyleSheet.create({
     color: COLORS.text.primary,
     fontWeight: "500",
     flex: 1,
+    marginLeft: 8,
   },
   emptyState: {
     flex: 1,
@@ -1215,6 +1835,22 @@ const styles = StyleSheet.create({
     color: COLORS.text.tertiary,
     marginTop: 16,
     textAlign: "center",
+  },
+  // ✅ Nuevo estilo para el botón de reintento
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: "600",
+    marginLeft: 8,
   },
   loadingModalState: {
     flex: 1,

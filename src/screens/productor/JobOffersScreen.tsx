@@ -19,6 +19,7 @@ import { useAuth } from "../../context/AuthContext";
 import ApiClient from "../../utils/api";
 import { getJobOffersByEmployerId } from "../../services/jobOffers";
 import { ModernJobOfferList } from "./ModernJobOfferList";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const PRIMARY_COLOR = "#284F66";
 const SECONDARY_COLOR = "#4A7C94";
@@ -127,7 +128,7 @@ export const JobOffersScreen = ({ navigation }) => {
         // Usar displayLocation que ya viene procesada del backend
         const location = offer.displayLocation || {
           country: offer.country || "No especificado",
-          department: offer.state || "No especificado", 
+          department: offer.state || "No especificado",
           city: offer.city || "No especificado",
           village: offer.village || "No especificado",
         };
@@ -136,11 +137,15 @@ export const JobOffersScreen = ({ navigation }) => {
         const farmInfo = {
           name: offer.farm?.name || "Finca sin nombre",
           location: {
-            country: offer.farm?.village?.municipality?.departmentState?.country?.name || location.country,
-            department: offer.farm?.village?.municipality?.departmentState?.name || location.department,
+            country:
+              offer.farm?.village?.municipality?.departmentState?.country
+                ?.name || location.country,
+            department:
+              offer.farm?.village?.municipality?.departmentState?.name ||
+              location.department,
             city: offer.farm?.village?.municipality?.name || location.city,
             village: offer.farm?.village?.name || location.village,
-          }
+          },
         };
 
         return {
@@ -148,20 +153,20 @@ export const JobOffersScreen = ({ navigation }) => {
           // Información de ubicación mejorada
           displayLocation: location,
           farmInfo: farmInfo,
-          
+
           // Información del cultivo (ya viene correcta del backend)
           cropTypeName: offer.cropType?.name || "Cultivo no especificado",
           phaseName: offer.phase?.name || "Fase no especificada",
-          
+
           // Información del empleador
           employerName: offer.employer?.user?.name || "Empleador",
-          
+
           // Contador de aplicaciones
           applicationsCount: offer.applicationsCount || 0,
-          
+
           // Información adicional para mostrar
           farmName: offer.farm?.name || "Sin nombre",
-          
+
           // Costos de beneficios (convertir null a 0 para mostrar)
           foodCost: offer.foodCost || 0,
           lodgingCost: offer.lodgingCost || 0,
@@ -169,16 +174,15 @@ export const JobOffersScreen = ({ navigation }) => {
       });
 
       setJobOffers(processedOffers);
-      
+
       // Extraer tipos de cultivo únicos para filtros
       const cropNames = processedOffers
-        .map(offer => offer.cropType?.name)
+        .map((offer) => offer.cropType?.name)
         .filter(Boolean);
       const uniqueCropNames = [...new Set(cropNames)];
       setAvailableCrops(
         uniqueCropNames.map((crop) => ({ id: crop, name: crop }))
       );
-      
     } catch (error) {
       console.error("Error cargando ofertas de trabajo:", error);
       setError(error.message || "Error al cargar las ofertas de trabajo");
@@ -193,7 +197,8 @@ export const JobOffersScreen = ({ navigation }) => {
       all: jobOffers.length,
       Activo: jobOffers.filter((offer) => offer.status === "Activo").length,
       En_curso: jobOffers.filter((offer) => offer.status === "En_curso").length,
-      Finalizado: jobOffers.filter((offer) => offer.status === "Finalizado").length,
+      Finalizado: jobOffers.filter((offer) => offer.status === "Finalizado")
+        .length,
     };
     setTabCounts(counts);
   };
@@ -239,20 +244,8 @@ export const JobOffersScreen = ({ navigation }) => {
     navigation.navigate("JobOfferDetail", { jobOfferId: jobOffer.id });
   };
 
-  // ✅ SOLUCIÓN: Usar ScreenLayout con header integrado
-  const screenLayoutProps = {
-    navigation,
-    showHeader: true,
-    headerTitle: "Mis Ofertas de Trabajo",
-    headerSubtitle: `${tabCounts.all} ${tabCounts.all === 1 ? "oferta" : "ofertas"} en total`,
-    showBackButton: true,
-    headerRight: (
-      <TouchableOpacity
-        style={styles.headerButton}
-        onPress={handleCreateJobOffer}>
-        <Icon name="add" size={24} color="#fff" />
-      </TouchableOpacity>
-    ),
+  const handleViewPublicHome = () => {
+    navigation.navigate("PublicHomePreview");
   };
 
   const renderTabBar = () => (
@@ -449,12 +442,22 @@ export const JobOffersScreen = ({ navigation }) => {
     );
   };
 
+  // ✅ SECCIÓN DE FILTROS ACTUALIZADA con botón PublicHome
   const renderFiltersSection = () => (
     <View style={styles.filtersContainer}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filtersContent}>
+        {/* Botón para ver vista pública */}
+        <TouchableOpacity
+          style={styles.publicViewChip}
+          onPress={handleViewPublicHome}>
+          <Icon name="visibility" size={18} color="#fff" />
+          <Text style={styles.publicViewChipText}>Vista Pública</Text>
+        </TouchableOpacity>
+
+        {/* Filtro de cultivo existente */}
         <TouchableOpacity
           style={[
             styles.filterChip,
@@ -480,6 +483,7 @@ export const JobOffersScreen = ({ navigation }) => {
           />
         </TouchableOpacity>
 
+        {/* Botón limpiar filtros */}
         {selectedCrops.length > 0 && (
           <TouchableOpacity
             style={styles.clearFiltersChip}
@@ -492,9 +496,8 @@ export const JobOffersScreen = ({ navigation }) => {
     </View>
   );
 
-  // ✅ SOLUCIÓN: Renderizado simplificado y consistente
   return (
-    <ScreenLayout {...screenLayoutProps}>
+    <ScreenLayout navigation={navigation}>
       <View style={styles.container}>
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -576,6 +579,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8fafc",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: PRIMARY_COLOR,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: PRIMARY_COLOR,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   headerButton: {
     width: 40,
@@ -667,6 +691,33 @@ const styles = StyleSheet.create({
   },
   filtersContent: {
     paddingHorizontal: 16,
+  },
+  // ✅ NUEVO: Estilo para el botón de vista pública
+  publicViewChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#6366f1", // Color índigo/violeta para destacar
+    borderRadius: 25,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginRight: 12,
+    gap: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#6366f1",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  publicViewChipText: {
+    fontSize: 14,
+    color: "#fff",
+    fontWeight: "600",
   },
   filterChip: {
     flexDirection: "row",

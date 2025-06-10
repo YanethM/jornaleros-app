@@ -21,7 +21,8 @@ import { useAuth } from "../../context/AuthContext";
 import { 
   getCountries, 
   getDepartmentsByCountry, 
-  getMunicipalitiesByDepartment 
+  getMunicipalitiesByDepartment,
+  getVillagesByMunicipality
 } from "../../services/locationService";
 
 const PRIMARY_COLOR = "#284F66";
@@ -29,12 +30,12 @@ const PRIMARY_COLOR = "#284F66";
 export default function TerrainScreen({ navigation }) {
   const [searchText, setSearchText] = useState("");
   const [farms, setFarms] = useState([]);
-  const [loading, setLoading] = useState(false); // ✅ CAMBIO: Iniciar en false
-  const [initialLoading, setInitialLoading] = useState(true); // ✅ NUEVO: Estado separado para carga inicial
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [locationCache, setLocationCache] = useState({});
-  const [isScreenReady, setIsScreenReady] = useState(false); // ✅ NUEVO: Control de renderizado
+  const [isScreenReady, setIsScreenReady] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const isFocused = useIsFocused();
@@ -56,21 +57,32 @@ export default function TerrainScreen({ navigation }) {
     ]).start();
   }, []);
 
-  // Cargar cache de ubicaciones
+  // Cargar cache de ubicaciones mejorado
   const loadLocationCache = async () => {
     try {
+      console.log("Loading location cache...");
       const countries = await getCountries();
       const cache = {};
       
       if (countries?.data) {
         for (const country of countries.data) {
-          cache[country.id] = { name: country.name, type: 'country' };
+          cache[country.id] = { 
+            name: country.name, 
+            type: 'country',
+            id: country.id 
+          };
           
           try {
             const departments = await getDepartmentsByCountry(country.id);
             if (departments?.data) {
               for (const dept of departments.data) {
-                cache[dept.id] = { name: dept.name, type: 'department', country: country.name };
+                cache[dept.id] = { 
+                  name: dept.name, 
+                  type: 'department', 
+                  country: country.name,
+                  countryId: country.id,
+                  id: dept.id
+                };
                 
                 try {
                   const municipalities = await getMunicipalitiesByDepartment(dept.id);
@@ -80,8 +92,33 @@ export default function TerrainScreen({ navigation }) {
                         name: muni.name, 
                         type: 'municipality', 
                         department: dept.name,
-                        country: country.name 
+                        departmentId: dept.id,
+                        country: country.name,
+                        countryId: country.id,
+                        id: muni.id
                       };
+
+                      // Cargar veredas para cada municipio
+                      try {
+                        const villages = await getVillagesByMunicipality(muni.id);
+                        if (villages?.data) {
+                          for (const village of villages.data) {
+                            cache[village.id] = {
+                              name: village.name,
+                              type: 'village',
+                              municipality: muni.name,
+                              municipalityId: muni.id,
+                              department: dept.name,
+                              departmentId: dept.id,
+                              country: country.name,
+                              countryId: country.id,
+                              id: village.id
+                            };
+                          }
+                        }
+                      } catch (villageError) {
+                        console.warn(`Error loading villages for ${muni.name}:`, villageError);
+                      }
                     }
                   }
                 } catch (muniError) {
@@ -95,6 +132,7 @@ export default function TerrainScreen({ navigation }) {
         }
       }
       
+      console.log("Location cache loaded with", Object.keys(cache).length, "entries");
       setLocationCache(cache);
     } catch (error) {
       console.warn("Error loading location cache:", error);
@@ -103,7 +141,6 @@ export default function TerrainScreen({ navigation }) {
 
   const loadFarms = async (isRefreshing = false) => {
     try {
-      // ✅ CAMBIO: Manejar estados de loading por separado
       if (isRefreshing) {
         setRefreshing(true);
       } else if (farms.length === 0) {
@@ -132,19 +169,14 @@ export default function TerrainScreen({ navigation }) {
       
       console.log("Farm response:", farmsData);
       
-      // CORRECCIÓN: Extraer datos del formato correcto de respuesta
       let farmsList = [];
       
       if (farmsData) {
-        // Intentar diferentes formatos de respuesta
         if (farmsData.data && Array.isArray(farmsData.data)) {
-          // Formato: { success: true, data: [...], count: X }
           farmsList = farmsData.data;
         } else if (farmsData.farms && Array.isArray(farmsData.farms)) {
-          // Formato legacy: { farms: [...] }
           farmsList = farmsData.farms;
         } else if (Array.isArray(farmsData)) {
-          // Formato directo: [...]
           farmsList = farmsData;
         } else {
           console.warn("Formato de respuesta desconocido:", farmsData);
@@ -172,14 +204,12 @@ export default function TerrainScreen({ navigation }) {
     }
   };
 
-  // ✅ CAMBIO: Cargar datos después del renderizado inicial
   useEffect(() => {
     const initializeScreen = async () => {
       await loadLocationCache();
       await loadFarms();
     };
     
-    // Pequeño delay para asegurar que el componente esté montado
     const timer = setTimeout(initializeScreen, 100);
     return () => clearTimeout(timer);
   }, []);
@@ -202,76 +232,89 @@ export default function TerrainScreen({ navigation }) {
     navigation.navigate("EditTerrain", { farmId });
   };
 
-  const handleDelete = (farmId) => {
-    Alert.alert(
-      "Confirmar eliminación",
-      "¿Estás seguro de que deseas eliminar esta finca?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Eliminar",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              console.log("Delete farm:", farmId);
-              // Implement delete logic here
-            } catch (error) {
-              Alert.alert("Error", "No se pudo eliminar la finca");
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleViewMore = (farmId) => {
     navigation.navigate("TerrainDetail", { farmId });
   };
 
+  // Obtener una representación compacta de la ubicación
+  const getLocationHierarchy = (locationInfo) => {
+    const parts = [];
+    
+    if (locationInfo.village) {
+      parts.push(locationInfo.village);
+    }
+    if (locationInfo.city && locationInfo.city !== "No especificado") {
+      parts.push(locationInfo.city);
+    }
+    if (locationInfo.state && locationInfo.state !== "No especificado") {
+      parts.push(locationInfo.state);
+    }
+    if (locationInfo.country && locationInfo.country !== "Colombia") {
+      parts.push(locationInfo.country);
+    }
+    
+    return parts.join(" → ");
+  };
+
   // Resolver nombres de ubicación desde la nueva estructura de datos
   const getLocationInfo = (farm) => {
-    // Priorizar locationInfo si existe
-    if (farm.locationInfo) {
-      return {
-        city: farm.locationInfo.city || "No especificado",
-        state: farm.locationInfo.department || farm.locationInfo.state || "No especificado",
-        village: farm.locationInfo.village || null,
-        country: farm.locationInfo.country || "Colombia"
-      };
-    }
-    
-    // Usar relaciones de objetos si existen
-    if (farm.city?.name || farm.department?.name || farm.village?.name) {
-      return {
-        city: farm.city?.name || "No especificado",
-        state: farm.department?.name || "No especificado", 
-        village: farm.village?.name || null,
-        country: farm.country?.name || "Colombia"
-      };
-    }
-    
-    // Fallback a cache de ubicaciones si solo hay IDs
-    return {
-      city: locationCache[farm.city]?.name || "No especificado",
-      state: locationCache[farm.state]?.name || "No especificado",
-      village: locationCache[farm.village]?.name || null,
-      country: "Colombia"
+    let locationInfo = {
+      country: "Colombia",
+      state: "No especificado", 
+      city: "No especificado",
+      village: null
     };
+
+    // Método 1: Priorizar locationDetails si existe (formato nuevo del backend)
+    if (farm.locationDetails) {
+      locationInfo = {
+        country: farm.locationDetails.country || "Colombia",
+        state: farm.locationDetails.department || "No especificado",
+        city: farm.locationDetails.city || "No especificado", 
+        village: farm.locationDetails.village || null
+      };
+    }
+    // Método 2: Usar locationInfo si existe (formato legacy)
+    else if (farm.locationInfo) {
+      locationInfo = {
+        country: farm.locationInfo.country || "Colombia",
+        state: farm.locationInfo.department || farm.locationInfo.state || "No especificado",
+        city: farm.locationInfo.city || "No especificado",
+        village: farm.locationInfo.village || null
+      };
+    }
+    // Método 3: Usar relaciones de objetos si existen
+    else if (farm.country?.name || farm.department?.name || farm.city?.name || farm.village?.name) {
+      locationInfo = {
+        country: farm.country?.name || "Colombia",
+        state: farm.department?.name || "No especificado", 
+        city: farm.city?.name || "No especificado",
+        village: farm.village?.name || null
+      };
+    }
+    // Método 4: Fallback a cache de ubicaciones usando IDs
+    else {
+      locationInfo = {
+        country: locationCache[farm.countryId]?.name || "Colombia",
+        state: locationCache[farm.departmentId]?.name || locationCache[farm.state]?.name || "No especificado",
+        city: locationCache[farm.cityId]?.name || locationCache[farm.city]?.name || "No especificado",
+        village: locationCache[farm.villageId]?.name || locationCache[farm.village]?.name || null
+      };
+    }
+
+    return locationInfo;
   };
 
   // Obtener todos los tipos de cultivo de una finca
   const getCropTypes = (farm) => {
-    // Priorizar cropTypesInfo si existe (formato nuevo)
     if (farm.cropTypesInfo && Array.isArray(farm.cropTypesInfo) && farm.cropTypesInfo.length > 0) {
       return farm.cropTypesInfo.map(ct => ct.name).filter(Boolean);
     }
     
-    // Formato legacy
     if (farm.cropTypes && Array.isArray(farm.cropTypes) && farm.cropTypes.length > 0) {
       return farm.cropTypes.map(ct => ct.cropType?.name || ct.name).filter(Boolean);
     }
     
-    // Cultivo único
     if (farm.cropType) {
       return [farm.cropType];
     }
@@ -310,14 +353,14 @@ export default function TerrainScreen({ navigation }) {
 
     return (
       farm.name?.toLowerCase().includes(searchLower) ||
-      locationInfo.city.toLowerCase().includes(searchLower) ||
-      locationInfo.state.toLowerCase().includes(searchLower) ||
+      locationInfo.country?.toLowerCase().includes(searchLower) ||
+      locationInfo.city?.toLowerCase().includes(searchLower) ||
+      locationInfo.state?.toLowerCase().includes(searchLower) ||
       locationInfo.village?.toLowerCase().includes(searchLower) ||
       cropTypes.some(type => type.toLowerCase().includes(searchLower))
     );
   });
 
-  // ✅ NUEVO: Renderizado condicional mejorado
   if (!isScreenReady) {
     return (
       <ScreenLayout navigation={navigation}>
@@ -332,13 +375,21 @@ export default function TerrainScreen({ navigation }) {
     <ScreenLayout navigation={navigation}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <View style={styles.headerContent}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}>
+            <Icon name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Mis Terrenos</Text>
+            <Text style={styles.headerSubtitle}>Gestiona tus fincas</Text>
+          </View>
+          <View style={styles.headerActions}>
             <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}>
-              <Icon name="arrow-back" size={24} color="#fff" />
+              style={styles.headerIcon}
+              onPress={handleAddTerrain}>
+              <Icon name="landscape" size={20} color="#fff" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Terrenos</Text>
             <TouchableOpacity
               style={styles.addIconButton}
               onPress={handleAddTerrain}>
@@ -359,7 +410,7 @@ export default function TerrainScreen({ navigation }) {
           <Icon name="search" size={20} color="#999" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Buscar fincas..."
+            placeholder="Buscar por nombre, ubicación o cultivo..."
             placeholderTextColor="#999"
             value={searchText}
             onChangeText={setSearchText}
@@ -371,7 +422,6 @@ export default function TerrainScreen({ navigation }) {
           )}
         </Animated.View>
 
-        {/* ✅ NUEVO: Loading state mejorado */}
         {initialLoading ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={PRIMARY_COLOR} />
@@ -441,7 +491,7 @@ export default function TerrainScreen({ navigation }) {
                   </Text>
                   <Text style={styles.emptyStateText}>
                     {searchText
-                      ? "Intenta con otros términos de búsqueda"
+                      ? "Intenta con otros términos de búsqueda (nombre, país, departamento, municipio, vereda o cultivo)"
                       : "Añade tu primera finca para comenzar"}
                   </Text>
                   {!searchText && (
@@ -505,26 +555,53 @@ export default function TerrainScreen({ navigation }) {
                             <View style={styles.cardCenter}>
                               <Text style={styles.farmName}>{farm.name}</Text>
                               <View style={styles.farmInfo}>
-                                <View style={styles.infoRow}>
-                                  <Icon name="location-on" size={14} color="#999" />
-                                  <Text style={styles.infoText}>
-                                    {locationInfo.city}, {locationInfo.state}
-                                  </Text>
-                                </View>
-                                <View style={styles.infoRow}>
-                                  <Icon name="terrain" size={14} color="#999" />
-                                  <Text style={styles.infoText}>
-                                    {farm.size || 0} hectáreas
-                                  </Text>
-                                </View>
-                                {farm.plantCount > 0 && (
+                                {/* Ubicación completa */}
+                                <View style={styles.locationContainer}>
                                   <View style={styles.infoRow}>
-                                    <Icon name="filter-vintage" size={14} color="#999" />
+                                    <Icon name="public" size={14} color="#999" />
                                     <Text style={styles.infoText}>
-                                      {farm.plantCount} plantas
+                                      {locationInfo.country}
                                     </Text>
                                   </View>
-                                )}
+                                  <View style={styles.infoRow}>
+                                    <Icon name="map" size={14} color="#999" />
+                                    <Text style={styles.infoText}>
+                                      {locationInfo.state}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.infoRow}>
+                                    <Icon name="location-city" size={14} color="#999" />
+                                    <Text style={styles.infoText}>
+                                      {locationInfo.city}
+                                    </Text>
+                                  </View>
+                                  {locationInfo.village && (
+                                    <View style={styles.infoRow}>
+                                      <Icon name="nature-people" size={14} color="#999" />
+                                      <Text style={styles.infoText}>
+                                        {locationInfo.village}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                                
+                                {/* Información adicional */}
+                                <View style={styles.additionalInfo}>
+                                  <View style={styles.infoRow}>
+                                    <Icon name="terrain" size={14} color="#999" />
+                                    <Text style={styles.infoText}>
+                                      {farm.size || 0} hectáreas
+                                    </Text>
+                                  </View>
+                                  {farm.plantCount > 0 && (
+                                    <View style={styles.infoRow}>
+                                      <Icon name="filter-vintage" size={14} color="#999" />
+                                      <Text style={styles.infoText}>
+                                        {farm.plantCount} plantas
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
                               </View>
                               
                               {/* Chips de cultivos */}
@@ -568,15 +645,6 @@ export default function TerrainScreen({ navigation }) {
                               <Icon name="edit" size={16} color={PRIMARY_COLOR} />
                               <Text style={styles.actionText}>Editar</Text>
                             </TouchableOpacity>
-                            
-                            <TouchableOpacity
-                              style={[styles.actionButton, styles.deleteButton]}
-                              onPress={() => handleDelete(farm.id)}>
-                              <Icon name="delete" size={16} color={PRIMARY_COLOR} />
-                              <Text style={[styles.actionText, { color: PRIMARY_COLOR }]}>
-                                Eliminar
-                              </Text>
-                            </TouchableOpacity>
                           </View>
                         </TouchableOpacity>
                       </Animated.View>
@@ -605,9 +673,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
   },
-  backButton: {
-    padding: 5,
-  },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
@@ -628,9 +693,14 @@ const styles = StyleSheet.create({
   retryButton: {
     marginTop: 20,
     paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingVertical: 16,
     backgroundColor: PRIMARY_COLOR,
-    borderRadius: 8,
+    borderRadius: 16,
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   retryButtonText: {
     color: "#fff",
@@ -638,42 +708,63 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   header: {
-    backgroundColor: PRIMARY_COLOR,
-    paddingTop: Platform.OS === "ios" ? 50 : 20,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
-  },
-  headerContent: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: "#284F66",
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    paddingTop: Platform.OS === "ios" ? 50 : 20,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitleContainer: {
+    flex: 1,
     alignItems: "center",
   },
   headerTitle: {
-    flex: 1,
     fontSize: 20,
     fontWeight: "700",
     color: "#fff",
-    marginHorizontal: 16,
-    textAlign: "center",
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.8)",
+    marginTop: 2,
   },
   addIconButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
     alignItems: "center",
+    marginLeft: 8,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  headerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   searchContainer: {
     flexDirection: "row",
@@ -682,11 +773,16 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 20,
     marginBottom: 10,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    height: 44,
-    borderWidth: 1,
-    borderColor: "#E8ECF0",
+    height: 50,
+    borderWidth: 2,
+    borderColor: "#E2E8F0",
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   searchIcon: {
     marginRight: 10,
@@ -701,16 +797,21 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 16,
     marginBottom: 20,
-    gap: 8,
+    gap: 12,
   },
   statCard: {
     flex: 1,
     backgroundColor: "#fff",
-    padding: 16,
-    borderRadius: 12,
+    padding: 20,
+    borderRadius: 16,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E8ECF0",
+    borderWidth: 2,
+    borderColor: "#F1F5F9",
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   statNumber: {
     fontSize: 24,
@@ -729,21 +830,15 @@ const styles = StyleSheet.create({
   farmCard: {
     backgroundColor: "#fff",
     marginBottom: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#E8ECF0",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    borderWidth: 2,
+    borderColor: "#F1F5F9",
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   multiCropHeader: {
     flexDirection: "row",
@@ -761,7 +856,7 @@ const styles = StyleSheet.create({
   cardContent: {
     flexDirection: "row",
     padding: 16,
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   cardLeft: {
     marginRight: 12,
@@ -780,15 +875,24 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     color: "#2C3E50",
-    marginBottom: 4,
+    marginBottom: 8,
   },
   farmInfo: {
     marginTop: 2,
   },
+  locationContainer: {
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  additionalInfo: {
+    marginTop: 4,
+  },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 2,
+    marginBottom: 3,
   },
   infoText: {
     fontSize: 13,
@@ -798,7 +902,7 @@ const styles = StyleSheet.create({
   chipContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginTop: 8,
+    marginTop: 12,
     gap: 6,
   },
   chip: {
@@ -812,6 +916,8 @@ const styles = StyleSheet.create({
   },
   cardRight: {
     marginLeft: 12,
+    alignSelf: "flex-start",
+    marginTop: 8,
   },
   moreButton: {
     width: 32,
@@ -835,9 +941,6 @@ const styles = StyleSheet.create({
     borderRightColor: "#F5F6F7",
   },
   editButton: {
-    borderRightWidth: 1,
-  },
-  deleteButton: {
     borderRightWidth: 0,
   },
   actionText: {
@@ -877,9 +980,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: PRIMARY_COLOR,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 16,
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   emptyStateButtonText: {
     color: "#fff",

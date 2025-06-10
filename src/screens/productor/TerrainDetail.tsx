@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Text,
   View,
@@ -15,8 +15,12 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useAuth } from "../../context/AuthContext";
-import { deleteFarm, getFarmById } from "../../services/farmService";
-import { getCultivationPhaseById } from "../../services/cultivationPhaseService";
+import {
+  checkDeletionStatus,
+  deleteFarm,
+  getFarmById,
+  requestFarmDeletion,
+} from "../../services/farmService";
 import {
   getCountries,
   getDepartmentsByCountry,
@@ -25,6 +29,7 @@ import {
 } from "../../services/locationService";
 import ScreenLayout from "../../components/ScreenLayout";
 import CustomTabBar from "../../components/CustomTabBar";
+import { useFocusEffect } from "@react-navigation/native";
 
 interface TerrainDetailProps {
   navigation: any;
@@ -76,7 +81,13 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
   const [phases, setPhases] = useState<any[]>([]);
   const [locationCache, setLocationCache] = useState<any>({});
   const [cropColors, setCropColors] = useState<Record<string, any>>({});
+  const [deletionRequest, setDeletionRequest] = useState<any>(null);
+  const [requestStatus, setRequestStatus] = useState<
+    "none" | "pending" | "approved" | "rejected" | null
+  >(null);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
+  // En el estado del componente, añade:
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
@@ -171,6 +182,21 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
     }
   };
 
+  const checkDeletionRequestStatus = async () => {
+    try {
+      const response = await checkDeletionStatus(farmId);
+      if (response.success && response.data.hasRequest) {
+        setRequestStatus(response.data.status);
+        setDeletionRequest(response.data);
+      } else {
+        setRequestStatus("none");
+      }
+    } catch (error) {
+      console.warn("Error checking deletion status:", error);
+      setRequestStatus("none");
+    }
+  };
+
   useEffect(() => {
     if (!farmId) {
       setError("No se proporcionó ID de finca");
@@ -187,6 +213,7 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
 
     loadLocationCache();
     loadFarmDetails();
+    checkDeletionRequestStatus();
 
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -215,6 +242,16 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
     }
   }, [farm]);
 
+  useFocusEffect(
+    useCallback(() => {
+      console.log('TerrainDetail received focus, reloading data...');
+      if (farm) {
+        loadFarmDetails(true);
+        checkDeletionRequestStatus();
+      }
+    }, [farm])
+  );
+
   const loadFarmDetails = async (isRefreshing = false) => {
     try {
       if (!isRefreshing) {
@@ -222,8 +259,10 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
       }
       setError(null);
 
+      console.log("Fetching farm by ID:", farmId);
       const response = await getFarmById(farmId);
       let farmData;
+
       if (response?.data) {
         farmData = response.data;
       } else if (response?.success && response?.data) {
@@ -234,73 +273,86 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
         throw new Error("Formato de respuesta inválido");
       }
 
-      const allPhases: any[] = [];
-      const cropTypesInfo = farmData.cropTypesInfo || [];
-      const cropTypeMap = new Map();
-      cropTypesInfo.forEach((cropType: any) => {
-        cropTypeMap.set(cropType.id, cropType.name);
-      });
+      console.log(
+        "Farm response:",
+        JSON.stringify({
+          success: true,
+          data: {
+            ...farmData,
+            cropTypes: farmData.cropTypes ? "[Object]" : undefined,
+            cropTypesInfo: farmData.cropTypesInfo ? "[Object]" : undefined,
+            activePhasesInfo: farmData.activePhasesInfo
+              ? "[Object]"
+              : undefined,
+            phases: farmData.phases ? "[Object]" : undefined,
+          },
+        })
+      );
 
-      if (farmData.phasesByCropType) {
-        Object.entries(farmData.phasesByCropType).forEach(
-          ([cropTypeId, cropData]: [string, any]) => {
-            const cropTypeName =
-              cropTypeMap.get(cropTypeId) ||
-              cropData.cropTypeName ||
-              "Sin especificar";
-            if (cropData.activePhases) {
-              allPhases.push(
-                ...cropData.activePhases.map((farmPhase: any) => ({
-                  ...farmPhase.cultivationPhase,
-                  isActive: farmPhase.isActive,
-                  startDate: farmPhase.startDate,
-                  endDate: farmPhase.endDate,
-                  cropTypeName: cropTypeName,
-                  farmPhaseId: farmPhase.id,
-                }))
-              );
+      // Log detallado de la estructura de datos
+      console.log("=== DETAILED FARM DATA ===");
+      console.log("cropTypes:", JSON.stringify(farmData.cropTypes, null, 2));
+      console.log(
+        "cropTypesInfo:",
+        JSON.stringify(farmData.cropTypesInfo, null, 2)
+      );
+      console.log(
+        "activePhasesInfo:",
+        JSON.stringify(farmData.activePhasesInfo, null, 2)
+      );
+      console.log("phases:", JSON.stringify(farmData.phases, null, 2));
+
+      // NUEVA LÓGICA: Usar directamente activePhasesInfo si existe
+      let processedPhases = [];
+
+      if (
+        farmData.activePhasesInfo &&
+        Array.isArray(farmData.activePhasesInfo) &&
+        farmData.activePhasesInfo.length > 0
+      ) {
+        console.log("Using activePhasesInfo for phases");
+        processedPhases = farmData.activePhasesInfo.map((phase: any) => ({
+          ...phase,
+          isActive: true,
+          cropTypeName: phase.cropType?.name || "Sin especificar",
+          cropTypeId: phase.cropType?.id || phase.cropTypeId,
+        }));
+      } else if (
+        farmData.phases &&
+        Array.isArray(farmData.phases) &&
+        farmData.phases.length > 0
+      ) {
+        console.log("Using phases array");
+        processedPhases = farmData.phases
+          .map((farmPhase: any) => {
+            if (farmPhase.cultivationPhase) {
+              return {
+                ...farmPhase.cultivationPhase,
+                isActive: farmPhase.isActive !== false,
+                startDate: farmPhase.startDate,
+                endDate: farmPhase.endDate,
+                cropTypeName:
+                  farmPhase.cultivationPhase.cropType?.name ||
+                  "Sin especificar",
+                cropTypeId:
+                  farmPhase.cultivationPhase.cropType?.id ||
+                  farmPhase.cropTypeId,
+                farmPhaseId: farmPhase.id,
+              };
             }
-          }
-        );
-      }
-
-      if (allPhases.length === 0 && farmData.activePhasesInfo) {
-        allPhases.push(
-          ...farmData.activePhasesInfo.map((phase: any) => {
-            const cropTypeName = phase.cropTypeId
-              ? cropTypeMap.get(phase.cropTypeId)
-              : phase.cropTypeName || "Sin especificar";
-            return {
-              ...phase,
-              isActive: phase.isActive !== false,
-              cropTypeName: cropTypeName,
-            };
+            return null;
           })
-        );
+          .filter(Boolean);
       }
 
-      if (allPhases.length === 0 && farmData.phases) {
-        farmData.phases.forEach((farmPhase: any) => {
-          if (farmPhase.cultivationPhase) {
-            const cropTypeName =
-              farmPhase.cultivationPhase.cropType?.name ||
-              (farmPhase.cropTypeId
-                ? cropTypeMap.get(farmPhase.cropTypeId)
-                : "Sin especificar");
-            allPhases.push({
-              ...farmPhase.cultivationPhase,
-              isActive: farmPhase.isActive,
-              startDate: farmPhase.startDate,
-              endDate: farmPhase.endDate,
-              cropTypeName: cropTypeName,
-              farmPhaseId: farmPhase.id,
-            });
-          }
-        });
-      }
-
-      setPhases(allPhases);
+      console.log("Processed phases:", processedPhases);
+      setPhases(processedPhases);
       setFarm(farmData);
+
+      // Asignar colores para tipos de cultivo
+      const cropTypes = getCropTypesFromFarm(farmData);
+      console.log("Extracted crop types:", cropTypes);
+      assignCropColors(cropTypes);
     } catch (error) {
       console.error("Error loading farm details:", error);
       let errorMessage = "Error al cargar los detalles de la finca";
@@ -319,25 +371,137 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
       setRefreshing(false);
     }
   };
-  
+
+  // NUEVA FUNCIÓN: Extraer tipos de cultivo de la finca
+  const getCropTypesFromFarm = (farmData: any) => {
+    console.log("Extracting crop types from farm data");
+
+    // Priorizar cropTypesInfo
+    if (
+      farmData.cropTypesInfo &&
+      Array.isArray(farmData.cropTypesInfo) &&
+      farmData.cropTypesInfo.length > 0
+    ) {
+      console.log("Using cropTypesInfo");
+      return farmData.cropTypesInfo
+        .map((ct: any) => ct.name || ct)
+        .filter(Boolean);
+    }
+
+    // Fallback a cropTypes
+    if (
+      farmData.cropTypes &&
+      Array.isArray(farmData.cropTypes) &&
+      farmData.cropTypes.length > 0
+    ) {
+      console.log("Using cropTypes");
+      return farmData.cropTypes
+        .map((ct: any) => {
+          if (ct.cropType?.name) return ct.cropType.name;
+          if (ct.name) return ct.name;
+          return typeof ct === "string" ? ct : null;
+        })
+        .filter(Boolean);
+    }
+
+    // Último recurso: extraer de las fases
+    if (farmData.activePhasesInfo && Array.isArray(farmData.activePhasesInfo)) {
+      console.log("Extracting crop types from activePhasesInfo");
+      const uniqueTypes = new Set();
+      farmData.activePhasesInfo.forEach((phase: any) => {
+        if (phase.cropType?.name) {
+          uniqueTypes.add(phase.cropType.name);
+        }
+      });
+      return Array.from(uniqueTypes);
+    }
+
+    console.log("No crop types found");
+    return [];
+  };
+
+  // FUNCIÓN SIMPLIFICADA: getCropTypes
+  const getCropTypes = () => {
+    if (!farm) return [];
+    return getCropTypesFromFarm(farm);
+  };
+
+  // NUEVA FUNCIÓN: Obtener fases agrupadas por tipo de cultivo
+  const getPhasesByCropType = () => {
+    if (!phases || phases.length === 0) return {};
+
+    const groupedPhases: Record<string, any[]> = {};
+
+    phases.forEach((phase) => {
+      const cropTypeName = phase.cropTypeName || "Sin especificar";
+      if (!groupedPhases[cropTypeName]) {
+        groupedPhases[cropTypeName] = [];
+      }
+      groupedPhases[cropTypeName].push(phase);
+    });
+
+    console.log("Phases grouped by crop type:", groupedPhases);
+    return groupedPhases;
+  };
+
   const handleDelete = async () => {
+    // Verificar si ya hay una solicitud pendiente
+    if (requestStatus === "pending") {
+      setShowPermissionModal(true);
+      return;
+    }
+
+    setIsDeleting(true);
     try {
+      // Intentar eliminar directamente primero
       await deleteFarm(farmId);
       Alert.alert("Éxito", "Finca eliminada correctamente", [
         { text: "OK", onPress: () => navigation.goBack() },
       ]);
     } catch (error) {
       console.error("Error deleting farm:", error);
-  
+
+      // Si es error de permisos, enviar solicitud automáticamente
       if (
         error?.status === 403 ||
+        error?.code === "DELETION_NOT_APPROVED" ||
         error?.message?.includes("No tienes permiso") ||
         error?.data?.msg?.includes("No tienes permiso")
       ) {
-        setShowPermissionModal(true);
+        console.log("Permission denied, sending deletion request...");
+
+        try {
+          // Enviar solicitud de eliminación automáticamente
+          const requestResponse = await requestFarmDeletion(farmId);
+
+          if (requestResponse.success) {
+            setRequestStatus("pending");
+            setDeletionRequest({
+              requestId: requestResponse.data.requestId,
+              status: "pending",
+              createdAt: new Date(),
+            });
+            setShowPermissionModal(true);
+          }
+        } catch (requestError) {
+          console.error("Error sending deletion request:", requestError);
+
+          // Si ya existe una solicitud, mostrar modal
+          if (requestError?.message?.includes("Ya existe una solicitud")) {
+            setRequestStatus("pending");
+            setShowPermissionModal(true);
+          } else {
+            Alert.alert(
+              "Error",
+              "No se pudo enviar la solicitud de eliminación"
+            );
+          }
+        }
       } else {
         Alert.alert("Error", "No se pudo eliminar la finca");
       }
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -410,40 +574,6 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
       village: cacheVillage || null,
       country: cacheCountry || "Colombia",
     };
-  };
-
-  const getCropTypes = () => {
-    if (!farm) return [];
-
-    if (
-      farm.cropTypesInfo &&
-      Array.isArray(farm.cropTypesInfo) &&
-      farm.cropTypesInfo.length > 0
-    ) {
-      const cropNames = farm.cropTypesInfo
-        .map((ct: any) => (typeof ct === "string" ? ct : ct.name))
-        .filter(Boolean);
-      return cropNames;
-    }
-
-    if (
-      farm.cropTypes &&
-      Array.isArray(farm.cropTypes) &&
-      farm.cropTypes.length > 0
-    ) {
-      const cropNames = farm.cropTypes
-        .map((ct: any) => ct.cropType?.name || ct.name)
-        .filter(Boolean);
-      return cropNames;
-    }
-
-    if (farm.cropType) {
-      const cropName =
-        typeof farm.cropType === "string" ? farm.cropType : farm.cropType.name;
-      return cropName ? [cropName] : [];
-    }
-
-    return [];
   };
 
   const getCropTypeColors = () => {
@@ -535,8 +665,7 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
       <View style={styles.loadingContainer}>
         <View style={styles.loadingContent}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Cargando detalles...</Text>
-          <Text style={styles.debugText}>Farm ID: {farmId}</Text>
+          <Text style={styles.loadingText}>Cargando detalles</Text>
         </View>
       </View>
     );
@@ -593,9 +722,15 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
           <View style={styles.modalHeader}>
             <View style={styles.modalIconContainer}>
               <Icon
-                name="admin-panel-settings"
+                name={
+                  requestStatus === "pending"
+                    ? "schedule"
+                    : "admin-panel-settings"
+                }
                 size={32}
-                color={COLORS.warning}
+                color={
+                  requestStatus === "pending" ? COLORS.warning : COLORS.primary
+                }
               />
             </View>
             <TouchableOpacity
@@ -606,62 +741,132 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
           </View>
 
           <View style={styles.modalBody}>
-            <Text style={styles.modalTitle}>Permisos Insuficientes</Text>
-            <Text style={styles.modalDescription}>
-              Solo los <Text style={styles.highlightText}>administradores</Text>{" "}
-              pueden eliminar fincas del sistema.
-            </Text>
+            {requestStatus === "pending" ? (
+              <>
+                <Text style={styles.modalTitle}>Solicitud Enviada</Text>
+                <Text style={styles.modalDescription}>
+                  Tu solicitud para eliminar la finca{" "}
+                  <Text style={styles.highlightText}>"{farm?.name}"</Text> ha
+                  sido enviada al administrador.
+                </Text>
 
-            <View style={styles.modalInfoContainer}>
-              <View style={styles.modalInfoItem}>
-                <Icon name="info" size={16} color={COLORS.primary} />
-                <Text style={styles.modalInfoText}>
-                  Esta es una medida de seguridad para proteger los datos
-                  importantes
-                </Text>
-              </View>
-              <View style={styles.modalInfoItem}>
-                <Icon
-                  name="contact-support"
-                  size={16}
-                  color={COLORS.secondary}
-                />
-                <Text style={styles.modalInfoText}>
-                  Contacta a tu administrador si necesitas eliminar esta finca
-                </Text>
-              </View>
-            </View>
+                <View style={styles.modalInfoContainer}>
+                  <View style={styles.modalInfoItem}>
+                    <Icon name="schedule" size={16} color={COLORS.warning} />
+                    <Text style={styles.modalInfoText}>
+                      La solicitud está pendiente de revisión por parte del
+                      administrador
+                    </Text>
+                  </View>
+                  <View style={styles.modalInfoItem}>
+                    <Icon name="email" size={16} color={COLORS.primary} />
+                    <Text style={styles.modalInfoText}>
+                      Recibirás una notificación cuando la solicitud sea
+                      procesada
+                    </Text>
+                  </View>
+                </View>
 
-            <View style={styles.modalAlternatives}>
-              <Text style={styles.modalAlternativesTitle}>
-                Alternativas disponibles:
-              </Text>
-              <View style={styles.modalAlternativeItem}>
-                <Icon name="edit" size={14} color={COLORS.success} />
-                <Text style={styles.modalAlternativeText}>
-                  Editar información de la finca
+                <View style={styles.modalStatusContainer}>
+                  <Text style={styles.modalStatusTitle}>Estado actual:</Text>
+                  <View style={styles.modalStatusBadge}>
+                    <View
+                      style={[
+                        styles.statusDot,
+                        { backgroundColor: COLORS.warning },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.modalStatusText,
+                        { color: COLORS.warning },
+                      ]}>
+                      Pendiente de aprobación
+                    </Text>
+                  </View>
+                  {deletionRequest?.createdAt && (
+                    <Text style={styles.modalStatusDate}>
+                      Enviada:{" "}
+                      {new Date(deletionRequest.createdAt).toLocaleDateString()}
+                    </Text>
+                  )}
+                </View>
+              </>
+            ) : requestStatus === "approved" ? (
+              <>
+                <Text style={styles.modalTitle}>Solicitud Aprobada</Text>
+                <Text style={styles.modalDescription}>
+                  Tu solicitud ha sido{" "}
+                  <Text style={styles.highlightText}>aprobada</Text>. Ahora
+                  puedes eliminar la finca.
                 </Text>
-              </View>
-              <View style={styles.modalAlternativeItem}>
-                <Icon name="visibility-off" size={14} color={COLORS.tertiary} />
-                <Text style={styles.modalAlternativeText}>
-                  Marcar como inactiva (si disponible)
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    { backgroundColor: COLORS.error, marginBottom: 10 },
+                  ]}
+                  onPress={async () => {
+                    setShowPermissionModal(false);
+                    try {
+                      await deleteFarm(farmId);
+                      Alert.alert("Éxito", "Finca eliminada correctamente", [
+                        { text: "OK", onPress: () => navigation.goBack() },
+                      ]);
+                    } catch (error) {
+                      Alert.alert("Error", "No se pudo eliminar la finca");
+                    }
+                  }}>
+                  <Text style={styles.modalButtonText}>
+                    Eliminar Finca Ahora
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>Permisos Insuficientes</Text>
+                <Text style={styles.modalDescription}>
+                  Solo los{" "}
+                  <Text style={styles.highlightText}>administradores</Text>{" "}
+                  pueden eliminar fincas del sistema.
                 </Text>
-              </View>
-            </View>
+
+                <View style={styles.modalInfoContainer}>
+                  <View style={styles.modalInfoItem}>
+                    <Icon name="info" size={16} color={COLORS.primary} />
+                    <Text style={styles.modalInfoText}>
+                      Se ha enviado automáticamente una solicitud al
+                      administrador
+                    </Text>
+                  </View>
+                  <View style={styles.modalInfoItem}>
+                    <Icon
+                      name="contact-support"
+                      size={16}
+                      color={COLORS.secondary}
+                    />
+                    <Text style={styles.modalInfoText}>
+                      Recibirás una notificación cuando sea procesada
+                    </Text>
+                  </View>
+                </View>
+              </>
+            )}
           </View>
 
           <View style={styles.modalFooter}>
             <TouchableOpacity
               style={styles.modalButton}
               onPress={() => setShowPermissionModal(false)}>
-              <Text style={styles.modalButtonText}>Entendido</Text>
+              <Text style={styles.modalButtonText}>
+                {requestStatus === "pending" ? "Cerrar" : "Entendido"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
       </View>
     </Modal>
   );
+
   return (
     <ScreenLayout navigation={navigation}>
       <View style={styles.header}>
@@ -1185,16 +1390,33 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionButton, styles.deleteButton]}
+              style={[
+                styles.actionButton,
+                styles.deleteButton,
+                (requestStatus === "pending" || isDeleting) &&
+                  styles.disabledButton,
+              ]}
               onPress={handleDelete}
-              activeOpacity={0.8}>
-              <Icon name="delete" size={18} color={COLORS.text.white} />
-              <Text style={styles.actionButtonText}>Eliminar</Text>
+              activeOpacity={0.8}
+              disabled={requestStatus === "pending" || isDeleting}>
+              {isDeleting ? (
+                <ActivityIndicator size="small" color={COLORS.text.white} />
+              ) : (
+                <>
+                  <Icon name="delete" size={18} color={COLORS.text.white} />
+                  <Text style={styles.actionButtonText}>
+                    {requestStatus === "pending"
+                      ? "Solicitud enviada"
+                      : "Solicitar eliminar"}
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </Animated.View>
-        <CustomTabBar navigation={navigation} currentRoute="TerrainDetail" />
       </ScrollView>
+      <CustomTabBar navigation={navigation} currentRoute="TerrainDetail" />
+
       <PermissionModal />
     </ScreenLayout>
   );
@@ -1395,6 +1617,10 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  disabledButton: {
+    opacity: 0.7,
+    backgroundColor: COLORS.text.tertiary,
+  },
   statIconContainer: {
     width: 36, // Reducido de 48 a 36
     height: 36, // Reducido de 48 a 36
@@ -1414,6 +1640,38 @@ const styles = StyleSheet.create({
     color: COLORS.text.secondary,
     textAlign: "center",
     fontWeight: "500",
+  },
+  modalStatusContainer: {
+    backgroundColor: COLORS.background.primary,
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 16,
+    alignItems: "center",
+  },
+  modalStatusTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.text.primary,
+    marginBottom: 8,
+  },
+  modalStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: COLORS.warningLight,
+    borderRadius: 20,
+    marginBottom: 8,
+  },
+  modalStatusText: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+  modalStatusDate: {
+    fontSize: 11,
+    color: COLORS.text.tertiary,
+    fontStyle: "italic",
   },
   card: {
     backgroundColor: COLORS.background.secondary,

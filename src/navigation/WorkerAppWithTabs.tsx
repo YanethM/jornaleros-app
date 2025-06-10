@@ -1,9 +1,8 @@
-// src/navigation/WorkerAppWithTabs.tsx
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import WorkerJobsScreen from "../screens/worker/WorkerJobScreen";
-import WorkerHomeScreen from "../screens/worker/HomeScreen";
+import WorkerHomeScreen from "../screens/worker/WorkerHomeScreen";
 import WorkerApplicationsScreen from "../screens/worker/WorkerApplicationScreen";
 import WorkerProfileScreen from "../screens/worker/WorkerProfileScreen";
 
@@ -37,10 +36,10 @@ export default function WorkerAppWithTabs() {
               iconName = focused ? "home" : "home-outline";
               break;
             case "WorkerJobs":
-              iconName = focused ? "search" : "search-outline";
+              iconName = focused ? "briefcase" : "briefcase-outline";
               break;
             case "WorkerApplications":
-              iconName = focused ? "paper-plane" : "paper-plane-outline";
+              iconName = focused ? "document-text" : "document-text-outline";
               break;
             case "WorkerProfile":
               iconName = focused ? "person" : "person-outline";

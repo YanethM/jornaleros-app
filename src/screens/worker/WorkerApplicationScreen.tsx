@@ -11,12 +11,14 @@ import {
   Alert,
   Modal,
   Dimensions,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import ScreenLayoutWorker from "../../components/ScreenLayoutWorker";
 import { useAuth } from "../../context/AuthContext";
 import { getWorkerApplications } from "../../services/workerService";
 import { cancelApplication } from "../../services/applicationService";
+import CustomTabBarWorker from "../../components/CustomTabBarWorker";
 
 const { width } = Dimensions.get("window");
 
@@ -33,50 +35,80 @@ const COLORS = {
   warning: "#F59E0B",
   error: "#EF4444",
   border: "#E2E8F0",
+  info: "#3B82F6",
+  purple: "#8B5CF6",
 };
 
 export default function WorkerApplicationsScreen({ navigation }) {
   const [applications, setApplications] = useState([]);
-  const [filteredApplications, setFilteredApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedApplication, setSelectedApplication] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState("active"); // "active" o "history"
   const { user } = useAuth();
 
-  // Estados de aplicación disponibles
+  // 🔥 NUEVO - Configuración mejorada de estados
   const applicationStatuses = [
-    { id: "all", label: "Todas", icon: "list", color: COLORS.textSecondary },
     {
       id: "Solicitado",
-      label: "Pendientes",
-      icon: "time",
+      label: "Pendiente",
+      icon: "time-outline",
       color: COLORS.warning,
+      bgColor: "#FEF3C7",
+      textColor: "#92400E",
+      gradient: ["#FEF3C7", "#FDE68A"],
+      category: "active"
     },
     {
       id: "En_revision",
       label: "En Revisión",
-      icon: "eye",
-      color: COLORS.secondary,
+      icon: "eye-outline",
+      color: COLORS.info,
+      bgColor: "#DBEAFE",
+      textColor: "#1E40AF",
+      gradient: ["#DBEAFE", "#BFDBFE"],
+      category: "active"
     },
     {
       id: "Aceptado",
-      label: "Aceptadas",
+      label: "Aceptada",
       icon: "checkmark-circle",
       color: COLORS.success,
-    },
-    {
-      id: "Rechazada",
-      label: "Rechazadas",
-      icon: "close-circle",
-      color: COLORS.error,
+      bgColor: "#D1FAE5",
+      textColor: "#065F46",
+      gradient: ["#D1FAE5", "#A7F3D0"],
+      category: "active"
     },
     {
       id: "Completado",
-      label: "Completadas",
+      label: "Completada",
       icon: "trophy",
-      color: COLORS.primary,
+      color: COLORS.purple,
+      bgColor: "#EDE9FE",
+      textColor: "#5B21B6",
+      gradient: ["#EDE9FE", "#DDD6FE"],
+      category: "active"
+    },
+    {
+      id: "Cancelada",
+      label: "Cancelada",
+      icon: "close-circle-outline",
+      color: COLORS.textLight,
+      bgColor: "#F3F4F6",
+      textColor: "#374151",
+      gradient: ["#F3F4F6", "#E5E7EB"],
+      category: "history"
+    },
+    {
+      id: "Rechazada",
+      label: "Rechazada",
+      icon: "close-circle",
+      color: COLORS.error,
+      bgColor: "#FEE2E2",
+      textColor: "#991B1B",
+      gradient: ["#FEE2E2", "#FECACA"],
+      category: "history"
     },
   ];
 
@@ -93,128 +125,151 @@ export default function WorkerApplicationsScreen({ navigation }) {
     }
   };
 
-  // Cargar aplicaciones del trabajador - Versión corregida
+  // Cargar aplicaciones del trabajador
   const loadApplications = async () => {
     try {
       setLoading(true);
       const workerId = await getWorkerId();
       const response = await getWorkerApplications(workerId);
 
-      // Asegurarnos de que siempre trabajamos con un array
       const applicationsData = Array.isArray(response)
         ? response
         : response?.applications || response?.data || [];
 
+      console.log("📋 Applications loaded:", applicationsData.length);
       setApplications(applicationsData);
-      setFilteredApplications(applicationsData);
     } catch (error) {
       console.error("Error cargando aplicaciones:", error);
       Alert.alert("Error", "No se pudieron cargar las postulaciones");
       setApplications([]);
-      setFilteredApplications([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Componente StatusFilters corregido
-  const StatusFilters = () => {
-    // Asegurarnos de que applications siempre es un array
-    const safeApplications = Array.isArray(applications) ? applications : [];
+  // 🔥 NUEVO - Separar aplicaciones por categoría
+  const activeApplications = applications.filter(app => {
+    const status = app.status?.name;
+    return ['Solicitado', 'En_revision', 'Aceptado', 'Completado'].includes(status);
+  });
 
-    return (
-      <View style={styles.statusFiltersContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtersScrollContent}>
-          {applicationStatuses.map((status) => {
-            const count =
-              status.id === "all"
-                ? safeApplications.length
-                : safeApplications.filter(
-                    (app) => app?.status?.name === status.id
-                  ).length;
+  const historyApplications = applications.filter(app => {
+    const status = app.status?.name;
+    return ['Cancelada', 'Rechazada'].includes(status);
+  });
 
-            return (
-              <TouchableOpacity
-                key={status.id}
-                style={[
-                  styles.statusFilter,
-                  selectedStatus === status.id && styles.activeStatusFilter,
-                ]}
-                onPress={() => filterApplicationsByStatus(status.id)}>
-                <Ionicons
-                  name={status.icon as keyof typeof Ionicons.glyphMap}
-                  size={16}
-                  color={
-                    selectedStatus === status.id ? "#FFFFFF" : status.color
-                  }
-                />
-                <Text
-                  style={[
-                    styles.statusFilterText,
-                    selectedStatus === status.id &&
-                      styles.activeStatusFilterText,
-                  ]}>
-                  {status.label}
-                </Text>
-                <View
-                  style={[
-                    styles.statusCount,
-                    selectedStatus === status.id && styles.activeStatusCount,
-                  ]}>
-                  <Text
-                    style={[
-                      styles.statusCountText,
-                      selectedStatus === status.id &&
-                        styles.activeStatusCountText,
-                    ]}>
-                    {count}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-    );
-  };
+  const currentApplications = activeTab === "active" ? activeApplications : historyApplications;
 
-  // Filtrar aplicaciones por estado
-  const filterApplicationsByStatus = (status) => {
-    setSelectedStatus(status);
-    if (status === "all") {
-      setFilteredApplications(applications);
-    } else {
-      const filtered = applications.filter(
-        (app) => app.status?.name === status
-      );
-      setFilteredApplications(filtered);
-    }
-  };
+  // 🔥 NUEVO - Componente de tabs mejorado
+  const TabSelector = () => (
+    <View style={styles.tabContainer}>
+      <TouchableOpacity
+        style={[
+          styles.tab,
+          activeTab === "active" && styles.activeTab
+        ]}
+        onPress={() => setActiveTab("active")}
+      >
+        <Ionicons 
+          name="briefcase" 
+          size={20} 
+          color={activeTab === "active" ? "#FFFFFF" : COLORS.textSecondary} 
+        />
+        <Text style={[
+          styles.tabText,
+          activeTab === "active" && styles.activeTabText
+        ]}>
+          Activas
+        </Text>
+        <View style={styles.tabBadge}>
+          <Text style={[
+            styles.tabBadgeText,
+            activeTab === "active" && styles.activeTabBadgeText
+          ]}>
+            {activeApplications.length}
+          </Text>
+        </View>
+      </TouchableOpacity>
 
-  // Cancelar aplicación
+      <TouchableOpacity
+        style={[
+          styles.tab,
+          activeTab === "history" && styles.activeTab
+        ]}
+        onPress={() => setActiveTab("history")}
+      >
+        <Ionicons 
+          name="archive" 
+          size={20} 
+          color={activeTab === "history" ? "#FFFFFF" : COLORS.textSecondary} 
+        />
+        <Text style={[
+          styles.tabText,
+          activeTab === "history" && styles.activeTabText
+        ]}>
+          Historial
+        </Text>
+        <View style={styles.tabBadge}>
+          <Text style={[
+            styles.tabBadgeText,
+            activeTab === "history" && styles.activeTabBadgeText
+          ]}>
+            {historyApplications.length}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // 🔥 MEJORADO - Handler para cancelar aplicación
   const handleCancelApplication = (applicationId) => {
     Alert.alert(
       "Cancelar Postulación",
       "¿Estás seguro de que quieres cancelar esta postulación? Esta acción no se puede deshacer.",
       [
         {
-          text: "Cancelar",
+          text: "No",
           style: "cancel",
         },
         {
-          text: "Confirmar",
+          text: "Sí, cancelar",
           style: "destructive",
           onPress: async () => {
             try {
+              console.log("🚫 Canceling application:", applicationId);
               await cancelApplication(applicationId);
-              Alert.alert("Éxito", "La postulación ha sido cancelada");
-              loadApplications(); // Recargar lista
+              
+              Alert.alert(
+                "✅ Éxito", 
+                "La postulación ha sido cancelada exitosamente",
+                [
+                  {
+                    text: "OK",
+                    onPress: () => {
+                      loadApplications();
+                    }
+                  }
+                ]
+              );
+              
             } catch (error) {
-              Alert.alert("Error", "No se pudo cancelar la postulación");
-              console.error("Error cancelando aplicación:", error);
+              console.error("❌ Error cancelando aplicación:", error);
+              const errorMessage = error.message || "No se pudo cancelar la postulación. Intenta de nuevo.";
+              
+              Alert.alert(
+                "❌ Error", 
+                errorMessage,
+                [
+                  {
+                    text: "Reintentar",
+                    onPress: () => handleCancelApplication(applicationId)
+                  },
+                  {
+                    text: "Cancelar",
+                    style: "cancel"
+                  }
+                ]
+              );
             }
           },
         },
@@ -244,115 +299,160 @@ export default function WorkerApplicationsScreen({ navigation }) {
     loadApplications();
   }, []);
 
-  // Función para obtener el color del estado
-  const getStatusColor = (statusName) => {
-    const status = applicationStatuses.find((s) => s.id === statusName);
-    return status ? status.color : COLORS.textSecondary;
+  // 🔥 NUEVO - Función para obtener configuración del estado
+  const getStatusConfig = (statusName) => {
+    return applicationStatuses.find((s) => s.id === statusName) || {
+      id: statusName,
+      label: statusName,
+      icon: "help-circle",
+      color: COLORS.textSecondary,
+      bgColor: "#F3F4F6",
+      textColor: "#374151",
+      gradient: ["#F3F4F6", "#E5E7EB"],
+      category: "active"
+    };
   };
 
-  // Función para obtener el ícono del estado
-  const getStatusIcon = (
-    statusName: string
-  ): keyof typeof Ionicons.glyphMap => {
-    const status = applicationStatuses.find((s) => s.id === statusName);
-    return status
-      ? (status.icon as keyof typeof Ionicons.glyphMap)
-      : "help-circle";
-  };
-
-  // Componente de tarjeta de aplicación
-  const ApplicationCard = ({ item }) => {
+  // 🔥 MEJORADO - Componente de tarjeta de aplicación con efectos visuales
+  const ApplicationCard = ({ item, index }) => {
+    const statusConfig = getStatusConfig(item.status?.name);
     const canCancel = ["Solicitado", "En_revision"].includes(item.status?.name);
-    const statusColor = getStatusColor(item.status?.name);
-    const statusIcon = getStatusIcon(item.status?.name);
+    const isHistory = statusConfig.category === "history";
+
+    const cardOpacity = isHistory ? 0.7 : 1;
+    const cardScale = isHistory ? 0.98 : 1;
 
     return (
-      <TouchableOpacity
-        style={styles.applicationCard}
-        onPress={() => viewApplicationDetails(item)}>
-        <View style={styles.applicationHeader}>
-          <View style={styles.applicationTitleContainer}>
-            <Text style={styles.applicationTitle} numberOfLines={2}>
-              {item.jobOffer?.title}
-            </Text>
-            <Text style={styles.employerName}>
-              {item.jobOffer?.employer?.user?.name}
-            </Text>
-          </View>
-          <View
+      <Animated.View
+        style={[
+          styles.applicationCard,
+          { 
+            opacity: cardOpacity,
+            transform: [{ scale: cardScale }]
+          },
+          isHistory && styles.historyCard
+        ]}
+      >
+        <TouchableOpacity
+          onPress={() => viewApplicationDetails(item)}
+          activeOpacity={0.7}
+        >
+          {/* 🔥 NUEVO - Indicador de estado lateral */}
+          <View 
             style={[
-              styles.statusBadge,
-              { backgroundColor: `${statusColor}15` },
-            ]}>
-            <Ionicons name={statusIcon} size={14} color={statusColor} />
-            <Text style={[styles.statusText, { color: statusColor }]}>
-              {item.status?.name}
-            </Text>
-          </View>
-        </View>
+              styles.statusIndicator, 
+              { backgroundColor: statusConfig.color }
+            ]} 
+          />
 
-        <View style={styles.applicationDetails}>
-          <View style={styles.detailRow}>
-            <Ionicons name="location" size={16} color={COLORS.textSecondary} />
-            <Text style={styles.detailText}>
-              {item.jobOffer?.displayLocation?.city},{" "}
-              {item.jobOffer?.displayLocation?.department}
-            </Text>
-          </View>
+          <View style={styles.cardContent}>
+            <View style={styles.applicationHeader}>
+              <View style={styles.applicationTitleContainer}>
+                <Text style={styles.applicationTitle} numberOfLines={2}>
+                  {item.jobOffer?.title || "Trabajo"}
+                </Text>
+                <Text style={styles.employerName}>
+                  {item.jobOffer?.employer?.user?.name || "Empleador"}
+                </Text>
+              </View>
+              
+              {/* 🔥 MEJORADO - Badge de estado con gradiente */}
+              <View
+                style={[
+                  styles.statusBadge,
+                  { 
+                    backgroundColor: statusConfig.bgColor,
+                    borderColor: statusConfig.color,
+                  }
+                ]}>
+                <Ionicons 
+                  name={statusConfig.icon as keyof typeof Ionicons.glyphMap} 
+                  size={14} 
+                  color={statusConfig.color} 
+                />
+                <Text style={[
+                  styles.statusText, 
+                  { color: statusConfig.textColor }
+                ]}>
+                  {statusConfig.label}
+                </Text>
+              </View>
+            </View>
 
-          <View style={styles.detailRow}>
-            <Ionicons name="leaf" size={16} color={COLORS.success} />
-            <Text style={styles.detailText}>
-              {item.jobOffer?.cropType?.name || "General"}
-            </Text>
-          </View>
+            {/* 🔥 MEJORADO - Información más organizada */}
+            <View style={styles.applicationDetails}>
+              <View style={styles.detailRow}>
+                <View style={styles.detailItem}>
+                  <Ionicons name="location" size={16} color={COLORS.textSecondary} />
+                  <Text style={styles.detailText} numberOfLines={1}>
+                    {item.jobOffer?.displayLocation?.city || item.jobOffer?.city || "N/A"}, {" "}
+                    {item.jobOffer?.displayLocation?.department || item.jobOffer?.state || "N/A"}
+                  </Text>
+                </View>
+                
+                <View style={styles.detailItem}>
+                  <Ionicons name="cash" size={16} color={COLORS.secondary} />
+                  <Text style={styles.detailText}>
+                    ${new Intl.NumberFormat("es-CO").format(item.jobOffer?.salary || 0)}/día
+                  </Text>
+                </View>
+              </View>
 
-          <View style={styles.detailRow}>
-            <Ionicons name="cash" size={16} color={COLORS.secondary} />
-            <Text style={styles.detailText}>
-              ${new Intl.NumberFormat("es-CO").format(item.jobOffer?.salary)}
-              /día
-            </Text>
-          </View>
+              <View style={styles.detailRow}>
+                <View style={styles.detailItem}>
+                  <Ionicons name="leaf" size={16} color={COLORS.success} />
+                  <Text style={styles.detailText} numberOfLines={1}>
+                    {item.jobOffer?.cropType?.name || "General"}
+                  </Text>
+                </View>
+                
+                <View style={styles.detailItem}>
+                  <Ionicons name="calendar" size={16} color={COLORS.textSecondary} />
+                  <Text style={styles.detailText}>
+                    {item.jobOffer?.duration || 0} días
+                  </Text>
+                </View>
+              </View>
+            </View>
 
-          <View style={styles.detailRow}>
-            <Ionicons name="calendar" size={16} color={COLORS.textSecondary} />
-            <Text style={styles.detailText}>
-              {item.jobOffer?.duration} días
-            </Text>
+            <View style={styles.applicationFooter}>
+              <Text style={styles.applicationDate}>
+                Postulado: {new Date(item.createdAt).toLocaleDateString("es-CO", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric"
+                })}
+              </Text>
+              
+              <View style={styles.applicationActions}>
+                <TouchableOpacity
+                  style={styles.detailsButton}
+                  onPress={() => viewApplicationDetails(item)}>
+                  <Ionicons name="eye" size={14} color={COLORS.primary} />
+                  <Text style={styles.detailsButtonText}>Detalles</Text>
+                </TouchableOpacity>
+                
+                {canCancel && (
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => handleCancelApplication(item.id)}>
+                    <Ionicons name="close" size={14} color={COLORS.error} />
+                    <Text style={styles.cancelButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
           </View>
-        </View>
-
-        <View style={styles.applicationFooter}>
-          <Text style={styles.applicationDate}>
-            Postulado el {new Date(item.createdAt).toLocaleDateString("es-CO")}
-          </Text>
-          <View style={styles.applicationActions}>
-            <TouchableOpacity
-              style={styles.detailsButton}
-              onPress={() => viewApplicationDetails(item)}>
-              <Text style={styles.detailsButtonText}>Ver Detalles</Text>
-            </TouchableOpacity>
-            {canCancel && (
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => handleCancelApplication(item.id)}>
-                <Ionicons name="close" size={16} color={COLORS.error} />
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </Animated.View>
     );
   };
 
-  // Modal de detalles de aplicación
+  // 🔥 MEJORADO - Modal de detalles
   const ApplicationDetailModal = () => {
     if (!selectedApplication) return null;
 
-    const statusColor = getStatusColor(selectedApplication.status?.name);
-    const statusIcon = getStatusIcon(selectedApplication.status?.name);
+    const statusConfig = getStatusConfig(selectedApplication.status?.name);
 
     return (
       <Modal
@@ -369,18 +469,28 @@ export default function WorkerApplicationsScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
-              {/* Estado actual */}
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {/* Estado actual con mejor diseño */}
               <View style={styles.statusSection}>
                 <View
                   style={[
                     styles.statusBadgeLarge,
-                    { backgroundColor: `${statusColor}15` },
+                    { 
+                      backgroundColor: statusConfig.bgColor,
+                      borderColor: statusConfig.color,
+                    }
                   ]}>
-                  <Ionicons name={statusIcon} size={20} color={statusColor} />
+                  <Ionicons 
+                    name={statusConfig.icon as keyof typeof Ionicons.glyphMap} 
+                    size={24} 
+                    color={statusConfig.color} 
+                  />
                   <Text
-                    style={[styles.statusTextLarge, { color: statusColor }]}>
-                    {selectedApplication.status?.name}
+                    style={[
+                      styles.statusTextLarge, 
+                      { color: statusConfig.textColor }
+                    ]}>
+                    {statusConfig.label}
                   </Text>
                 </View>
               </View>
@@ -404,11 +514,8 @@ export default function WorkerApplicationsScreen({ navigation }) {
                     />
                     <Text style={styles.jobDetailLabel}>Ubicación</Text>
                     <Text style={styles.jobDetailValue}>
-                      {selectedApplication.jobOffer?.displayLocation?.city},{" "}
-                      {
-                        selectedApplication.jobOffer?.displayLocation
-                          ?.department
-                      }
+                      {selectedApplication.jobOffer?.displayLocation?.city || selectedApplication.jobOffer?.city},{" "}
+                      {selectedApplication.jobOffer?.displayLocation?.department || selectedApplication.jobOffer?.state}
                     </Text>
                   </View>
 
@@ -480,6 +587,20 @@ export default function WorkerApplicationsScreen({ navigation }) {
                       #{selectedApplication.id.slice(-8)}
                     </Text>
                   </View>
+                  {selectedApplication.updatedAt !== selectedApplication.createdAt && (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Última actualización:</Text>
+                      <Text style={styles.infoValue}>
+                        {new Date(
+                          selectedApplication.updatedAt
+                        ).toLocaleDateString("es-CO", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
 
@@ -554,7 +675,7 @@ export default function WorkerApplicationsScreen({ navigation }) {
                 style={styles.viewJobButton}
                 onPress={() => {
                   setDetailModalVisible(false);
-                  navigation.navigate("JobOfferDetail", {
+                  navigation.navigate("WorkerJobOfferDetail", {
                     jobOfferId: selectedApplication.jobOffer?.id,
                   });
                 }}>
@@ -586,16 +707,16 @@ export default function WorkerApplicationsScreen({ navigation }) {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Mis Postulaciones</Text>
           <Text style={styles.headerSubtitle}>
-            {applications.length} postulaciones realizadas
+            {applications.length} postulaciones totales
           </Text>
         </View>
 
-        {/* Filtros de estado */}
-        <StatusFilters />
+        {/* 🔥 NUEVO - Selector de tabs */}
+        <TabSelector />
 
         <FlatList
-          data={filteredApplications}
-          renderItem={({ item }) => <ApplicationCard item={item} />}
+          data={currentApplications}
+          renderItem={({ item, index }) => <ApplicationCard item={item} index={index} />}
           keyExtractor={(item) => item.id}
           refreshControl={
             <RefreshControl
@@ -607,35 +728,36 @@ export default function WorkerApplicationsScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.applicationsList,
-            filteredApplications.length === 0 && styles.emptyListContainer,
+            currentApplications.length === 0 && styles.emptyListContainer,
           ]}
           ListEmptyComponent={() => (
             <View style={styles.emptyStateContainer}>
               <Ionicons
-                name="paper-plane-outline"
+                name={activeTab === "active" ? "briefcase-outline" : "archive-outline"}
                 size={64}
                 color={COLORS.textLight}
               />
               <Text style={styles.emptyStateText}>
-                {selectedStatus === "all"
-                  ? "No tienes postulaciones aún"
-                  : `No tienes postulaciones ${applicationStatuses
-                      .find((s) => s.id === selectedStatus)
-                      ?.label.toLowerCase()}`}
+                {activeTab === "active"
+                  ? "No tienes postulaciones activas"
+                  : "No hay postulaciones en el historial"}
               </Text>
               <Text style={styles.emptyStateSubtext}>
-                {selectedStatus === "all"
+                {activeTab === "active"
                   ? "Busca ofertas de trabajo y postúlate"
-                  : "Cambia el filtro para ver otras postulaciones"}
+                  : "Las postulaciones canceladas y rechazadas aparecerán aquí"}
               </Text>
-              <TouchableOpacity
-                style={styles.searchJobsButton}
-                onPress={() => navigation.navigate("WorkerJobs")}>
-                <Text style={styles.searchJobsButtonText}>Buscar Trabajos</Text>
-              </TouchableOpacity>
+              {activeTab === "active" && (
+                <TouchableOpacity
+                  style={styles.searchJobsButton}
+                  onPress={() => navigation.navigate("WorkerJobs")}>
+                  <Text style={styles.searchJobsButtonText}>Buscar Trabajos</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         />
+        
         {/* Modal de detalles */}
         <ApplicationDetailModal />
       </View>
@@ -659,10 +781,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.textSecondary,
   },
-
-  filtersScrollContent: {
-    alignItems: "center", // Centrar verticalmente los filtros
-  },
   header: {
     backgroundColor: COLORS.surface,
     paddingHorizontal: 20,
@@ -680,38 +798,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
   },
-  statusFiltersContainer: {
+  
+  // 🔥 NUEVO - Estilos para tabs
+  tabContainer: {
+    flexDirection: "row",
+    backgroundColor: COLORS.surface,
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  statusFilter: {
+  tab: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginRight: 8,
+    borderRadius: 12,
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    gap: 6,
   },
-  activeStatusFilter: {
+  activeTab: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
   },
-  statusFilterText: {
+  tabText: {
     fontSize: 14,
+    fontWeight: "600",
     color: COLORS.textSecondary,
-    fontWeight: "500",
+    marginLeft: 8,
+    marginRight: 8,
   },
-  activeStatusFilterText: {
+  activeTabText: {
     color: "#FFFFFF",
   },
-  statusCount: {
+  tabBadge: {
     backgroundColor: COLORS.border,
     borderRadius: 10,
     paddingHorizontal: 6,
@@ -719,27 +843,48 @@ const styles = StyleSheet.create({
     minWidth: 20,
     alignItems: "center",
   },
-  activeStatusCount: {
-    backgroundColor: "rgba(255,255,255,0.3)",
-  },
-  statusCountText: {
+  tabBadgeText: {
     fontSize: 12,
     color: COLORS.textSecondary,
     fontWeight: "600",
   },
-  activeStatusCountText: {
+  activeTabBadgeText: {
     color: "#FFFFFF",
   },
+
   applicationsList: {
     padding: 20,
   },
+  
+  // 🔥 MEJORADO - Estilos de tarjeta
   applicationCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 16,
-    padding: 20,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
+    overflow: "hidden",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  historyCard: {
+    borderColor: COLORS.textLight,
+    backgroundColor: "#FAFAFA",
+  },
+  statusIndicator: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    zIndex: 1,
+  },
+  cardContent: {
+    padding: 20,
+    paddingLeft: 24,
   },
   applicationHeader: {
     flexDirection: "row",
@@ -766,32 +911,39 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    gap: 4,
+    borderWidth: 1,
+    gap: 6,
   },
   statusText: {
     fontSize: 12,
     fontWeight: "600",
   },
+  
+  // 🔥 MEJORADO - Detalles de aplicación
   applicationDetails: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
     marginBottom: 16,
   },
   detailRow: {
     flexDirection: "row",
+    marginBottom: 8,
+  },
+  detailItem: {
+    flex: 1,
+    flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    minWidth: "48%",
+    marginRight: 8,
   },
   detailText: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
     flex: 1,
+    fontWeight: "500",
   },
+  
   applicationFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -800,16 +952,20 @@ const styles = StyleSheet.create({
   applicationDate: {
     fontSize: 12,
     color: COLORS.textLight,
+    fontWeight: "500",
   },
   applicationActions: {
     flexDirection: "row",
     gap: 8,
   },
   detailsButton: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: `${COLORS.primary}15`,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 8,
+    gap: 4,
   },
   detailsButtonText: {
     color: COLORS.primary,
@@ -822,7 +978,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${COLORS.error}15`,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 8,
     gap: 4,
   },
   cancelButtonText: {
@@ -830,6 +986,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
+  
+  // Estados vacíos
   emptyStateContainer: {
     alignItems: "center",
     justifyContent: "center",
@@ -860,6 +1018,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  emptyListContainer: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  // 🔥 MEJORADO - Estilos del modal
   modalContainer: {
     flex: 1,
     justifyContent: "flex-end",
@@ -896,14 +1061,15 @@ const styles = StyleSheet.create({
   statusBadgeLarge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 16,
-    gap: 8,
+    borderWidth: 2,
+    gap: 10,
   },
   statusTextLarge: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   detailSection: {
     padding: 20,
@@ -1026,10 +1192,5 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: 16,
     fontWeight: "600",
-  },
-  emptyListContainer: {
-    flexGrow: 1,
-    justifyContent: "center",
-    alignItems: "center",
   },
 });

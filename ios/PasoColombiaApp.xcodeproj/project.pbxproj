@@ -8,11 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		182E2EED6AC4C4C8EFA9DAC1 /* libPods-PasoColombiaApp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B5486E92EC92193BFEAF3375 /* libPods-PasoColombiaApp.a */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
+		796CC29C2605EA96AC6FE20E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1537B5BE0205D5762ED7E6D6 /* PrivacyInfo.xcprivacy */; };
+		A5479BA0BD4BB6931901FA8F /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C5FE139DA6F08D5A22A5CC8 /* ExpoModulesProvider.swift */; };
+		B5AE881623667D3EAF82F719 /* libPods-PasoColombiaApp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = ADE4C0EB66D0D7B247164F3C /* libPods-PasoColombiaApp.a */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
-		BB7BCDF84C9C364A7B88FCE6 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7D031D4C4713C1A39F1EFAF1 /* PrivacyInfo.xcprivacy */; };
-		D0660A563D3A20AF4290EE72 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840AC6C6D6076360977BDD9D /* ExpoModulesProvider.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
@@ -20,13 +20,13 @@
 		13B07F961A680F5B00A75B9A /* PasoColombiaApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PasoColombiaApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = PasoColombiaApp/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = PasoColombiaApp/Info.plist; sourceTree = "<group>"; };
-		14746F4AA0F2A5B100785276 /* Pods-PasoColombiaApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PasoColombiaApp.release.xcconfig"; path = "Target Support Files/Pods-PasoColombiaApp/Pods-PasoColombiaApp.release.xcconfig"; sourceTree = "<group>"; };
-		33F809CC96AFF8C099E61A64 /* Pods-PasoColombiaApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PasoColombiaApp.debug.xcconfig"; path = "Target Support Files/Pods-PasoColombiaApp/Pods-PasoColombiaApp.debug.xcconfig"; sourceTree = "<group>"; };
-		7D031D4C4713C1A39F1EFAF1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = PasoColombiaApp/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		840AC6C6D6076360977BDD9D /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-PasoColombiaApp/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		1537B5BE0205D5762ED7E6D6 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = PasoColombiaApp/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		2C38D82B411897CFC5C619E4 /* Pods-PasoColombiaApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PasoColombiaApp.debug.xcconfig"; path = "Target Support Files/Pods-PasoColombiaApp/Pods-PasoColombiaApp.debug.xcconfig"; sourceTree = "<group>"; };
+		9C5FE139DA6F08D5A22A5CC8 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-PasoColombiaApp/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = PasoColombiaApp/SplashScreen.storyboard; sourceTree = "<group>"; };
-		B5486E92EC92193BFEAF3375 /* libPods-PasoColombiaApp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-PasoColombiaApp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		ADE4C0EB66D0D7B247164F3C /* libPods-PasoColombiaApp.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-PasoColombiaApp.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
+		C93AF112A38A83D146EC57E0 /* Pods-PasoColombiaApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PasoColombiaApp.release.xcconfig"; path = "Target Support Files/Pods-PasoColombiaApp/Pods-PasoColombiaApp.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = PasoColombiaApp/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* PasoColombiaApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "PasoColombiaApp-Bridging-Header.h"; path = "PasoColombiaApp/PasoColombiaApp-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -37,7 +37,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				182E2EED6AC4C4C8EFA9DAC1 /* libPods-PasoColombiaApp.a in Frameworks */,
+				B5AE881623667D3EAF82F719 /* libPods-PasoColombiaApp.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,44 +53,34 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				7D031D4C4713C1A39F1EFAF1 /* PrivacyInfo.xcprivacy */,
+				1537B5BE0205D5762ED7E6D6 /* PrivacyInfo.xcprivacy */,
 			);
 			name = PasoColombiaApp;
+			sourceTree = "<group>";
+		};
+		24C25B3AF13D84964C74C28E /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				78712F4CC67D55E769AC5136 /* PasoColombiaApp */,
+			);
+			name = ExpoModulesProviders;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				B5486E92EC92193BFEAF3375 /* libPods-PasoColombiaApp.a */,
+				ADE4C0EB66D0D7B247164F3C /* libPods-PasoColombiaApp.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		4802F7AE89E920971826B5E9 /* PasoColombiaApp */ = {
+		78712F4CC67D55E769AC5136 /* PasoColombiaApp */ = {
 			isa = PBXGroup;
 			children = (
-				840AC6C6D6076360977BDD9D /* ExpoModulesProvider.swift */,
+				9C5FE139DA6F08D5A22A5CC8 /* ExpoModulesProvider.swift */,
 			);
 			name = PasoColombiaApp;
-			sourceTree = "<group>";
-		};
-		4C74262453E6AE3AD083785B /* ExpoModulesProviders */ = {
-			isa = PBXGroup;
-			children = (
-				4802F7AE89E920971826B5E9 /* PasoColombiaApp */,
-			);
-			name = ExpoModulesProviders;
-			sourceTree = "<group>";
-		};
-		712F0BFECFA08100FA5D6B5C /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				33F809CC96AFF8C099E61A64 /* Pods-PasoColombiaApp.debug.xcconfig */,
-				14746F4AA0F2A5B100785276 /* Pods-PasoColombiaApp.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -107,8 +97,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				712F0BFECFA08100FA5D6B5C /* Pods */,
-				4C74262453E6AE3AD083785B /* ExpoModulesProviders */,
+				D55D2EA5D7FFC4F76976DD27 /* Pods */,
+				24C25B3AF13D84964C74C28E /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -132,6 +122,16 @@
 			path = PasoColombiaApp/Supporting;
 			sourceTree = "<group>";
 		};
+		D55D2EA5D7FFC4F76976DD27 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				2C38D82B411897CFC5C619E4 /* Pods-PasoColombiaApp.debug.xcconfig */,
+				C93AF112A38A83D146EC57E0 /* Pods-PasoColombiaApp.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -140,13 +140,13 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "PasoColombiaApp" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				CD5421BFED133222B2BAA732 /* [Expo] Configure project */,
+				C3C05ADBE22CCEAD8FB44FFA /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				2AC577252DEB8F7B8B10016F /* [CP] Embed Pods Frameworks */,
+				DCD353FE837A38BBBE3F50F8 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -196,7 +196,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				BB7BCDF84C9C364A7B88FCE6 /* PrivacyInfo.xcprivacy in Resources */,
+				796CC29C2605EA96AC6FE20E /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -238,24 +238,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
-		2AC577252DEB8F7B8B10016F /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-PasoColombiaApp/Pods-PasoColombiaApp-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-PasoColombiaApp/Pods-PasoColombiaApp-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
@@ -342,7 +324,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-PasoColombiaApp/Pods-PasoColombiaApp-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		CD5421BFED133222B2BAA732 /* [Expo] Configure project */ = {
+		C3C05ADBE22CCEAD8FB44FFA /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -361,6 +343,24 @@
 			shellPath = /bin/sh;
 			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-PasoColombiaApp/expo-configure-project.sh\"\n";
 		};
+		DCD353FE837A38BBBE3F50F8 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-PasoColombiaApp/Pods-PasoColombiaApp-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-PasoColombiaApp/Pods-PasoColombiaApp-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -369,7 +369,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				D0660A563D3A20AF4290EE72 /* ExpoModulesProvider.swift in Sources */,
+				A5479BA0BD4BB6931901FA8F /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -378,7 +378,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 33F809CC96AFF8C099E61A64 /* Pods-PasoColombiaApp.debug.xcconfig */;
+			baseConfigurationReference = 2C38D82B411897CFC5C619E4 /* Pods-PasoColombiaApp.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -402,7 +402,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.cdi.pasocolombiaapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yanethm.PasoColombiaApp;
 				PRODUCT_NAME = PasoColombiaApp;
 				SWIFT_OBJC_BRIDGING_HEADER = "PasoColombiaApp/PasoColombiaApp-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -414,7 +414,7 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 14746F4AA0F2A5B100785276 /* Pods-PasoColombiaApp.release.xcconfig */;
+			baseConfigurationReference = C93AF112A38A83D146EC57E0 /* Pods-PasoColombiaApp.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -433,7 +433,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.cdi.pasocolombiaapp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yanethm.PasoColombiaApp;
 				PRODUCT_NAME = PasoColombiaApp;
 				SWIFT_OBJC_BRIDGING_HEADER = "PasoColombiaApp/PasoColombiaApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

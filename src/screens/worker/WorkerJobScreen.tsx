@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+// 🔥 NUEVO - UseEffeimport React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Text,
   View,
@@ -12,12 +12,19 @@ import {
   Alert,
   Modal,
   Dimensions,
+  SectionList,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import ScreenLayoutWorker from "../../components/ScreenLayoutWorker";
 import { useAuth } from "../../context/AuthContext";
 import { getAvailableJobOffers } from "../../services/jobOffers";
 import { createApplication } from "../../services/applicationService";
+import { getCropType } from "../../services/cropTypeService";
+import {
+  getWorkerApplications,
+  getWorkerApplicationsSafe,
+} from "../../services/workerService";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 const { width } = Dimensions.get("window");
 
@@ -43,80 +50,173 @@ export default function WorkerJobsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [appliedJobs, setAppliedJobs] = useState(new Set());
-  const { user } = useAuth();
+  const [applyingJobs, setApplyingJobs] = useState(new Set());
 
-  // Estados para filtros
-  const [selectedLocation, setSelectedLocation] = useState(null);
+  const { user, isLoading: authLoading, hasWorkerProfile } = useAuth();
+
+  // Estados para filtros - CORREGIDOS
   const [selectedCrop, setSelectedCrop] = useState(null);
   const [salaryRange, setSalaryRange] = useState({ min: "", max: "" });
   const [selectedDuration, setSelectedDuration] = useState(null);
-  const [sortBy, setSortBy] = useState("newest"); // newest, salary_high, salary_low, duration
+  const [sortBy, setSortBy] = useState("newest");
+  const [cropTypes, setCropTypes] = useState([]);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-  // Estados para modales
-  const [filtersModalVisible, setFiltersModalVisible] = useState(false);
-  const [sortModalVisible, setSortModalVisible] = useState(false);
+  // Cargar tipos de cultivo
+  const loadCropTypes = async () => {
+    try {
+      const response = await getCropType();
+      console.log("🌱 Crop types loaded:", response?.length || 0);
+      setCropTypes(response || []);
+    } catch (error) {
+      console.error("❌ Error loading crop types:", error);
+    }
+  };
 
-  const defaultCropTypes = [
-    { id: 1, name: "Café" },
-    { id: 2, name: "Cacao" },
-    { id: 3, name: "Aguacate" },
-    { id: 4, name: "Plátano" },
-    { id: 5, name: "Maíz" },
-    { id: 6, name: "Arroz" },
-    { id: 7, name: "Banano" },
-    { id: 8, name: "Caña de azúcar" },
-  ];
+  const loadWorkerApplications = async () => {
+    try {
+      console.log("📋 Loading worker applications for user:", user?.id);
+      console.log("👤 User has worker profile:", hasWorkerProfile);
+      console.log("🏷️ Worker profile ID:", user?.workerProfile?.id);
 
-  const locations = [
-    { id: 1, name: "Bogotá", department: "Cundinamarca" },
-    { id: 2, name: "Medellín", department: "Antioquia" },
-    { id: 3, name: "Cali", department: "Valle del Cauca" },
-    { id: 4, name: "Manizales", department: "Caldas" },
-    { id: 5, name: "Pereira", department: "Risaralda" },
-    { id: 6, name: "Armenia", department: "Quindío" },
-    { id: 7, name: "Fortul", department: "Arauca" },
-    { id: 8, name: "Tame", department: "Arauca" },
-    { id: 9, name: "Arauquita", department: "Arauca" },
-  ];
+      if (!hasWorkerProfile || !user?.workerProfile?.id) {
+        console.log("⚠️ No worker profile found, skipping applications load");
+        setAppliedJobs(new Set());
+        return;
+      }
 
-  const durationOptions = [
-    { id: 1, label: "1-7 días", min: 1, max: 7 },
-    { id: 2, label: "1-2 semanas", min: 8, max: 14 },
-    { id: 3, label: "2-4 semanas", min: 15, max: 30 },
-    { id: 4, label: "1-3 meses", min: 31, max: 90 },
-    { id: 5, label: "Más de 3 meses", min: 91, max: 365 },
-  ];
+      let applications = [];
 
-  const sortOptions = [
-    { id: "newest", label: "Más recientes", icon: "time" },
-    { id: "salary_high", label: "Salario mayor", icon: "trending-up" },
-    { id: "salary_low", label: "Salario menor", icon: "trending-down" },
-    { id: "duration", label: "Duración corta", icon: "calendar" },
-  ];
+      try {
+        const workerId = user.workerProfile.id;
+        console.log(
+          "🔍 Method 1: Fetching applications for worker ID:",
+          workerId
+        );
 
-  // ✅ FIXED: Cargar ofertas de trabajo
+        const response = await getWorkerApplications(workerId);
+        console.log("📊 Method 1 response:", response);
+
+        if (Array.isArray(response)) {
+          applications = response;
+        } else if (response && Array.isArray(response.applications)) {
+          applications = response.applications;
+        } else if (response && Array.isArray(response.data)) {
+          applications = response.data;
+        } else if (
+          response &&
+          response.success &&
+          Array.isArray(response.data)
+        ) {
+          applications = response.data;
+        } else {
+          console.log(
+            "⚠️ Method 1 returned unexpected structure, trying method 2"
+          );
+          throw new Error("Unexpected response structure");
+        }
+
+        console.log(
+          "✅ Method 1 successful, found",
+          applications.length,
+          "applications"
+        );
+      } catch (method1Error) {
+        console.log("⚠️ Method 1 failed, trying method 2 (safe method)");
+        console.error("Method 1 error:", method1Error);
+
+        try {
+          applications = await getWorkerApplicationsSafe(user);
+          console.log(
+            "✅ Method 2 successful, found",
+            applications.length,
+            "applications"
+          );
+        } catch (method2Error) {
+          console.error("❌ Method 2 also failed:", method2Error);
+          applications = [];
+        }
+      }
+
+      console.log("📋 Final processed applications:", applications.length);
+
+      // 🔥 CORREGIDO - Solo incluir aplicaciones ACTIVAS (no canceladas)
+      const activeApplications = applications.filter((app) => {
+        const status = app.status?.name || app.status;
+        const isActive = status && !["Cancelada", "Rechazada"].includes(status);
+        console.log(
+          `📋 App ${app.id}: status="${status}", isActive=${isActive}`
+        );
+        return isActive;
+      });
+
+      console.log(
+        "✅ Active applications:",
+        activeApplications.length,
+        "of",
+        applications.length
+      );
+
+      const appliedIds = new Set(
+        activeApplications
+          .map((app) => app.jobOffer?.id || app.jobOfferId)
+          .filter(Boolean)
+      );
+
+      console.log("✅ Active applied job IDs:", Array.from(appliedIds));
+      setAppliedJobs(appliedIds);
+    } catch (error) {
+      console.error("❌ Error loading worker applications:", error);
+      console.error("❌ Error details:", {
+        status: error.status,
+        message: error.message,
+        data: error.data,
+      });
+
+      setAppliedJobs(new Set());
+    }
+  };
+
+  // CORREGIDA - Función para cargar ofertas de trabajo
   const loadJobOffers = async () => {
     try {
+      setLoading(true);
+      console.log("🔄 Starting to load job offers...");
+
+      // Cargar tipos de cultivo
+      await loadCropTypes();
+
+      // Cargar ofertas de trabajo primero
       const response = await getAvailableJobOffers();
-      console.log('Raw API response:', response);
-      
-      // ✅ Handle both response formats: direct array or object with jobOffers
+      console.log("📡 Raw job offers API response:", response);
+
       let jobsData = [];
       if (Array.isArray(response)) {
         jobsData = response;
       } else if (response?.jobOffers && Array.isArray(response.jobOffers)) {
         jobsData = response.jobOffers;
       } else {
-        console.warn('Unexpected response format:', response);
+        console.warn("⚠️ Unexpected response format:", response);
         jobsData = [];
       }
-      
-      console.log('Extracted jobs data:', jobsData.length, 'jobs found');
-      
+
+      // 🔥 CORREGIDO - Siempre guardar TODAS las ofertas disponibles
+      console.log("✅ All available jobs:", jobsData.length);
       setJobOffers(jobsData);
-      setFilteredJobs(jobsData);
+
+      // Cargar aplicaciones del trabajador después de tener las ofertas
+      if (user && hasWorkerProfile) {
+        await loadWorkerApplications();
+      } else {
+        console.log(
+          "⚠️ User doesn't have worker profile, skipping applications"
+        );
+        setAppliedJobs(new Set());
+        // Si no tiene perfil, mostrar todas las ofertas
+        setFilteredJobs(jobsData);
+      }
     } catch (error) {
-      console.error("Error cargando ofertas:", error);
+      console.error("❌ Error cargando ofertas:", error);
       Alert.alert("Error", "No se pudieron cargar las ofertas de trabajo");
       setJobOffers([]);
       setFilteredJobs([]);
@@ -125,200 +225,632 @@ export default function WorkerJobsScreen({ navigation }) {
     }
   };
 
-  // Aplicar filtros y búsqueda
-  const applyFiltersAndSearch = () => {
+  // CORREGIDA - Aplicar filtros y búsqueda (incluye filtro de trabajos aplicados)
+  const applyFiltersAndSearch = useCallback(() => {
+    console.log("🔍 Applying filters and search with:", {
+      searchTerm,
+      selectedCrop: selectedCrop?.name,
+      salaryRange,
+      selectedDuration,
+      sortBy,
+      appliedJobsCount: appliedJobs.size,
+      hasWorkerProfile,
+    });
+
     let filtered = [...jobOffers];
+    console.log("📊 Starting with", filtered.length, "jobs");
 
-    // Filtro por término de búsqueda
+    // 🔥 NUEVO - Filtro por trabajos ya aplicados (solo si tiene perfil de trabajador)
+    if (hasWorkerProfile && appliedJobs.size > 0) {
+      const beforeFilter = filtered.length;
+      filtered = filtered.filter((job) => !appliedJobs.has(job.id));
+      console.log(
+        `👤 After applied jobs filter: ${filtered.length} jobs (removed ${
+          beforeFilter - filtered.length
+        } applied jobs)`
+      );
+    }
+
+    // Filtro por búsqueda
     if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(
         (job) =>
-          job.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          job.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          job.employer?.user?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+          job.title?.toLowerCase().includes(searchLower) ||
+          job.description?.toLowerCase().includes(searchLower) ||
+          job.employer?.user?.name?.toLowerCase().includes(searchLower) ||
+          job.city?.toLowerCase().includes(searchLower) ||
+          job.state?.toLowerCase().includes(searchLower)
       );
+      console.log("📝 After search filter:", filtered.length, "jobs");
     }
 
-    // ✅ FIXED: Filtro por ubicación usando campos correctos
-    if (selectedLocation) {
-      filtered = filtered.filter(
-        (job) =>
-          job.city?.toLowerCase() === selectedLocation.name.toLowerCase() ||
-          job.displayLocation?.city?.toLowerCase() === selectedLocation.name.toLowerCase()
-      );
+    // Filtro por tipo de cultivo - CORREGIDO
+    if (selectedCrop && selectedCrop.id) {
+      filtered = filtered.filter((job) => job.cropType?.id === selectedCrop.id);
+      console.log("🌱 After crop filter:", filtered.length, "jobs");
     }
 
-    // Filtro por tipo de cultivo
-    if (selectedCrop) {
-      filtered = filtered.filter(
-        (job) => job.cropType?.name === selectedCrop.name
-      );
-    }
-
-    // Filtro por rango salarial
+    // Filtro por rango salarial - CORREGIDO
     if (salaryRange.min || salaryRange.max) {
       filtered = filtered.filter((job) => {
-        const salary = job.salary || 0;
+        const salary = parseInt(job.salary) || 0;
         const min = salaryRange.min ? parseInt(salaryRange.min) : 0;
         const max = salaryRange.max ? parseInt(salaryRange.max) : Infinity;
-        return salary >= min && salary <= max;
+        const passesFilter = salary >= min && salary <= max;
+        return passesFilter;
       });
+      console.log("💰 After salary filter:", filtered.length, "jobs");
     }
 
-    // Filtro por duración
+    // Filtro por duración - CORREGIDO
     if (selectedDuration) {
-      filtered = filtered.filter(
-        (job) => {
-          const duration = parseInt(job.duration) || 0;
-          return duration >= selectedDuration.min && duration <= selectedDuration.max;
-        }
-      );
+      filtered = filtered.filter((job) => {
+        const duration = parseInt(job.duration) || 0;
+        const passesFilter =
+          duration >= selectedDuration.min && duration <= selectedDuration.max;
+        return passesFilter;
+      });
+      console.log("📅 After duration filter:", filtered.length, "jobs");
     }
 
-    // Ordenamiento
+    // Ordenamiento - CORREGIDO
     switch (sortBy) {
       case "salary_high":
-        filtered.sort((a, b) => (b.salary || 0) - (a.salary || 0));
+        filtered.sort(
+          (a, b) => (parseInt(b.salary) || 0) - (parseInt(a.salary) || 0)
+        );
+        console.log("📊 Sorted by salary (high to low)");
         break;
       case "salary_low":
-        filtered.sort((a, b) => (a.salary || 0) - (b.salary || 0));
+        filtered.sort(
+          (a, b) => (parseInt(a.salary) || 0) - (parseInt(b.salary) || 0)
+        );
+        console.log("📊 Sorted by salary (low to high)");
         break;
       case "duration":
-        filtered.sort((a, b) => (parseInt(a.duration) || 0) - (parseInt(b.duration) || 0));
+        filtered.sort(
+          (a, b) => (parseInt(a.duration) || 0) - (parseInt(b.duration) || 0)
+        );
+        console.log("📊 Sorted by duration");
         break;
       case "newest":
       default:
         filtered.sort(
-          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+          (a, b) =>
+            new Date(b.createdAt || 0).getTime() -
+            new Date(a.createdAt || 0).getTime()
         );
+        console.log("📊 Sorted by newest");
         break;
     }
 
+    console.log("✅ Final filtered jobs:", filtered.length);
     setFilteredJobs(filtered);
-  };
+  }, [
+    jobOffers,
+    searchTerm,
+    selectedCrop,
+    salaryRange,
+    selectedDuration,
+    sortBy,
+    appliedJobs,
+    hasWorkerProfile,
+  ]);
 
-  // Postularse a un trabajo
-  const applyToJob = async (jobOfferId) => {
-    try {
-      if (appliedJobs.has(jobOfferId)) {
-        Alert.alert("Información", "Ya te has postulado a esta oferta");
-        return;
+  // CORREGIDA - Función para postularse (no remueve de jobOffers)
+  const applyToJob = useCallback(
+    async (jobOfferId) => {
+      try {
+        if (!hasWorkerProfile) {
+          Alert.alert(
+            "Perfil requerido",
+            "Necesitas tener un perfil de trabajador para postularte a ofertas de trabajo"
+          );
+          return;
+        }
+
+        if (appliedJobs.has(jobOfferId)) {
+          Alert.alert("Información", "Ya te has postulado a esta oferta");
+          return;
+        }
+
+        if (applyingJobs.has(jobOfferId)) {
+          return;
+        }
+
+        setApplyingJobs((prev) => new Set([...prev, jobOfferId]));
+
+        const workerId = user.workerProfile.id;
+        await createApplication(jobOfferId, {
+          userId: user.id,
+          workerId: workerId,
+        });
+
+        // 🔥 CORREGIDO - Solo actualizar appliedJobs, no remover de jobOffers
+        // El filtrado se manejará automáticamente en applyFiltersAndSearch
+        setAppliedJobs((prev) => new Set([...prev, jobOfferId]));
+
+        setApplyingJobs((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(jobOfferId);
+          return newSet;
+        });
+
+        Alert.alert("¡Éxito!", "Te has postulado exitosamente a esta oferta");
+      } catch (error) {
+        setApplyingJobs((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(jobOfferId);
+          return newSet;
+        });
+
+        Alert.alert("Error", "No se pudo enviar la postulación");
+        console.error("❌ Error aplicando a trabajo:", error);
       }
+    },
+    [appliedJobs, applyingJobs, user, hasWorkerProfile]
+  );
 
-      await createApplication(jobOfferId, { userId: user.id });
-      setAppliedJobs(new Set([...appliedJobs, jobOfferId]));
-      Alert.alert("¡Éxito!", "Te has postulado exitosamente a esta oferta");
-    } catch (error) {
-      Alert.alert("Error", "No se pudo enviar la postulación");
-      console.error("Error aplicando a trabajo:", error);
-    }
-  };
-
-  const clearAllFilters = () => {
+  // CORREGIDA - Función para limpiar filtros
+  const clearAllFilters = useCallback(() => {
+    console.log("🧹 Clearing all filters");
     setSearchTerm("");
-    setSelectedLocation(null);
     setSelectedCrop(null);
     setSalaryRange({ min: "", max: "" });
     setSelectedDuration(null);
     setSortBy("newest");
-  };
+    setShowAdvancedFilters(false);
+  }, []);
 
-  // Refrescar datos
+  // 🔥 NUEVA - Función para refrescar solo las aplicaciones del trabajador
+  const refreshWorkerApplications = useCallback(async () => {
+    if (user && hasWorkerProfile) {
+      console.log("🔄 Refreshing worker applications...");
+      await loadWorkerApplications();
+    }
+  }, [user, hasWorkerProfile]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadJobOffers();
     setRefreshing(false);
   };
 
-  // Efectos
   useEffect(() => {
-    loadJobOffers();
-  }, []);
+    console.log("🔄 WorkerJobsScreen useEffect triggered:", {
+      authLoading,
+      hasUser: !!user,
+      hasWorkerProfile,
+    });
 
+    if (!authLoading && user) {
+      loadJobOffers();
+    }
+  }, [authLoading, user, hasWorkerProfile]);
+
+  // CORREGIDO - UseEffect para aplicar filtros inmediatamente
   useEffect(() => {
+    console.log("🔄 Filter useEffect triggered");
     applyFiltersAndSearch();
-  }, [
-    jobOffers,
-    searchTerm,
-    selectedLocation,
-    selectedCrop,
-    salaryRange,
-    selectedDuration,
-    sortBy,
-  ]);
+  }, [applyFiltersAndSearch]);
 
-  // Componente de barra de búsqueda
-  const SearchBar = () => (
-    <View style={styles.searchContainer}>
-      <Ionicons name="search" size={20} color={COLORS.textLight} />
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Buscar trabajos, empleadores..."
-        value={searchTerm}
-        onChangeText={setSearchTerm}
-        placeholderTextColor={COLORS.textLight}
-      />
-      {searchTerm ? (
-        <TouchableOpacity onPress={() => setSearchTerm("")}>
-          <Ionicons name="close-circle" size={20} color={COLORS.textLight} />
-        </TouchableOpacity>
-      ) : null}
-    </View>
-  );
+  // 🔥 NUEVO - UseEffect para re-aplicar filtros cuando appliedJobs cambie
+  useEffect(() => {
+    console.log(
+      "🔄 Applied jobs changed, re-applying filters. Applied jobs count:",
+      appliedJobs.size
+    );
+    if (jobOffers.length > 0) {
+      applyFiltersAndSearch();
+    }
+  }, [appliedJobs]);
 
-  // Componente de filtros rápidos
-  const QuickFilters = () => (
-    <View style={styles.quickFiltersContainer}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+  // 🔥 NUEVO - UseEffect para re-aplicar filtros cuando appliedJobs cambie
+  useEffect(() => {
+    console.log(
+      "🔄 Applied jobs changed, re-applying filters. Applied jobs count:",
+      appliedJobs.size
+    );
+    if (jobOffers.length > 0) {
+      applyFiltersAndSearch();
+    }
+  }, [appliedJobs]);
+
+  // CORREGIDO - Componente de pestañas de categorías
+  const CategoryTabs = React.memo(() => (
+    <View style={styles.filtersSection}>
+      <Text style={styles.filtersSectionTitle}>Categorías</Text>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.categoryTabsContainer}
+        style={styles.categoryTabsScroll}>
         <TouchableOpacity
-          style={styles.filterChip}
-          onPress={() => setFiltersModalVisible(true)}>
-          <Ionicons name="options" size={16} color={COLORS.primary} />
-          <Text style={styles.filterChipText}>Filtros</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.filterChip}
-          onPress={() => setSortModalVisible(true)}>
-          <Ionicons name="swap-vertical" size={16} color={COLORS.primary} />
-          <Text style={styles.filterChipText}>
-            {sortOptions.find((opt) => opt.id === sortBy)?.label}
-          </Text>
-        </TouchableOpacity>
-
-        {selectedLocation && (
-          <TouchableOpacity
-            style={[styles.filterChip, styles.activeFilterChip]}
-            onPress={() => setSelectedLocation(null)}>
-            <Text style={styles.activeFilterChipText}>
-              {selectedLocation.name}
+          style={[
+            styles.categoryTab,
+            !selectedCrop && styles.activeCategoryTab,
+          ]}
+          onPress={() => {
+            console.log("🏷️ Selected category: All");
+            setSelectedCrop(null);
+          }}
+          activeOpacity={0.7}>
+          <View style={styles.categoryTabContent}>
+            <Ionicons
+              name="apps-outline"
+              size={16}
+              color={!selectedCrop ? "#FFFFFF" : COLORS.textSecondary}
+              style={styles.categoryTabIcon}
+            />
+            <Text
+              style={[
+                styles.categoryTabText,
+                !selectedCrop && styles.activeCategoryTabText,
+              ]}>
+              Todos
             </Text>
-            <Ionicons name="close" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-        )}
+          </View>
+        </TouchableOpacity>
 
-        {selectedCrop && (
-          <TouchableOpacity
-            style={[styles.filterChip, styles.activeFilterChip]}
-            onPress={() => setSelectedCrop(null)}>
-            <Text style={styles.activeFilterChipText}>{selectedCrop.name}</Text>
-            <Ionicons name="close" size={16} color="#FFFFFF" />
-          </TouchableOpacity>
-        )}
+        {cropTypes.map((crop) => {
+          const isActive = selectedCrop?.id === crop.id;
+          return (
+            <TouchableOpacity
+              key={crop.id}
+              style={[styles.categoryTab, isActive && styles.activeCategoryTab]}
+              onPress={() => {
+                console.log("🏷️ Selected category:", crop.name);
+                setSelectedCrop(crop);
+              }}
+              activeOpacity={0.7}>
+              <View style={styles.categoryTabContent}>
+                <Ionicons
+                  name="leaf-outline"
+                  size={16}
+                  color={isActive ? "#FFFFFF" : COLORS.success}
+                  style={styles.categoryTabIcon}
+                />
+                <Text
+                  style={[
+                    styles.categoryTabText,
+                    isActive && styles.activeCategoryTabText,
+                  ]}>
+                  {crop.name}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
-    </View>
-  );
 
-  // ✅ FIXED: Componente de tarjeta de trabajo
-  const JobCard = ({ item }) => {
-    const isApplied = appliedJobs.has(item.id);
+      {/* CORREGIDO - Filtros adicionales */}
+      <View style={styles.additionalFilters}>
+        <Text style={styles.additionalFiltersTitle}>Filtros rápidos</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickFiltersContainer}>
+          {/* Filtro de ordenamiento - CORREGIDO */}
+          <TouchableOpacity
+            style={[
+              styles.quickFilterButton,
+              sortBy !== "newest" && styles.quickFilterButtonActive,
+            ]}
+            onPress={() => {
+              console.log("🔄 Current sortBy:", sortBy);
+              const sortOptions = [
+                "newest",
+                "salary_high",
+                "salary_low",
+                "duration",
+              ];
+              const currentIndex = sortOptions.indexOf(sortBy);
+              const nextIndex = (currentIndex + 1) % sortOptions.length;
+              const nextSort = sortOptions[nextIndex];
+              console.log("🔄 Setting sortBy to:", nextSort);
+              setSortBy(nextSort);
+            }}>
+            <Ionicons
+              name="swap-vertical-outline"
+              size={16}
+              color={sortBy !== "newest" ? "#FFFFFF" : COLORS.textSecondary}
+            />
+            <Text
+              style={[
+                styles.quickFilterText,
+                sortBy !== "newest" && styles.quickFilterTextActive,
+              ]}>
+              {sortBy === "salary_high"
+                ? "Salario ↓"
+                : sortBy === "salary_low"
+                ? "Salario ↑"
+                : sortBy === "duration"
+                ? "Duración"
+                : "Recientes"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Filtro de rango salarial rápido - CORREGIDO */}
+          <TouchableOpacity
+            style={[
+              styles.quickFilterButton,
+              (salaryRange.min || salaryRange.max) &&
+                styles.quickFilterButtonActive,
+            ]}
+            onPress={() => {
+              console.log("💰 Current salary range:", salaryRange);
+              if (salaryRange.min || salaryRange.max) {
+                console.log("💰 Clearing salary range");
+                setSalaryRange({ min: "", max: "" });
+              } else {
+                console.log("💰 Setting salary range: 43000-50000");
+                setSalaryRange({ min: "43000", max: "50000" });
+              }
+            }}>
+            <Ionicons
+              name="cash-outline"
+              size={16}
+              color={
+                salaryRange.min || salaryRange.max
+                  ? "#FFFFFF"
+                  : COLORS.textSecondary
+              }
+            />
+            <Text
+              style={[
+                styles.quickFilterText,
+                (salaryRange.min || salaryRange.max) &&
+                  styles.quickFilterTextActive,
+              ]}>
+              {salaryRange.min || salaryRange.max
+                ? "Salario filtrado"
+                : "43k-50k"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Filtro de duración - CORREGIDO */}
+          <TouchableOpacity
+            style={[
+              styles.quickFilterButton,
+              selectedDuration && styles.quickFilterButtonActive,
+            ]}
+            onPress={() => {
+              console.log("📅 Current duration:", selectedDuration);
+              if (selectedDuration) {
+                console.log("📅 Clearing duration filter");
+                setSelectedDuration(null);
+              } else {
+                console.log("📅 Setting duration filter: 1-30 days");
+                setSelectedDuration({ min: 1, max: 30 });
+              }
+            }}>
+            <Ionicons
+              name="calendar-outline"
+              size={16}
+              color={selectedDuration ? "#FFFFFF" : COLORS.textSecondary}
+            />
+            <Text
+              style={[
+                styles.quickFilterText,
+                selectedDuration && styles.quickFilterTextActive,
+              ]}>
+              {selectedDuration ? "Corta duración" : "Duración"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Botón de filtros avanzados */}
+          <TouchableOpacity
+            style={[
+              styles.quickFilterButton,
+              showAdvancedFilters && styles.quickFilterButtonActive,
+            ]}
+            onPress={() => {
+              console.log(
+                "⚙️ Toggling advanced filters:",
+                !showAdvancedFilters
+              );
+              setShowAdvancedFilters(!showAdvancedFilters);
+            }}>
+            <Ionicons
+              name="options-outline"
+              size={16}
+              color={showAdvancedFilters ? "#FFFFFF" : COLORS.textSecondary}
+            />
+            <Text
+              style={[
+                styles.quickFilterText,
+                showAdvancedFilters && styles.quickFilterTextActive,
+              ]}>
+              Más filtros
+            </Text>
+          </TouchableOpacity>
+
+          {/* Botón para limpiar filtros - MEJORADO */}
+          {(searchTerm ||
+            selectedCrop ||
+            salaryRange.min ||
+            salaryRange.max ||
+            selectedDuration ||
+            sortBy !== "newest") && (
+            <TouchableOpacity
+              style={styles.clearFiltersQuickButton}
+              onPress={clearAllFilters}>
+              <Ionicons name="refresh-outline" size={16} color={COLORS.error} />
+              <Text style={styles.clearFiltersQuickText}>Limpiar</Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      </View>
+
+      {/* CORREGIDO - Filtros avanzados expandibles */}
+      {showAdvancedFilters && (
+        <View style={styles.advancedFiltersContainer}>
+          <View style={styles.advancedFilterRow}>
+            <Text style={styles.advancedFilterLabel}>
+              Rango salarial personalizado (COP):
+            </Text>
+            <View style={styles.salaryRangeContainer}>
+              <TextInput
+                style={styles.salaryInput}
+                placeholder="Mínimo"
+                value={salaryRange.min}
+                onChangeText={(text) => {
+                  console.log("💰 Setting salary min:", text);
+                  setSalaryRange((prev) => ({ ...prev, min: text }));
+                }}
+                keyboardType="numeric"
+                placeholderTextColor={COLORS.textLight}
+              />
+              <Text style={styles.salaryRangeSeparator}>-</Text>
+              <TextInput
+                style={styles.salaryInput}
+                placeholder="Máximo"
+                value={salaryRange.max}
+                onChangeText={(text) => {
+                  console.log("💰 Setting salary max:", text);
+                  setSalaryRange((prev) => ({ ...prev, max: text }));
+                }}
+                keyboardType="numeric"
+                placeholderTextColor={COLORS.textLight}
+              />
+            </View>
+          </View>
+
+          <View style={styles.advancedFilterRow}>
+            <Text style={styles.advancedFilterLabel}>
+              Duración del trabajo:
+            </Text>
+            <View style={styles.durationButtonsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.durationButton,
+                  !selectedDuration && styles.durationButtonActive,
+                ]}
+                onPress={() => {
+                  console.log("📅 Setting duration: any");
+                  setSelectedDuration(null);
+                }}>
+                <Text
+                  style={[
+                    styles.durationButtonText,
+                    !selectedDuration && styles.durationButtonTextActive,
+                  ]}>
+                  Cualquiera
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.durationButton,
+                  selectedDuration?.min === 1 &&
+                    selectedDuration?.max === 7 &&
+                    styles.durationButtonActive,
+                ]}
+                onPress={() => {
+                  console.log("📅 Setting duration: 1-7 days");
+                  setSelectedDuration({ min: 1, max: 7 });
+                }}>
+                <Text
+                  style={[
+                    styles.durationButtonText,
+                    selectedDuration?.min === 1 &&
+                      selectedDuration?.max === 7 &&
+                      styles.durationButtonTextActive,
+                  ]}>
+                  1-7 días
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.durationButton,
+                  selectedDuration?.min === 8 &&
+                    selectedDuration?.max === 30 &&
+                    styles.durationButtonActive,
+                ]}
+                onPress={() => {
+                  console.log("📅 Setting duration: 8-30 days");
+                  setSelectedDuration({ min: 8, max: 30 });
+                }}>
+                <Text
+                  style={[
+                    styles.durationButtonText,
+                    selectedDuration?.min === 8 &&
+                      selectedDuration?.max === 30 &&
+                      styles.durationButtonTextActive,
+                  ]}>
+                  1-4 semanas
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.durationButton,
+                  selectedDuration?.min === 31 && styles.durationButtonActive,
+                ]}
+                onPress={() => {
+                  console.log("📅 Setting duration: 31+ days");
+                  setSelectedDuration({ min: 31, max: 365 });
+                }}>
+                <Text
+                  style={[
+                    styles.durationButtonText,
+                    selectedDuration?.min === 31 &&
+                      styles.durationButtonTextActive,
+                  ]}>
+                  +1 mes
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.advancedFilterActions}>
+            <TouchableOpacity
+              style={styles.applyFiltersButton}
+              onPress={() => {
+                console.log("✅ Closing advanced filters panel");
+                setShowAdvancedFilters(false);
+              }}>
+              <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+              <Text style={styles.applyFiltersButtonText}>Aplicar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </View>
+  ));
+
+  // JobCard component
+  const JobCard = React.memo(({ item }) => {
+    const isApplied = useMemo(() => appliedJobs.has(item.id), [item.id]);
+    const isApplying = useMemo(() => applyingJobs.has(item.id), [item.id]);
+
+    const handleApply = useCallback(() => {
+      applyToJob(item.id);
+    }, [item.id]);
+
+    const handleNavigate = useCallback(() => {
+      navigation.navigate("WorkerJobOfferDetail", { jobOfferId: item.id });
+    }, [item.id]);
+
+    const daysAgo = useMemo(() => {
+      return Math.max(
+        1,
+        Math.floor(
+          (new Date().getTime() -
+            new Date(item.createdAt || new Date()).getTime()) /
+            (1000 * 60 * 60 * 24)
+        )
+      );
+    }, [item.createdAt]);
 
     return (
       <TouchableOpacity
         style={styles.jobCard}
-        onPress={() =>
-          navigation.navigate("JobOfferDetail", { jobOfferId: item.id })
-        }>
+        onPress={handleNavigate}
+        activeOpacity={0.7}>
         <View style={styles.jobCardHeader}>
           <View style={styles.jobCardTitleContainer}>
             <Text style={styles.jobCardTitle} numberOfLines={2}>
@@ -340,7 +872,8 @@ export default function WorkerJobsScreen({ navigation }) {
           <View style={styles.jobDetailItem}>
             <Ionicons name="location" size={16} color={COLORS.textSecondary} />
             <Text style={styles.jobDetailText}>
-              {item.displayLocation?.city || item.city || "Ciudad"}, {item.displayLocation?.department || item.state || "Departamento"}
+              {item.displayLocation?.city || item.city || "Ciudad"},{" "}
+              {item.displayLocation?.department || item.state || "Departamento"}
             </Text>
           </View>
 
@@ -372,235 +905,84 @@ export default function WorkerJobsScreen({ navigation }) {
 
         <View style={styles.jobCardFooter}>
           <Text style={styles.jobPostedTime}>
-            Publicado hace{" "}
-            {Math.max(1, Math.floor(
-              (new Date().getTime() - new Date(item.createdAt || new Date()).getTime()) / (1000 * 60 * 60 * 24)
-            ))}{" "}
-            días
+            Publicado hace {daysAgo} días
           </Text>
           <TouchableOpacity
             style={[
               styles.applyButton,
-              isApplied && styles.appliedButton,
+              (isApplied || isApplying) && styles.appliedButton,
+              !hasWorkerProfile && styles.disabledButton,
             ]}
-            onPress={() => applyToJob(item.id)}
-            disabled={isApplied}>
-            <Text
-              style={[
-                styles.applyButtonText,
-                isApplied && styles.appliedButtonText,
-              ]}>
-              {isApplied ? "Postulado" : "Postularme"}
-            </Text>
+            onPress={handleApply}
+            disabled={isApplied || isApplying || !hasWorkerProfile}
+            activeOpacity={0.8}>
+            {isApplying ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text
+                style={[
+                  styles.applyButtonText,
+                  isApplied && styles.appliedButtonText,
+                  !hasWorkerProfile && styles.disabledButtonText,
+                ]}>
+                {!hasWorkerProfile
+                  ? "Perfil requerido"
+                  : isApplied
+                  ? "Postulado"
+                  : "Postularme"}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
-  };
+  });
 
-  // Modal de filtros
-  const FiltersModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={filtersModalVisible}
-      onRequestClose={() => setFiltersModalVisible(false)}>
-      <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Filtros</Text>
-            <TouchableOpacity onPress={() => setFiltersModalVisible(false)}>
-              <Ionicons name="close" size={24} color={COLORS.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalBody}>
-            {/* Filtro por ubicación */}
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Ubicación</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {locations.map((location) => (
-                  <TouchableOpacity
-                    key={location.id}
-                    style={[
-                      styles.filterOption,
-                      selectedLocation?.id === location.id &&
-                        styles.selectedFilterOption,
-                    ]}
-                    onPress={() =>
-                      setSelectedLocation(
-                        selectedLocation?.id === location.id ? null : location
-                      )
-                    }>
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        selectedLocation?.id === location.id &&
-                          styles.selectedFilterOptionText,
-                      ]}>
-                      {location.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-
-            {/* Filtro por cultivo */}
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Tipo de Cultivo</Text>
-              <View style={styles.filterOptionsGrid}>
-                {defaultCropTypes.map((crop) => (
-                  <TouchableOpacity
-                    key={crop.id}
-                    style={[
-                      styles.filterOption,
-                      selectedCrop?.id === crop.id &&
-                        styles.selectedFilterOption,
-                    ]}
-                    onPress={() =>
-                      setSelectedCrop(
-                        selectedCrop?.id === crop.id ? null : crop
-                      )
-                    }>
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        selectedCrop?.id === crop.id &&
-                          styles.selectedFilterOptionText,
-                      ]}>
-                      {crop.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Filtro por salario */}
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Rango Salarial (por día)</Text>
-              <View style={styles.salaryRangeContainer}>
-                <TextInput
-                  style={styles.salaryInput}
-                  placeholder="Mín"
-                  value={salaryRange.min}
-                  onChangeText={(text) =>
-                    setSalaryRange({ ...salaryRange, min: text })
-                  }
-                  keyboardType="numeric"
-                  placeholderTextColor={COLORS.textLight}
-                />
-                <Text style={styles.salaryRangeSeparator}>-</Text>
-                <TextInput
-                  style={styles.salaryInput}
-                  placeholder="Máx"
-                  value={salaryRange.max}
-                  onChangeText={(text) =>
-                    setSalaryRange({ ...salaryRange, max: text })
-                  }
-                  keyboardType="numeric"
-                  placeholderTextColor={COLORS.textLight}
-                />
-              </View>
-            </View>
-
-            {/* Filtro por duración */}
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Duración del Trabajo</Text>
-              <View style={styles.filterOptionsGrid}>
-                {durationOptions.map((duration) => (
-                  <TouchableOpacity
-                    key={duration.id}
-                    style={[
-                      styles.filterOption,
-                      selectedDuration?.id === duration.id &&
-                        styles.selectedFilterOption,
-                    ]}
-                    onPress={() =>
-                      setSelectedDuration(
-                        selectedDuration?.id === duration.id ? null : duration
-                      )
-                    }>
-                    <Text
-                      style={[
-                        styles.filterOptionText,
-                        selectedDuration?.id === duration.id &&
-                          styles.selectedFilterOptionText,
-                      ]}>
-                      {duration.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </ScrollView>
-
-          <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={styles.clearFiltersButton}
-              onPress={clearAllFilters}>
-              <Text style={styles.clearFiltersButtonText}>Limpiar Filtros</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.applyFiltersButton}
-              onPress={() => setFiltersModalVisible(false)}>
-              <Text style={styles.applyFiltersButtonText}>Aplicar</Text>
-            </TouchableOpacity>
-          </View>
+  // Lista de trabajos
+  const JobsList = React.memo(() => (
+    <FlatList
+      data={filteredJobs}
+      renderItem={({ item }) => <JobCard item={item} />}
+      keyExtractor={(item, index) =>
+        item.id ? `job-${item.id}` : `job-index-${index}`
+      }
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[COLORS.primary]}
+        />
+      }
+      contentContainerStyle={styles.jobsList}
+      ListEmptyComponent={() => (
+        <View style={styles.emptyStateContainer}>
+          <Ionicons name="search-outline" size={64} color={COLORS.textLight} />
+          <Text style={styles.emptyStateText}>
+            No se encontraron ofertas de trabajo
+          </Text>
+          <Text style={styles.emptyStateSubtext}>
+            Intenta ajustar tus filtros de búsqueda
+          </Text>
+          <TouchableOpacity
+            style={styles.clearFiltersButton}
+            onPress={clearAllFilters}>
+            <Text style={styles.clearFiltersButtonText}>Limpiar Filtros</Text>
+          </TouchableOpacity>
         </View>
-      </View>
-    </Modal>
-  );
+      )}
+    />
+  ));
 
-  // Modal de ordenamiento
-  const SortModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={sortModalVisible}
-      onRequestClose={() => setSortModalVisible(false)}>
-      <View style={styles.modalContainer}>
-        <View style={styles.sortModalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Ordenar por</Text>
-            <TouchableOpacity onPress={() => setSortModalVisible(false)}>
-              <Ionicons name="close" size={24} color={COLORS.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          {sortOptions.map((option) => (
-            <TouchableOpacity
-              key={option.id}
-              style={[
-                styles.sortOption,
-                sortBy === option.id && styles.selectedSortOption,
-              ]}
-              onPress={() => {
-                setSortBy(option.id);
-                setSortModalVisible(false);
-              }}>
-              <Ionicons
-                name={option.icon as keyof typeof Ionicons.glyphMap}
-                size={20}
-                color={
-                  sortBy === option.id ? COLORS.primary : COLORS.textSecondary
-                }
-              />
-              <Text
-                style={[
-                  styles.sortOptionText,
-                  sortBy === option.id && styles.selectedSortOptionText,
-                ]}>
-                {option.label}
-              </Text>
-              {sortBy === option.id && (
-                <Ionicons name="checkmark" size={20} color={COLORS.primary} />
-              )}
-            </TouchableOpacity>
-          ))}
+  if (authLoading) {
+    return (
+      <ScreenLayoutWorker navigation={navigation}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Verificando autenticación...</Text>
         </View>
-      </View>
-    </Modal>
-  );
+      </ScreenLayoutWorker>
+    );
+  }
 
   if (loading) {
     return (
@@ -616,58 +998,42 @@ export default function WorkerJobsScreen({ navigation }) {
   return (
     <ScreenLayoutWorker navigation={navigation}>
       <View style={styles.container}>
-        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Buscar Trabajos</Text>
-          <Text style={styles.headerSubtitle}>
-            {filteredJobs.length} ofertas disponibles
-          </Text>
-        </View>
+          <View style={styles.headerSubtitleContainer}>
+            <Text style={styles.headerSubtitle}>
+              {filteredJobs.length} ofertas disponibles
+            </Text>
+            {/* Indicador de filtros activos */}
+            {(() => {
+              const activeFiltersCount = [
+                searchTerm,
+                selectedCrop,
+                salaryRange.min || salaryRange.max,
+                selectedDuration,
+                sortBy !== "newest",
+              ].filter(Boolean).length;
 
-        {/* Barra de búsqueda */}
-        <SearchBar />
-
-        {/* Filtros rápidos */}
-        <QuickFilters />
-
-        {/* Lista de trabajos */}
-        <FlatList
-          data={filteredJobs}
-          renderItem={({ item }) => <JobCard item={item} />}
-          keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[COLORS.primary]}
-            />
-          }
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.jobsList}
-          ListEmptyComponent={() => (
-            <View style={styles.emptyStateContainer}>
-              <Ionicons name="search-outline" size={64} color={COLORS.textLight} />
-              <Text style={styles.emptyStateText}>
-                No se encontraron ofertas de trabajo
-              </Text>
-              <Text style={styles.emptyStateSubtext}>
-                Intenta ajustar tus filtros de búsqueda
-              </Text>
-              <TouchableOpacity
-                style={styles.clearFiltersButton}
-                onPress={clearAllFilters}>
-                <Text style={styles.clearFiltersButtonText}>
-                  Limpiar Filtros
-                </Text>
-              </TouchableOpacity>
-            </View>
+              return activeFiltersCount > 0 ? (
+                <View style={styles.activeFiltersIndicator}>
+                  <Ionicons name="funnel" size={12} color="#FFFFFF" />
+                  <Text style={styles.activeFiltersText}>
+                    {activeFiltersCount}
+                  </Text>
+                </View>
+              ) : null;
+            })()}
+          </View>
+          {!hasWorkerProfile && (
+            <Text style={styles.warningText}>
+              ⚠️ Necesitas completar tu perfil de trabajador para postularte
+            </Text>
           )}
-        />
-
-        {/* Modales */}
-        <FiltersModal />
-        <SortModal />
+        </View>
+        <CategoryTabs />
+        <JobsList />
       </View>
+      
     </ScreenLayoutWorker>
   );
 }
@@ -705,6 +1071,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
   },
+  headerSubtitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  activeFiltersIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  activeFiltersText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  warningText: {
+    fontSize: 12,
+    color: COLORS.warning,
+    marginTop: 4,
+    fontWeight: "500",
+  },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -722,34 +1113,212 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.text,
   },
-  quickFiltersContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 16,
+  filtersSection: {
+    backgroundColor: COLORS.surface,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
-  filterChip: {
+  filtersSectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  categoryTabsScroll: {
+    marginBottom: 12,
+  },
+  categoryTabsContainer: {
+    paddingHorizontal: 16,
+    paddingRight: 32,
+  },
+  categoryTab: {
+    flexDirection: "column",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginRight: 8,
+    backgroundColor: COLORS.background,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    minWidth: 80,
+    minHeight: 60,
+  },
+  activeCategoryTab: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+    elevation: 3,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  categoryTabContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+  },
+  categoryTabIcon: {
+    marginBottom: 4,
+  },
+  categoryTabText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: "500",
+    textAlign: "center",
+    lineHeight: 14,
+  },
+  activeCategoryTabText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  additionalFilters: {
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  additionalFiltersTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginHorizontal: 20,
+    marginBottom: 8,
+  },
+  quickFiltersContainer: {
+    paddingHorizontal: 16,
+    paddingRight: 32,
+  },
+  quickFilterButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
     marginRight: 8,
-    gap: 6,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    minHeight: 36,
   },
-  activeFilterChip: {
+  quickFilterButtonActive: {
+    backgroundColor: COLORS.secondary,
+    borderColor: COLORS.secondary,
+  },
+  quickFilterText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginLeft: 6,
+    fontWeight: "500",
+  },
+  quickFilterTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  clearFiltersQuickButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: `${COLORS.error}15`,
+    borderWidth: 1,
+    borderColor: COLORS.error,
+    minHeight: 36,
+  },
+  clearFiltersQuickText: {
+    fontSize: 12,
+    color: COLORS.error,
+    marginLeft: 6,
+    fontWeight: "600",
+  },
+  advancedFiltersContainer: {
+    backgroundColor: COLORS.background,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  advancedFilterRow: {
+    marginBottom: 16,
+  },
+  advancedFilterLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  salaryRangeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  salaryInput: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  salaryRangeSeparator: {
+    marginHorizontal: 12,
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    fontWeight: "500",
+  },
+  durationButtonsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  durationButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    minWidth: 80,
+  },
+  durationButtonActive: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
   },
-  filterChipText: {
-    fontSize: 14,
-    color: COLORS.primary,
+  durationButtonText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: "center",
     fontWeight: "500",
   },
-  activeFilterChipText: {
+  durationButtonTextActive: {
     color: "#FFFFFF",
-    fontWeight: "500",
+    fontWeight: "600",
+  },
+  advancedFilterActions: {
+    alignItems: "center",
+    marginTop: 8,
+  },
+  applyFiltersButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.success,
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  applyFiltersButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 8,
   },
   jobsList: {
     padding: 20,
@@ -837,12 +1406,18 @@ const styles = StyleSheet.create({
   appliedButton: {
     backgroundColor: COLORS.success,
   },
+  disabledButton: {
+    backgroundColor: COLORS.textLight,
+  },
   applyButtonText: {
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "600",
   },
   appliedButtonText: {
+    color: "#FFFFFF",
+  },
+  disabledButtonText: {
     color: "#FFFFFF",
   },
   emptyStateContainer: {
@@ -862,144 +1437,18 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: "center",
   },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    backgroundColor: COLORS.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "80%",
-  },
-  sortModalContent: {
-    backgroundColor: COLORS.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 20,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
-  modalBody: {
-    maxHeight: 400,
-  },
-  filterSection: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  filterSectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: 12,
-  },
-  filterOptionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  filterOption: {
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  selectedFilterOption: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  filterOptionText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-  },
-  selectedFilterOptionText: {
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
-  salaryRangeContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  salaryInput: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: COLORS.text,
-  },
-  salaryRangeSeparator: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
-  },
-  modalFooter: {
-    flexDirection: "row",
-    padding: 20,
-    gap: 12,
-  },
   clearFiltersButton: {
-    flex: 1,
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
+    paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
-    alignItems: "center",
+    marginTop: 16,
   },
   clearFiltersButtonText: {
     color: COLORS.textSecondary,
     fontSize: 16,
-    fontWeight: "500",
-  },
-  applyFiltersButton: {
-    flex: 1,
-    backgroundColor: COLORS.primary,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  applyFiltersButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  sortOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    gap: 12,
-  },
-  selectedSortOption: {
-    backgroundColor: `${COLORS.primary}10`,
-  },
-  sortOptionText: {
-    flex: 1,
-    fontSize: 16,
-    color: COLORS.textSecondary,
-  },
-  selectedSortOptionText: {
-    color: COLORS.primary,
     fontWeight: "500",
   },
 });

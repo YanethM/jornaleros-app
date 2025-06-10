@@ -62,7 +62,7 @@ const CustomHeaderWorker = ({ navigation }) => {
 
   const menuItems = [
     { title: "Mis trabajos", icon: "work", route: "MyJobs" },
-    { title: "Mensajes", icon: "message", route: "Messages" },
+    { title: "Mensajes", icon: "message", route: "WorkerMessage" },
     { title: "Calificar productor", icon: "star", route: "RateProducer" },
     {
       title: "Cancelar postulación",
@@ -149,7 +149,7 @@ const CustomHeaderWorker = ({ navigation }) => {
     if (userData?.workerProfile?.profilePicture) {
       return { uri: userData.workerProfile.profilePicture };
     }
-    return require("../../assets/onboarding/slide1.webp");
+    return require("../../assets/onboarding/slide1.png");
   };
 
   return (

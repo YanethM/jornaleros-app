@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,127 +9,74 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
-  Image,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useAuth } from '../../context/AuthContext';
-import { getWorkerApplications } from '../../services/workerService';
-import { getUserData } from '../../services/userService';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useAuth } from "../../context/AuthContext";
+import { getWorkerApplications } from "../../services/workerService";
+import { getUserData } from "../../services/userService";
+import ScreenLayoutWorker from "../../components/ScreenLayoutWorker";
+import CustomTabBarWorker from "../../components/CustomTabBarWorker";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
 // Paleta de colores
 const COLORS = {
-  primary: '#274F66',
-  primaryLight: '#3A6B85',
-  secondary: '#B6883E',
-  background: '#F8FAFC',
-  surface: '#FFFFFF',
-  text: '#274E66',
-  textSecondary: '#4A5568',
-  textLight: '#718096',
-  success: '#10B981',
-  warning: '#F59E0B',
-  error: '#EF4444',
-  border: '#E2E8F0',
+  primary: "#274F66",
+  primaryLight: "#3A6B85",
+  secondary: "#B6883E",
+  background: "#F8FAFC",
+  surface: "#FFFFFF",
+  text: "#274E66",
+  textSecondary: "#4A5568",
+  textLight: "#718096",
+  success: "#10B981",
+  warning: "#F59E0B",
+  error: "#EF4444",
+  border: "#E2E8F0",
+  info: "#3B82F6",
 };
 
-interface MyJobsScreenProps {
-  navigation: any;
-}
-
-interface Application {
-  id: string;
-  status: {
-    name: string;
-    id: string;
-  };
-  jobOffer: {
-    id: string;
-    title: string;
-    salary: number;
-    duration: number;
-    city: string;
-    state: string;
-    country: string;
-    cropType: {
-      name: string;
-    };
-    farm: {
-      name: string;
-    };
-    employer: {
-      name?: string;
-      user?: {
-        name: string;
-      };
-    };
-    includesFood: boolean;
-    includesLodging: boolean;
-    paymentMode: string;
-    paymentType: string;
-  };
-  createdAt: string;
-  updatedAt: string;
-}
-
-const MyJobsScreen: React.FC<MyJobsScreenProps> = ({ navigation }) => {
+const MyJobsScreen = ({ navigation }) => {
   const { user } = useAuth();
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [filteredApplications, setFilteredApplications] = useState<Application[]>([]);
+  const [allApplications, setAllApplications] = useState([]);
+  const [acceptedJobs, setAcceptedJobs] = useState([]);
+  const [filteredJobs, setFilteredJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [userData, setUserData] = useState<any>(null);
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [userData, setUserData] = useState(null);
+  const [cropTypeFilters, setCropTypeFilters] = useState([]);
 
-  const filters = [
-    { key: 'all', label: 'Todos', icon: 'list' },
-    { key: 'Solicitado', label: 'Enviadas', icon: 'paper-plane' },
-    { key: 'En_revision', label: 'En Revisión', icon: 'time' },
-    { key: 'Completado', label: 'Completadas', icon: 'checkmark-circle' },
-    { key: 'Rechazado', label: 'Rechazadas', icon: 'close-circle' },
-  ];
-
-  // Función para obtener el nombre amigable del status
-  const getStatusDisplayName = (status: string) => {
-    const statusMap: { [key: string]: string } = {
-      Solicitado: 'Enviada',
-      En_revision: 'En Revisión',
-      Completado: 'Completada',
-      Rechazado: 'Rechazada',
-      Cancelado: 'Cancelada',
+  // 🔥 NUEVO - Función para obtener nombre amigable del estado
+  const getJobStatusDisplayName = (status) => {
+    const statusMap = {
+      Aceptado: "En Progreso",
+      Completado: "Completado",
     };
-    return statusMap[status] || status || 'Desconocido';
+    return statusMap[status] || status || "Desconocido";
   };
 
-  const getStatusStyle = (status: string) => {
+  // 🔥 MEJORADO - Estilos de estado para trabajos
+  const getJobStatusStyle = (status) => {
     switch (status) {
-      case 'Completado':
+      case "Completado":
         return { backgroundColor: COLORS.success };
-      case 'En_revision':
-        return { backgroundColor: COLORS.warning };
-      case 'Rechazado':
-        return { backgroundColor: COLORS.error };
-      case 'Solicitado':
-        return { backgroundColor: COLORS.primary };
+      case "Aceptado":
+        return { backgroundColor: COLORS.info };
       default:
         return { backgroundColor: COLORS.textLight };
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getJobStatusIcon = (status) => {
     switch (status) {
-      case 'Completado':
-        return 'checkmark-circle';
-      case 'En_revision':
-        return 'time';
-      case 'Rechazado':
-        return 'close-circle';
-      case 'Solicitado':
-        return 'paper-plane';
+      case "Completado":
+        return "checkmark-circle";
+      case "Aceptado":
+        return "play-circle";
       default:
-        return 'help-circle';
+        return "help-circle";
     }
   };
 
@@ -142,69 +89,140 @@ const MyJobsScreen: React.FC<MyJobsScreenProps> = ({ navigation }) => {
         setUserData(workerData);
       }
 
-      if (!workerData.workerProfile) {
-        throw new Error('El usuario no tiene perfil de trabajador');
+      if (!workerData?.workerProfile?.id) {
+        throw new Error("El usuario no tiene perfil de trabajador");
       }
 
       return workerData.workerProfile.id;
     } catch (error) {
-      console.error('Error obteniendo ID del trabajador:', error);
+      console.error("Error obteniendo ID del trabajador:", error);
       throw error;
     }
   };
 
-  // Cargar aplicaciones
-  const loadApplications = async () => {
+  // 🔥 CORREGIDO - Cargar solo trabajos aprobados
+  const loadAcceptedJobs = async () => {
     try {
       const workerId = await getWorkerId();
       const response = await getWorkerApplications(workerId);
-      const applicationsData = response?.applications || [];
       
-      // Ordenar por fecha más reciente
-      const sortedApplications = applicationsData.sort((a: Application, b: Application) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      let applicationsData = [];
+      if (Array.isArray(response)) {
+        applicationsData = response;
+      } else if (response?.applications && Array.isArray(response.applications)) {
+        applicationsData = response.applications;
+      } else if (response?.data && Array.isArray(response.data)) {
+        applicationsData = response.data;
+      }
+
+      console.log("📋 All applications loaded:", applicationsData.length);
+      setAllApplications(applicationsData);
+
+      // 🔥 FILTRAR solo trabajos aprobados (Aceptado o Completado)
+      const approvedJobs = applicationsData.filter(app => 
+        ['Aceptado', 'Completado'].includes(app.status?.name)
       );
+
+      console.log("✅ Approved jobs found:", approvedJobs.length);
+
+      // Ordenar por fecha más reciente
+      const sortedJobs = approvedJobs.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      setAcceptedJobs(sortedJobs);
       
-      setApplications(sortedApplications);
-      filterApplications(sortedApplications, activeFilter);
+      // 🔥 GENERAR filtros de tipos de cultivo dinámicamente
+      generateCropTypeFilters(sortedJobs);
+      
+      // Aplicar filtro actual
+      filterJobsByCropType(sortedJobs, activeFilter);
     } catch (error) {
-      console.error('Error cargando aplicaciones:', error);
-      Alert.alert('Error', 'No se pudieron cargar tus trabajos');
+      console.error("Error cargando trabajos:", error);
+      Alert.alert("Error", "No se pudieron cargar tus trabajos");
+      setAcceptedJobs([]);
+      setFilteredJobs([]);
     }
   };
 
-  // Filtrar aplicaciones
-  const filterApplications = (apps: Application[], filter: string) => {
-    if (filter === 'all') {
-      setFilteredApplications(apps);
-    } else {
-      const filtered = apps.filter(app => app.status?.name === filter);
-      setFilteredApplications(filtered);
+  // 🔥 NUEVO - Generar filtros de tipos de cultivo dinámicamente
+  const generateCropTypeFilters = (jobs) => {
+    const cropTypes = new Map();
+    
+    jobs.forEach(job => {
+      const cropType = job.jobOffer?.cropType;
+      if (cropType) {
+        cropTypes.set(cropType.id, {
+          id: cropType.id,
+          name: cropType.name,
+          icon: "leaf"
+        });
+      }
+    });
+
+    const filters = [
+      { id: "all", name: "Todos los Cultivos", icon: "apps" },
+      { id: "in_progress", name: "En Progreso", icon: "play-circle" },
+      { id: "completed", name: "Completados", icon: "checkmark-circle" },
+      ...Array.from(cropTypes.values())
+    ];
+
+    setCropTypeFilters(filters);
+  };
+
+  // 🔥 NUEVO - Filtrar trabajos por tipo de cultivo
+  const filterJobsByCropType = (jobs, filterId) => {
+    let filtered = [];
+
+    switch (filterId) {
+      case "all":
+        filtered = jobs;
+        break;
+      case "in_progress":
+        filtered = jobs.filter(job => job.status?.name === "Aceptado");
+        break;
+      case "completed":
+        filtered = jobs.filter(job => job.status?.name === "Completado");
+        break;
+      default:
+        // Filtrar por tipo de cultivo específico
+        filtered = jobs.filter(job => job.jobOffer?.cropType?.id === filterId);
+        break;
     }
+
+    console.log(`🔍 Filtered jobs for '${filterId}':`, filtered.length);
+    setFilteredJobs(filtered);
   };
 
   // Manejar cambio de filtro
-  const handleFilterChange = (filter: string) => {
-    setActiveFilter(filter);
-    filterApplications(applications, filter);
+  const handleFilterChange = (filterId) => {
+    setActiveFilter(filterId);
+    filterJobsByCropType(acceptedJobs, filterId);
   };
 
   // Función para refrescar datos
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await loadApplications();
+      await loadAcceptedJobs();
     } finally {
       setRefreshing(false);
     }
   };
 
   // Función para navegar al detalle del trabajo
-  const navigateToJobDetail = (application: Application) => {
-    navigation.navigate('JobOfferDetail', { 
-      jobOfferId: application.jobOffer.id,
-      applicationId: application.id 
-    });
+  const navigateToJobDetail = (job) => {
+    try {
+      navigation.navigate("WorkerJobOfferDetail", {
+        jobOfferId: job.jobOffer?.id,
+        applicationId: job.id,
+      });
+    } catch (error) {
+      console.error("Error navegando al detalle:", error);
+      Alert.alert("Error", "No se pudo abrir el detalle del trabajo");
+    }
   };
 
   // Cargar datos iniciales
@@ -212,7 +230,9 @@ const MyJobsScreen: React.FC<MyJobsScreenProps> = ({ navigation }) => {
     const initializeData = async () => {
       setLoading(true);
       try {
-        await loadApplications();
+        await loadAcceptedJobs();
+      } catch (error) {
+        console.error("Error inicializando datos:", error);
       } finally {
         setLoading(false);
       }
@@ -220,291 +240,383 @@ const MyJobsScreen: React.FC<MyJobsScreenProps> = ({ navigation }) => {
 
     if (user?.id) {
       initializeData();
+    } else {
+      setLoading(false);
+      Alert.alert("Error", "Usuario no encontrado");
     }
   }, [user]);
 
-  // Calcular estadísticas
-  const getStats = () => {
-    const total = applications.length;
-    const pending = applications.filter(app => 
-      ['Solicitado', 'En_revision'].includes(app.status?.name)
-    ).length;
-    const completed = applications.filter(app => 
-      app.status?.name === 'Completado'
-    ).length;
-    const rejected = applications.filter(app => 
-      app.status?.name === 'Rechazado'
-    ).length;
+  // 🔥 CORREGIDO - Calcular estadísticas para trabajos aprobados
+  const getJobStats = () => {
+    const total = acceptedJobs.length;
+    const inProgress = acceptedJobs.filter(job => job.status?.name === "Aceptado").length;
+    const completed = acceptedJobs.filter(job => job.status?.name === "Completado").length;
+    
+    // Calcular total ganado (solo trabajos completados)
+    const totalEarnings = acceptedJobs
+      .filter(job => job.status?.name === "Completado")
+      .reduce((sum, job) => {
+        const salary = job.jobOffer?.salary || 0;
+        const duration = job.jobOffer?.duration || 1;
+        return sum + (salary * duration);
+      }, 0);
 
-    return { total, pending, completed, rejected };
+    return { total, inProgress, completed, totalEarnings };
   };
 
-  const stats = getStats();
+  const stats = getJobStats();
 
+  // Estado de carga
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Cargando tus trabajos...</Text>
-      </View>
+      <ScreenLayoutWorker navigation={navigation}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Cargando tus trabajos...</Text>
+        </View>
+      </ScreenLayoutWorker>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mis Trabajos</Text>
-        <View style={styles.headerRight} />
-      </View>
+    <ScreenLayoutWorker navigation={navigation}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Mis Trabajos</Text>
+          <View style={styles.headerRight} />
+        </View>
 
-      {/* Estadísticas */}
-      <View style={styles.statsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={[COLORS.primary, COLORS.primaryLight]}
-                style={styles.statGradient}
-              >
-                <Ionicons name="briefcase" size={24} color="#FFFFFF" />
-                <Text style={styles.statNumber}>{stats.total}</Text>
-                <Text style={styles.statLabel}>Total</Text>
-              </LinearGradient>
+        {/* 🔥 MEJORADO - Estadísticas para trabajos */}
+        <View style={styles.statsContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <LinearGradient
+                  colors={[COLORS.primary, COLORS.primaryLight]}
+                  style={styles.statGradient}>
+                  <Ionicons name="briefcase" size={24} color="#FFFFFF" />
+                  <Text style={styles.statNumber}>{stats.total}</Text>
+                  <Text style={styles.statLabel}>Total Trabajos</Text>
+                </LinearGradient>
+              </View>
+
+              <View style={styles.statCard}>
+                <LinearGradient
+                  colors={[COLORS.info, "#60A5FA"]}
+                  style={styles.statGradient}>
+                  <Ionicons name="play-circle" size={24} color="#FFFFFF" />
+                  <Text style={styles.statNumber}>{stats.inProgress}</Text>
+                  <Text style={styles.statLabel}>En Progreso</Text>
+                </LinearGradient>
+              </View>
+
+              <View style={styles.statCard}>
+                <LinearGradient
+                  colors={[COLORS.success, "#34D399"]}
+                  style={styles.statGradient}>
+                  <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
+                  <Text style={styles.statNumber}>{stats.completed}</Text>
+                  <Text style={styles.statLabel}>Completados</Text>
+                </LinearGradient>
+              </View>
+
+              <View style={styles.statCard}>
+                <LinearGradient
+                  colors={[COLORS.secondary, "#FBBF24"]}
+                  style={styles.statGradient}>
+                  <Ionicons name="cash" size={24} color="#FFFFFF" />
+                  <Text style={styles.statNumber}>
+                    ${new Intl.NumberFormat("es-CO", {
+                      notation: "compact",
+                      maximumFractionDigits: 1
+                    }).format(stats.totalEarnings)}
+                  </Text>
+                  <Text style={styles.statLabel}>Ganado Total</Text>
+                </LinearGradient>
+              </View>
             </View>
+          </ScrollView>
+        </View>
 
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={[COLORS.warning, '#FBBF24']}
-                style={styles.statGradient}
-              >
-                <Ionicons name="time" size={24} color="#FFFFFF" />
-                <Text style={styles.statNumber}>{stats.pending}</Text>
-                <Text style={styles.statLabel}>Pendientes</Text>
-              </LinearGradient>
+        {/* 🔥 NUEVO - Filtros por tipo de cultivo */}
+        <View style={styles.filtersContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.filtersRow}>
+              {cropTypeFilters.map((filter) => (
+                <TouchableOpacity
+                  key={filter.id}
+                  style={[
+                    styles.filterButton,
+                    activeFilter === filter.id && styles.filterButtonActive,
+                  ]}
+                  onPress={() => handleFilterChange(filter.id)}>
+                  <Ionicons
+                    name={filter.icon}
+                    size={16}
+                    color={
+                      activeFilter === filter.id
+                        ? COLORS.surface
+                        : COLORS.textSecondary
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.filterButtonText,
+                      activeFilter === filter.id &&
+                        styles.filterButtonTextActive,
+                    ]}>
+                    {filter.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
+          </ScrollView>
+        </View>
 
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={[COLORS.success, '#34D399']}
-                style={styles.statGradient}
-              >
-                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
-                <Text style={styles.statNumber}>{stats.completed}</Text>
-                <Text style={styles.statLabel}>Completados</Text>
-              </LinearGradient>
+        {/* 🔥 MEJORADO - Lista de trabajos aprobados */}
+        <ScrollView
+          style={styles.content}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[COLORS.primary]}
+            />
+          }
+          showsVerticalScrollIndicator={false}>
+          {filteredJobs.length > 0 ? (
+            <View style={styles.jobsList}>
+              {filteredJobs.map((job) => (
+                <TouchableOpacity
+                  key={job.id}
+                  style={styles.jobCard}
+                  onPress={() => navigateToJobDetail(job)}>
+                  
+                  {/* Indicador de estado lateral */}
+                  <View 
+                    style={[
+                      styles.statusIndicator, 
+                      getJobStatusStyle(job.status?.name)
+                    ]} 
+                  />
+
+                  <View style={styles.jobCardContent}>
+                    <View style={styles.jobCardHeader}>
+                      <View style={styles.jobInfo}>
+                        <Text style={styles.jobTitle} numberOfLines={2}>
+                          {job.jobOffer?.title || "Trabajo sin título"}
+                        </Text>
+                        <Text style={styles.employerName}>
+                          {job.jobOffer?.employer?.user?.name || "Empleador"}
+                        </Text>
+                        <Text style={styles.farmName}>
+                          {job.jobOffer?.farm?.name || "Finca"}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          getJobStatusStyle(job.status?.name),
+                        ]}>
+                        <Ionicons
+                          name={getJobStatusIcon(job.status?.name)}
+                          size={12}
+                          color="#FFFFFF"
+                        />
+                        <Text style={styles.statusText}>
+                          {getJobStatusDisplayName(job.status?.name)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.jobDetails}>
+                      <View style={styles.detailRow}>
+                        <Ionicons
+                          name="location"
+                          size={16}
+                          color={COLORS.textLight}
+                        />
+                        <Text style={styles.detailText}>
+                          {job.jobOffer?.displayLocation?.city || job.jobOffer?.city || "Ciudad"},{" "}
+                          {job.jobOffer?.displayLocation?.department || job.jobOffer?.state || "Estado"}
+                        </Text>
+                      </View>
+
+                      <View style={styles.detailRow}>
+                        <Ionicons
+                          name="leaf"
+                          size={16}
+                          color={COLORS.success}
+                        />
+                        <Text style={styles.detailText}>
+                          {job.jobOffer?.cropType?.name || "Cultivo general"}
+                        </Text>
+                      </View>
+
+                      <View style={styles.detailRow}>
+                        <Ionicons
+                          name="cash"
+                          size={16}
+                          color={COLORS.secondary}
+                        />
+                        <Text style={styles.detailText}>
+                          $
+                          {new Intl.NumberFormat("es-CO").format(
+                            job.jobOffer?.salary || 0
+                          )}
+                          /día
+                        </Text>
+                      </View>
+
+                      <View style={styles.detailRow}>
+                        <Ionicons
+                          name="time"
+                          size={16}
+                          color={COLORS.textLight}
+                        />
+                        <Text style={styles.detailText}>
+                          {job.jobOffer?.duration || 1} días de duración
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* 🔥 NUEVO - Información de ganancias para trabajos completados */}
+                    {job.status?.name === "Completado" && (
+                      <View style={styles.earningsContainer}>
+                        <View style={styles.earningsBox}>
+                          <Ionicons name="cash" size={18} color={COLORS.success} />
+                          <Text style={styles.earningsLabel}>Total Ganado:</Text>
+                          <Text style={styles.earningsAmount}>
+                            $
+                            {new Intl.NumberFormat("es-CO").format(
+                              (job.jobOffer?.salary || 0) * (job.jobOffer?.duration || 1)
+                            )}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Beneficios */}
+                    <View style={styles.benefitsContainer}>
+                      <View style={styles.benefitItem}>
+                        <Ionicons
+                          name="restaurant"
+                          size={14}
+                          color={
+                            job.jobOffer?.includesFood
+                              ? COLORS.success
+                              : COLORS.textLight
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.benefitText,
+                            !job.jobOffer?.includesFood &&
+                              styles.benefitTextDisabled,
+                          ]}>
+                          {job.jobOffer?.includesFood
+                            ? "Incluye comida"
+                            : "Sin comida"}
+                        </Text>
+                      </View>
+
+                      <View style={styles.benefitItem}>
+                        <Ionicons
+                          name="bed"
+                          size={14}
+                          color={
+                            job.jobOffer?.includesLodging
+                              ? COLORS.success
+                              : COLORS.textLight
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.benefitText,
+                            !job.jobOffer?.includesLodging &&
+                              styles.benefitTextDisabled,
+                          ]}>
+                          {job.jobOffer?.includesLodging
+                            ? "Incluye alojamiento"
+                            : "Sin alojamiento"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.jobFooter}>
+                      <View style={styles.dateContainer}>
+                        <Ionicons
+                          name="calendar"
+                          size={14}
+                          color={COLORS.textLight}
+                        />
+                        <Text style={styles.dateText}>
+                          Iniciado el{" "}
+                          {job.createdAt ? new Date(job.createdAt).toLocaleDateString(
+                            "es-ES",
+                            {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            }
+                          ) : "Fecha no disponible"}
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity style={styles.viewDetailsButton}>
+                        <Text style={styles.viewDetailsText}>Ver detalles</Text>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={16}
+                          color={COLORS.primary}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
             </View>
-
-            <View style={styles.statCard}>
-              <LinearGradient
-                colors={[COLORS.error, '#F87171']}
-                style={styles.statGradient}
-              >
-                <Ionicons name="close-circle" size={24} color="#FFFFFF" />
-                <Text style={styles.statNumber}>{stats.rejected}</Text>
-                <Text style={styles.statLabel}>Rechazados</Text>
-              </LinearGradient>
-            </View>
-          </View>
-        </ScrollView>
-      </View>
-
-      {/* Filtros */}
-      <View style={styles.filtersContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.filtersRow}>
-            {filters.map((filter) => (
-              <TouchableOpacity
-                key={filter.key}
-                style={[
-                  styles.filterButton,
-                  activeFilter === filter.key && styles.filterButtonActive
-                ]}
-                onPress={() => handleFilterChange(filter.key)}
-              >
-                <Ionicons 
-                  name={filter.icon as any} 
-                  size={16} 
-                  color={activeFilter === filter.key ? COLORS.surface : COLORS.textSecondary} 
+          ) : (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons
+                  name="briefcase-outline"
+                  size={64}
+                  color={COLORS.textLight}
                 />
-                <Text style={[
-                  styles.filterButtonText,
-                  activeFilter === filter.key && styles.filterButtonTextActive
-                ]}>
-                  {filter.label}
-                </Text>
+              </View>
+              <Text style={styles.emptyTitle}>
+                {activeFilter === "all"
+                  ? "No tienes trabajos aprobados aún"
+                  : `No tienes trabajos de ${cropTypeFilters
+                      .find((f) => f.id === activeFilter)
+                      ?.name.toLowerCase()}`}
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                {activeFilter === "all"
+                  ? "Cuando te aprueben para un trabajo, aparecerá aquí"
+                  : "Prueba cambiando el filtro o postúlate a más trabajos"}
+              </Text>
+              <TouchableOpacity
+                style={styles.exploreJobsButton}
+                onPress={() => navigation.navigate("WorkerJobs")}>
+                <Ionicons name="search" size={20} color={COLORS.surface} />
+                <Text style={styles.exploreJobsText}>Buscar Más Trabajos</Text>
               </TouchableOpacity>
-            ))}
-          </View>
+            </View>
+          )}
         </ScrollView>
       </View>
+      <CustomTabBarWorker navigation={navigation} currentRoute="MyJobs" />
 
-      {/* Lista de trabajos */}
-      <ScrollView
-        style={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[COLORS.primary]}
-          />
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        {filteredApplications.length > 0 ? (
-          <View style={styles.jobsList}>
-            {filteredApplications.map((application) => (
-              <TouchableOpacity
-                key={application.id}
-                style={styles.jobCard}
-                onPress={() => navigateToJobDetail(application)}
-              >
-                <View style={styles.jobCardHeader}>
-                  <View style={styles.jobInfo}>
-                    <Text style={styles.jobTitle} numberOfLines={2}>
-                      {application.jobOffer?.title || 'Trabajo sin título'}
-                    </Text>
-                    <Text style={styles.employerName}>
-                      {application.jobOffer?.employer?.user?.name ||
-                       application.jobOffer?.employer?.name ||
-                       'Empleador no disponible'}
-                    </Text>
-                    <Text style={styles.farmName}>
-                      {application.jobOffer?.farm?.name || 'Finca no especificada'}
-                    </Text>
-                  </View>
-
-                  <View style={[
-                    styles.statusBadge,
-                    getStatusStyle(application.status?.name)
-                  ]}>
-                    <Ionicons 
-                      name={getStatusIcon(application.status?.name) as any} 
-                      size={12} 
-                      color="#FFFFFF" 
-                    />
-                    <Text style={styles.statusText}>
-                      {getStatusDisplayName(application.status?.name)}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.jobDetails}>
-                  <View style={styles.detailRow}>
-                    <Ionicons name="location" size={16} color={COLORS.textLight} />
-                    <Text style={styles.detailText}>
-                      {application.jobOffer?.city}, {application.jobOffer?.state}
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailRow}>
-                    <Ionicons name="leaf" size={16} color={COLORS.textLight} />
-                    <Text style={styles.detailText}>
-                      {application.jobOffer?.cropType?.name || 'Cultivo general'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailRow}>
-                    <Ionicons name="cash" size={16} color={COLORS.textLight} />
-                    <Text style={styles.detailText}>
-                      ${new Intl.NumberFormat('es-CO').format(application.jobOffer?.salary || 0)}
-                      {application.jobOffer?.paymentType === 'Por_dia' ? '/día' : '/tarea'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailRow}>
-                    <Ionicons name="time" size={16} color={COLORS.textLight} />
-                    <Text style={styles.detailText}>
-                      {application.jobOffer?.duration || 1} días de duración
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Beneficios */}
-                <View style={styles.benefitsContainer}>
-                  <View style={styles.benefitItem}>
-                    <Ionicons 
-                      name="restaurant" 
-                      size={14} 
-                      color={application.jobOffer?.includesFood ? COLORS.success : COLORS.textLight} 
-                    />
-                    <Text style={[
-                      styles.benefitText,
-                      !application.jobOffer?.includesFood && styles.benefitTextDisabled
-                    ]}>
-                      {application.jobOffer?.includesFood ? 'Incluye comida' : 'Sin comida'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.benefitItem}>
-                    <Ionicons 
-                      name="bed" 
-                      size={14} 
-                      color={application.jobOffer?.includesLodging ? COLORS.success : COLORS.textLight} 
-                    />
-                    <Text style={[
-                      styles.benefitText,
-                      !application.jobOffer?.includesLodging && styles.benefitTextDisabled
-                    ]}>
-                      {application.jobOffer?.includesLodging ? 'Incluye alojamiento' : 'Sin alojamiento'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.jobFooter}>
-                  <View style={styles.dateContainer}>
-                    <Ionicons name="calendar" size={14} color={COLORS.textLight} />
-                    <Text style={styles.dateText}>
-                      Postulado el {new Date(application.createdAt).toLocaleDateString('es-ES', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric'
-                      })}
-                    </Text>
-                  </View>
-
-                  <TouchableOpacity style={styles.viewDetailsButton}>
-                    <Text style={styles.viewDetailsText}>Ver detalles</Text>
-                    <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconContainer}>
-              <Ionicons name="briefcase-outline" size={64} color={COLORS.textLight} />
-            </View>
-            <Text style={styles.emptyTitle}>
-              {activeFilter === 'all' 
-                ? 'No tienes trabajos aún' 
-                : `No tienes trabajos ${filters.find(f => f.key === activeFilter)?.label.toLowerCase()}`
-              }
-            </Text>
-            <Text style={styles.emptySubtitle}>
-              {activeFilter === 'all'
-                ? 'Explora las ofertas disponibles y postúlate a trabajos que coincidan con tus habilidades'
-                : 'Prueba cambiando el filtro o revisa otros estados de tus aplicaciones'
-              }
-            </Text>
-            <TouchableOpacity
-              style={styles.exploreJobsButton}
-              onPress={() => navigation.navigate('WorkerHome')}
-            >
-              <Ionicons name="search" size={20} color={COLORS.surface} />
-              <Text style={styles.exploreJobsText}>Explorar Trabajos</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </ScrollView>
-    </View>
+    </ScreenLayoutWorker>
   );
 };
 
@@ -515,8 +627,8 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     backgroundColor: COLORS.background,
   },
   loadingText: {
@@ -525,9 +637,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: COLORS.surface,
@@ -539,7 +651,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.text,
   },
   headerRight: {
@@ -552,15 +664,15 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   statsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 20,
     gap: 12,
   },
   statCard: {
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -568,20 +680,21 @@ const styles = StyleSheet.create({
   statGradient: {
     paddingVertical: 16,
     paddingHorizontal: 20,
-    alignItems: 'center',
+    alignItems: "center",
     minWidth: 90,
   },
   statNumber: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#FFFFFF",
     marginTop: 8,
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '600',
+    fontSize: 11,
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "600",
+    textAlign: "center",
   },
   filtersContainer: {
     backgroundColor: COLORS.surface,
@@ -590,13 +703,13 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   filtersRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 20,
     gap: 12,
   },
   filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
@@ -612,11 +725,11 @@ const styles = StyleSheet.create({
   filterButtonText: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   filterButtonTextActive: {
     color: COLORS.surface,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   content: {
     flex: 1,
@@ -628,19 +741,31 @@ const styles = StyleSheet.create({
   jobCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 16,
-    padding: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
+    overflow: "hidden",
+  },
+  statusIndicator: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    zIndex: 1,
+  },
+  jobCardContent: {
+    padding: 16,
+    paddingLeft: 20,
   },
   jobCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 16,
   },
   jobInfo: {
@@ -649,7 +774,7 @@ const styles = StyleSheet.create({
   },
   jobTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.text,
     marginBottom: 6,
     lineHeight: 24,
@@ -657,17 +782,17 @@ const styles = StyleSheet.create({
   employerName: {
     fontSize: 14,
     color: COLORS.textSecondary,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 4,
   },
   farmName: {
     fontSize: 14,
     color: COLORS.textLight,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -675,7 +800,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.surface,
   },
   jobDetails: {
@@ -683,46 +808,70 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   detailText: {
     fontSize: 14,
     color: COLORS.textSecondary,
     flex: 1,
-    fontWeight: '500',
+    fontWeight: "500",
+  },
+  earningsContainer: {
+    marginBottom: 16,
+  },
+  earningsBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: `${COLORS.success}15`,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: `${COLORS.success}30`,
+    gap: 8,
+  },
+  earningsLabel: {
+    fontSize: 14,
+    color: COLORS.success,
+    fontWeight: "600",
+  },
+  earningsAmount: {
+    fontSize: 16,
+    color: COLORS.success,
+    fontWeight: "700",
+    marginLeft: "auto",
   },
   benefitsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 16,
     paddingHorizontal: 8,
   },
   benefitItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   benefitText: {
     fontSize: 12,
     color: COLORS.textSecondary,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   benefitTextDisabled: {
     color: COLORS.textLight,
   },
   jobFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
   dateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
   dateText: {
@@ -730,18 +879,18 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
   },
   viewDetailsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
   },
   viewDetailsText: {
     fontSize: 14,
     color: COLORS.primary,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 80,
     paddingHorizontal: 40,
   },
@@ -750,27 +899,27 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     backgroundColor: `${COLORS.primary}15`,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 24,
   },
   emptyTitle: {
     fontSize: 22,
-    fontWeight: '600',
+    fontWeight: "600",
     color: COLORS.text,
     marginBottom: 12,
-    textAlign: 'center',
+    textAlign: "center",
   },
   emptySubtitle: {
     fontSize: 16,
     color: COLORS.textSecondary,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 24,
     marginBottom: 32,
   },
   exploreJobsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: COLORS.primary,
     paddingHorizontal: 24,
     paddingVertical: 14,
@@ -780,7 +929,7 @@ const styles = StyleSheet.create({
   exploreJobsText: {
     color: COLORS.surface,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });
 

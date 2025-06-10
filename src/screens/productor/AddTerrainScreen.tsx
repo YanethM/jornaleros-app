@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   FlatList,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -23,47 +24,68 @@ import {
 import { createFarm } from "../../services/farmService";
 import { getCropType } from "../../services/cropTypeService";
 import { getCultivationPhasesByCropId } from "../../services/cultivationPhaseService";
-import { Picker } from "@react-native-picker/picker";
 
-interface LocationOption {
-  id: string;
-  name: string;
-  value: string;
-  label: string;
-}
+// Paleta de colores consistente
+const COLORS = {
+  primary: "#2C5F7B",
+  primaryLight: "#E8F1F5",
+  primaryDark: "#1A3B4A",
+  secondary: "#C49B61",
+  secondaryLight: "#F7F2E8",
+  tertiary: "#0F52A0",
+  tertiaryLight: "#E6EDF8",
+  success: "#22C55E",
+  successLight: "#DCFCE7",
+  warning: "#F59E0B",
+  warningLight: "#FEF3C7",
+  error: "#E35353",
+  errorLight: "#FEF2F2",
+  text: {
+    primary: "#1F2937",
+    secondary: "#6B7280",
+    tertiary: "#9CA3AF",
+    white: "#FFFFFF",
+  },
+  background: {
+    primary: "#F9FAFB",
+    secondary: "#FFFFFF",
+    tertiary: "#F3F4F6",
+  },
+  border: {
+    light: "#E5E7EB",
+    medium: "#D1D5DB",
+    dark: "#9CA3AF",
+  },
+};
 
 export default function AddTerrainScreen({ navigation }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
-  const [showPhaseModal, setShowPhaseModal] = useState(false);
-  const [isLoadingDepartments, setIsLoadingDepartments] = useState(false);
-  const [isLoadingMunicipalities, setIsLoadingMunicipalities] = useState(false);
-  const [nationality, setNationality] = useState("Colombiano(a)");
-  const [password, setPassword] = useState("");
-  const [cityId, setCityId] = useState("");
   const [employerInfo, setEmployerInfo] = useState(null);
-
-  // Estado de carga para veredas
-  const [isLoadingVillages, setIsLoadingVillages] = useState(false);
-
-  // Estados para manejar la ubicación
-  const [countryId, setCountryId] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
-  const [availableCountries, setAvailableCountries] = useState<
-    LocationOption[]
-  >([]);
-  const [availableDepartments, setAvailableDepartments] = useState<
-    LocationOption[]
-  >([]);
-  const [availableMunicipalities, setAvailableMunicipalities] = useState<
-    LocationOption[]
-  >([]);
-  const [availableVillages, setAvailableVillages] = useState<LocationOption[]>(
-    []
-  );
-
-  const [village, setVillage] = useState("");
+  
+  // Estados de ubicación
+  const [countries, setCountries] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [municipalities, setMunicipalities] = useState([]);
+  const [villages, setVillages] = useState([]);
+  const [selectedCountry, setSelectedCountry] = useState(null);
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
+  const [selectedMunicipality, setSelectedMunicipality] = useState(null);
+  const [selectedVillage, setSelectedVillage] = useState(null);
+  
+  // Estados de modales
+  const [showCountryModal, setShowCountryModal] = useState(false);
+  const [showDepartmentModal, setShowDepartmentModal] = useState(false);
+  const [showMunicipalityModal, setShowMunicipalityModal] = useState(false);
+  const [showVillageModal, setShowVillageModal] = useState(false);
+  const [showCropModal, setShowCropModal] = useState(false);
+  
+  // Estados de animación y carga
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const [loadingLocationData, setLoadingLocationData] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -71,25 +93,14 @@ export default function AddTerrainScreen({ navigation }) {
     size: "",
     state: "",
     city: "",
-    phaseIds: [], // Cambiado de phaseId a phaseIds para múltiples fases
+    village: "",
+    phaseIds: [],
     status: "ACTIVA",
     plantCount: "",
   });
 
   const [cropTypes, setCropTypes] = useState([]);
-  const [phasesByCropType, setPhasesByCropType] = useState({}); // Nuevo estado para fases agrupadas por cultivo
-  const [showCropModal, setShowCropModal] = useState(false);
-  const [showDepartmentModal, setShowDepartmentModal] = useState(false);
-  const [showMunicipalityModal, setShowMunicipalityModal] = useState(false);
-
-  // [Mantener todos los useEffect y funciones existentes sin cambios...]
-
-  // Synchronize cityId with formData.city
-  useEffect(() => {
-    if (cityId) {
-      setFormData((prev) => ({ ...prev, city: cityId }));
-    }
-  }, [cityId]);
+  const [phasesByCropType, setPhasesByCropType] = useState({});
 
   useEffect(() => {
     if (user?.employerProfile) {
@@ -106,16 +117,45 @@ export default function AddTerrainScreen({ navigation }) {
   }, [user]);
 
   useEffect(() => {
-    if (departmentId) {
-      setFormData((prev) => ({ ...prev, state: departmentId }));
-    }
-  }, [departmentId]);
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const countriesResponse = await getCountries();
+        let countriesData = [];
+        if (countriesResponse?.data) {
+          countriesData = countriesResponse.data;
+        } else if (countriesResponse && Array.isArray(countriesResponse)) {
+          countriesData = countriesResponse;
+        }
+        setCountries(countriesData);
+      } catch (error) {
+        console.error("Error loading initial data:", error);
+        Alert.alert("Error", "No se pudieron cargar los datos iniciales");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   useEffect(() => {
     const loadInitialData = async () => {
       try {
         setLoadingData(true);
-        await Promise.all([loadCropTypes(), loadCountries()]);
+        await Promise.all([loadCropTypes()]);
       } catch (error) {
         console.error("Error loading initial data:", error);
         Alert.alert("Error", "No se pudieron cargar los datos necesarios");
@@ -127,7 +167,6 @@ export default function AddTerrainScreen({ navigation }) {
     loadInitialData();
   }, []);
 
-  // Cargar fases cuando cambian los tipos de cultivo seleccionados
   useEffect(() => {
     if (formData.cropTypeIds.length > 0) {
       loadPhasesForSelectedCropTypes();
@@ -137,177 +176,63 @@ export default function AddTerrainScreen({ navigation }) {
     }
   }, [formData.cropTypeIds]);
 
-  // Cargar departamentos cuando cambia el país
   useEffect(() => {
-    if (countryId) {
-      loadDepartments(countryId);
-      setDepartmentId("");
-      setCityId("");
-      setFormData((prev) => ({ ...prev, state: "", city: "" }));
-    } else {
-      setAvailableDepartments([]);
-      setAvailableMunicipalities([]);
-    }
-  }, [countryId]);
+    // Actualizar formData con las ubicaciones seleccionadas (usar IDs, no nombres)
+    setFormData((prev) => ({
+      ...prev,
+      state: selectedDepartment?.id || "",
+      city: selectedMunicipality?.id || "",
+      village: selectedVillage?.id || "",
+    }));
+  }, [selectedDepartment, selectedMunicipality, selectedVillage]);
 
-  // Cargar veredas cuando cambia el municipio
-  useEffect(() => {
-    if (cityId) {
-      console.log("City ID changed, loading villages for city ID:", cityId);
-      loadVillages(cityId);
-    } else {
-      console.log("City ID is empty, clearing villages");
-      setAvailableVillages([]);
-      setVillage("");
-    }
-  }, [cityId]);
+  const handleLocationSelect = async (type, item) => {
+    setHasChanges(true);
 
-  // Cargar municipios cuando cambia el departamento
-  useEffect(() => {
-    if (departmentId) {
-      loadMunicipalities(departmentId);
-      setCityId("");
-      setFormData((prev) => ({ ...prev, city: "" }));
-      setAvailableVillages([]);
-      setVillage("");
-    } else {
-      setAvailableMunicipalities([]);
-    }
-  }, [departmentId]);
+    switch (type) {
+      case "country":
+        setSelectedCountry(item);
+        setSelectedDepartment(null);
+        setSelectedMunicipality(null);
+        setSelectedVillage(null);
+        setDepartments([]);
+        setMunicipalities([]);
+        setVillages([]);
+        setShowCountryModal(false);
 
-  const loadCountries = async () => {
-    try {
-      const response = await getCountries();
-      // The API returns {count, data, success} where data contains the countries array
-      if (response && response.success && Array.isArray(response.data)) {
-        const countryOptions = response.data.map((c) => ({
-          id: c.id,
-          value: c.id,
-          label: c.name,
-          name: c.name,
-        }));
-        setAvailableCountries(countryOptions);
-      } else {
-        throw new Error("Formato de respuesta inesperado");
-      }
-    } catch (error) {
-      console.error("Error loading countries:", error);
-      Alert.alert("Error", "No se pudieron cargar los países");
-    }
-  };
+        if (item.id) {
+          await loadDepartments(item.id);
+        }
+        break;
 
-  const loadDepartments = async (countryId: string) => {
-    try {
-      setIsLoadingDepartments(true);
-      const response = await getDepartmentsByCountry(countryId);
+      case "department":
+        setSelectedDepartment(item);
+        setSelectedMunicipality(null);
+        setSelectedVillage(null);
+        setMunicipalities([]);
+        setVillages([]);
+        setShowDepartmentModal(false);
 
-      // Check for response.data structure similar to countries
-      if (response && response.success && Array.isArray(response.data)) {
-        const departmentOptions = response.data.map((d) => ({
-          id: d.id,
-          value: d.id,
-          label: d.name,
-          name: d.name,
-        }));
-        setAvailableDepartments(departmentOptions);
-      } else if (response && Array.isArray(response)) {
-        // Fallback to old structure if needed
-        const departmentOptions = response.map((d) => ({
-          id: d.id,
-          value: d.id,
-          label: d.name,
-          name: d.name,
-        }));
-        setAvailableDepartments(departmentOptions);
-      } else {
-        throw new Error("Formato de respuesta inesperado");
-      }
-    } catch (error) {
-      console.error("Error loading departments:", error);
-      Alert.alert("Error", "No se pudieron cargar los departamentos");
-    } finally {
-      setIsLoadingDepartments(false);
-    }
-  };
+        if (item.id) {
+          await loadMunicipalities(item.id);
+        }
+        break;
 
-  const loadMunicipalities = async (departmentId: string) => {
-    try {
-      setIsLoadingMunicipalities(true);
-      const response = await getMunicipalitiesByDepartment(departmentId);
+      case "municipality":
+        setSelectedMunicipality(item);
+        setSelectedVillage(null);
+        setVillages([]);
+        setShowMunicipalityModal(false);
 
-      // Check for response.data structure similar to countries
-      if (response && response.success && Array.isArray(response.data)) {
-        const municipalityOptions = response.data.map((m) => ({
-          id: m.id,
-          value: m.id,
-          label: m.name,
-          name: m.name,
-        }));
-        setAvailableMunicipalities(municipalityOptions);
-      } else if (response && Array.isArray(response)) {
-        // Fallback to old structure if needed
-        const municipalityOptions = response.map((m) => ({
-          id: m.id,
-          value: m.id,
-          label: m.name,
-          name: m.name,
-        }));
-        setAvailableMunicipalities(municipalityOptions);
-      } else {
-        throw new Error("Formato de respuesta inesperado");
-      }
-    } catch (error) {
-      console.error("Error loading municipalities:", error);
-      Alert.alert("Error", "No se pudieron cargar los municipios");
-    } finally {
-      setIsLoadingMunicipalities(false);
-    }
-  };
+        if (item.id) {
+          await loadVillages(item.id);
+        }
+        break;
 
-  const loadVillages = async (municipalityId: string) => {
-    try {
-      setIsLoadingVillages(true);
-      console.log("Loading villages for municipality ID:", municipalityId);
-
-      const response = await getVillagesByMunicipality(municipalityId);
-      console.log("Villages API response:", JSON.stringify(response));
-
-      // Check for response.data structure similar to countries
-      if (response && response.success && Array.isArray(response.data)) {
-        const villageOptions = response.data.map((v) => ({
-          id: v.id,
-          value: v.id,
-          label: v.name,
-          name: v.name,
-        }));
-        console.log("Processed village options:", villageOptions);
-        setAvailableVillages(villageOptions);
-      } else if (response && Array.isArray(response)) {
-        // Fallback to old structure if needed
-        const villageOptions = response.map((v) => ({
-          id: v.id,
-          value: v.id,
-          label: v.name,
-          name: v.name,
-        }));
-        console.log(
-          "Processed village options (array format):",
-          villageOptions
-        );
-        setAvailableVillages(villageOptions);
-      } else {
-        // If no villages are returned but the response is valid, set empty array
-        console.log(
-          "No villages found or unexpected format, setting empty array"
-        );
-        setAvailableVillages([]);
-      }
-    } catch (error) {
-      console.error("Error loading villages:", error);
-      Alert.alert("Error", "No se pudieron cargar las veredas");
-      setAvailableVillages([]);
-    } finally {
-      setIsLoadingVillages(false);
+      case "village":
+        setSelectedVillage(item);
+        setShowVillageModal(false);
+        break;
     }
   };
 
@@ -318,10 +243,8 @@ export default function AddTerrainScreen({ navigation }) {
       if (data && data.success && Array.isArray(data.data)) {
         setCropTypes(data.data);
       } else if (data && data.cropTypes && Array.isArray(data.cropTypes)) {
-        // Format with cropTypes property
         setCropTypes(data.cropTypes);
       } else if (Array.isArray(data)) {
-        // Direct array format
         setCropTypes(data);
       } else {
         console.error("Unexpected crop types response format:", data);
@@ -337,13 +260,24 @@ export default function AddTerrainScreen({ navigation }) {
   const loadPhasesForSelectedCropTypes = async () => {
     try {
       const phasesData = {};
-
-      // Cargar fases para cada tipo de cultivo seleccionado
       for (const cropTypeId of formData.cropTypeIds) {
         try {
-          const phases = await getCultivationPhasesByCropId(cropTypeId);
-          if (phases && phases.length > 0) {
+          const response = await getCultivationPhasesByCropId(cropTypeId);
+          let phases = [];
+
+          if (response && response.success && Array.isArray(response.data)) {
+            phases = response.data;
+          } else if (Array.isArray(response)) {
+            phases = response;
+          }
+
+          if (phases.length > 0) {
             phasesData[cropTypeId] = phases;
+            console.log(
+              `Loaded ${phases.length} phases for crop ${cropTypeId}`
+            );
+          } else {
+            console.log(`No phases found for crop ${cropTypeId}`);
           }
         } catch (error) {
           console.error(
@@ -354,8 +288,6 @@ export default function AddTerrainScreen({ navigation }) {
       }
 
       setPhasesByCropType(phasesData);
-
-      // Limpiar fases seleccionadas que ya no pertenecen a los cultivos actuales
       setFormData((prev) => ({
         ...prev,
         phaseIds: prev.phaseIds.filter((phaseId) =>
@@ -370,6 +302,122 @@ export default function AddTerrainScreen({ navigation }) {
       setPhasesByCropType({});
     }
   };
+
+  const loadDepartments = async (countryId) => {
+    try {
+      setLoadingLocationData(true);
+      const response = await getDepartmentsByCountry(countryId);
+
+      let departmentsData = [];
+      if (response?.data) {
+        departmentsData = response.data;
+      } else if (Array.isArray(response)) {
+        departmentsData = response;
+      }
+
+      setDepartments(departmentsData);
+    } catch (error) {
+      console.warn("Error loading departments:", error);
+    } finally {
+      setLoadingLocationData(false);
+    }
+  };
+
+  const loadMunicipalities = async (departmentId) => {
+    try {
+      setLoadingLocationData(true);
+      const response = await getMunicipalitiesByDepartment(departmentId);
+      let municipalitiesData = [];
+      if (response?.data) {
+        municipalitiesData = response.data;
+      } else if (Array.isArray(response)) {
+        municipalitiesData = response;
+      }
+      setMunicipalities(municipalitiesData);
+    } catch (error) {
+      console.warn("Error loading municipalities:", error);
+    } finally {
+      setLoadingLocationData(false);
+    }
+  };
+
+  const loadVillages = async (municipalityId) => {
+    try {
+      setLoadingLocationData(true);
+      const response = await getVillagesByMunicipality(municipalityId);
+      let villagesData = [];
+      if (response?.data) {
+        villagesData = response.data;
+      } else if (Array.isArray(response)) {
+        villagesData = response;
+      }
+      setVillages(villagesData);
+    } catch (error) {
+      console.warn("Error loading villages:", error);
+    } finally {
+      setLoadingLocationData(false);
+    }
+  };
+
+  const LocationModal = ({
+    visible,
+    onClose,
+    title,
+    data,
+    onSelect,
+    loading,
+  }) => (
+    <Modal
+      animationType="slide"
+      transparent
+      visible={visible}
+      onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.locationModalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            <TouchableOpacity onPress={onClose} style={styles.modalCloseButton}>
+              <Icon name="close" size={20} color={COLORS.text.secondary} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            style={styles.modalList}
+            showsVerticalScrollIndicator={false}>
+            {loading ? (
+              <View style={styles.loadingModalState}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+                <Text style={styles.loadingModalText}>
+                  Cargando opciones...
+                </Text>
+              </View>
+            ) : data && data.length > 0 ? (
+              data.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.modalItem}
+                  onPress={() => onSelect(item)}
+                  activeOpacity={0.7}>
+                  <Text style={styles.modalItemText}>{item.name}</Text>
+                  <Icon
+                    name="chevron-right"
+                    size={20}
+                    color={COLORS.text.tertiary}
+                  />
+                </TouchableOpacity>
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Icon name="info" size={48} color={COLORS.text.tertiary} />
+                <Text style={styles.emptyStateText}>
+                  No hay opciones disponibles
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
 
   const handleCreateFarm = async () => {
     if (!formData.name.trim()) {
@@ -387,12 +435,12 @@ export default function AddTerrainScreen({ navigation }) {
       return;
     }
 
-    if (!formData.state) {
+    if (!selectedDepartment) {
       Alert.alert("Error", "Debes seleccionar un departamento");
       return;
     }
 
-    if (!formData.city) {
+    if (!selectedMunicipality) {
       Alert.alert("Error", "Debes seleccionar un municipio");
       return;
     }
@@ -410,19 +458,18 @@ export default function AddTerrainScreen({ navigation }) {
         cropTypeIds: formData.cropTypeIds,
         phaseIds: formData.phaseIds,
         status: formData.status === "ACTIVA",
-        city: formData.city,
-        state: formData.state,
+        city: selectedMunicipality.id,        // Enviar ID del municipio
+        state: selectedDepartment.id,         // Enviar ID del departamento
         plantCount: parseInt(formData.plantCount) || 0,
-        // Incluir información del employerProfile
         ...(employerInfo && {
           organization: employerInfo.organization,
           employerCity: employerInfo.employerCity,
           employerState: employerInfo.employerState,
           employerProfileId: employerInfo.employerProfileId,
-          userId: user.id, // También incluir el ID del usuario
+          userId: user.id,
         }),
-        // Include village when selected
-        ...(village && { village: village }),
+        // Solo incluir village si está seleccionado
+        ...(selectedVillage && { village: selectedVillage.id }),
       };
 
       console.log("Farm data to send:", JSON.stringify(farmData, null, 2));
@@ -516,7 +563,7 @@ export default function AddTerrainScreen({ navigation }) {
                     {cropType?.name || "Cultivo"}
                   </Text>
                   <Text style={styles.phaseCount}>
-                    {(phases as Array<any>).length} {(phases as Array<any>).length === 1 ? "fase" : "fases"}
+                    {phases.length} {phases.length === 1 ? "fase" : "fases"}
                   </Text>
                 </View>
 
@@ -577,20 +624,6 @@ export default function AddTerrainScreen({ navigation }) {
       formData.cropTypeIds.includes(ct.id)
     );
     return selectedCrops.map((ct) => ct.name).join(", ");
-  };
-
-  const getDepartmentLabel = () => {
-    if (nationality === "Colombiano(a)") return "Departamento";
-    if (nationality === "Venezolano(a)") return "Estado";
-    if (nationality === "ColomboVenezolano(a)") return "Departamento / Estado";
-    return "Departamento / Estado";
-  };
-
-  const getMunicipalityLabel = () => {
-    if (nationality === "Colombiano(a)") return "Municipio";
-    if (nationality === "Venezolano(a)") return "Municipio";
-    if (nationality === "ColomboVenezolano(a)") return "Municipio / Ciudad";
-    return "Municipio / Ciudad";
   };
 
   if (loadingData) {
@@ -734,7 +767,7 @@ export default function AddTerrainScreen({ navigation }) {
             </View>
           </View>
 
-          {/* Sección de ubicación */}
+          {/* Sección de ubicación - CORREGIDA */}
           <View style={styles.sectionContainer}>
             <View style={styles.sectionHeader}>
               <Icon name="location-on" size={20} color="#284F66" />
@@ -744,205 +777,141 @@ export default function AddTerrainScreen({ navigation }) {
             {/* País */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>País *</Text>
-              <View style={styles.pickerWrapper}>
+              <TouchableOpacity
+                style={styles.selectContainer}
+                onPress={() => setShowCountryModal(true)}>
                 <Icon
                   name="public"
                   size={20}
                   color="#284F66"
                   style={styles.inputIcon}
                 />
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={countryId}
-                    onValueChange={(itemValue) => {
-                      setCountryId(itemValue);
-                      setDepartmentId("");
-                      setCityId("");
-                      setVillage("");
-                    }}
-                    style={styles.picker}
-                    dropdownIconColor="#284F66">
-                    <Picker.Item
-                      label="Selecciona un país"
-                      value=""
-                      style={styles.pickerItem}
-                    />
-                    {availableCountries.map((c) => (
-                      <Picker.Item
-                        key={c.id}
-                        label={c.label}
-                        value={c.value}
-                        style={styles.pickerItem}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-              </View>
+                <Text
+                  style={[
+                    styles.selectText,
+                    !selectedCountry && styles.placeholderText,
+                  ]}>
+                  {selectedCountry?.name || "Selecciona un país"}
+                </Text>
+                <Icon name="keyboard-arrow-down" size={24} color="#284F66" />
+              </TouchableOpacity>
             </View>
 
             {/* Departamento */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>{getDepartmentLabel()} *</Text>
-              <View
+              <Text style={styles.label}>Departamento *</Text>
+              <TouchableOpacity
                 style={[
-                  styles.pickerWrapper,
-                  !countryId && styles.disabledWrapper,
-                ]}>
+                  styles.selectContainer,
+                  !selectedCountry && styles.disabledContainer,
+                ]}
+                onPress={() => {
+                  if (selectedCountry) {
+                    setShowDepartmentModal(true);
+                  }
+                }}
+                disabled={!selectedCountry}>
                 <Icon
                   name="map"
                   size={20}
-                  color={countryId ? "#284F66" : "#ccc"}
+                  color={selectedCountry ? "#284F66" : "#999"}
                   style={styles.inputIcon}
                 />
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={departmentId}
-                    onValueChange={(itemValue) => setDepartmentId(itemValue)}
-                    style={styles.picker}
-                    dropdownIconColor="#284F66"
-                    enabled={!!countryId}>
-                    <Picker.Item
-                      label={
-                        countryId
-                          ? `Selecciona ${getDepartmentLabel().toLowerCase()}`
-                          : "Selecciona un país primero"
-                      }
-                      value=""
-                      style={styles.pickerItem}
-                    />
-                    {availableDepartments.map((d) => (
-                      <Picker.Item
-                        key={d.id || `dep-${Math.random()}`}
-                        label={d.label || "Opción sin nombre"}
-                        value={d.value || ""}
-                        style={styles.pickerItem}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-                {isLoadingDepartments && (
-                  <ActivityIndicator
-                    size="small"
-                    color="#284F66"
-                    style={styles.loadingIndicator}
-                  />
-                )}
-              </View>
+                <Text
+                  style={[
+                    styles.selectText,
+                    !selectedDepartment && styles.placeholderText,
+                    !selectedCountry && styles.disabledText,
+                  ]}>
+                  {selectedDepartment?.name || 
+                   (!selectedCountry 
+                     ? "Primero selecciona un país" 
+                     : "Selecciona un departamento")}
+                </Text>
+                <Icon 
+                  name="keyboard-arrow-down" 
+                  size={24} 
+                  color={selectedCountry ? "#284F66" : "#999"} 
+                />
+              </TouchableOpacity>
             </View>
 
             {/* Municipio */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>{getMunicipalityLabel()} *</Text>
-              <View
+              <Text style={styles.label}>Municipio *</Text>
+              <TouchableOpacity
                 style={[
-                  styles.pickerWrapper,
-                  !departmentId && styles.disabledWrapper,
-                ]}>
+                  styles.selectContainer,
+                  !selectedDepartment && styles.disabledContainer,
+                ]}
+                onPress={() => {
+                  if (selectedDepartment) {
+                    setShowMunicipalityModal(true);
+                  }
+                }}
+                disabled={!selectedDepartment}>
                 <Icon
                   name="location-city"
                   size={20}
-                  color={departmentId ? "#284F66" : "#ccc"}
+                  color={selectedDepartment ? "#284F66" : "#999"}
                   style={styles.inputIcon}
                 />
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={cityId}
-                    onValueChange={(itemValue) => setCityId(itemValue)}
-                    style={styles.picker}
-                    dropdownIconColor="#284F66"
-                    enabled={!!departmentId}>
-                    <Picker.Item
-                      label={
-                        departmentId
-                          ? `Selecciona ${getMunicipalityLabel().toLowerCase()}`
-                          : "Selecciona un departamento primero"
-                      }
-                      value=""
-                      style={styles.pickerItem}
-                    />
-                    {availableMunicipalities.map((m) => (
-                      <Picker.Item
-                        key={m.id || `mun-${Math.random()}`}
-                        label={m.label || "Opción sin nombre"}
-                        value={m.value || ""}
-                        style={styles.pickerItem}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-                {isLoadingMunicipalities && (
-                  <ActivityIndicator
-                    size="small"
-                    color="#284F66"
-                    style={styles.loadingIndicator}
-                  />
-                )}
-              </View>
+                <Text
+                  style={[
+                    styles.selectText,
+                    !selectedMunicipality && styles.placeholderText,
+                    !selectedDepartment && styles.disabledText,
+                  ]}>
+                  {selectedMunicipality?.name || 
+                   (!selectedDepartment 
+                     ? "Primero selecciona un departamento" 
+                     : "Selecciona un municipio")}
+                </Text>
+                <Icon 
+                  name="keyboard-arrow-down" 
+                  size={24} 
+                  color={selectedDepartment ? "#284F66" : "#999"} 
+                />
+              </TouchableOpacity>
             </View>
 
-            {/* Vereda */}
+            {/* Vereda (Opcional) */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Vereda (Opcional)</Text>
-              <View
+              <TouchableOpacity
                 style={[
-                  styles.pickerWrapper,
-                  !cityId && styles.disabledWrapper,
-                ]}>
+                  styles.selectContainer,
+                  !selectedMunicipality && styles.disabledContainer,
+                ]}
+                onPress={() => {
+                  if (selectedMunicipality) {
+                    setShowVillageModal(true);
+                  }
+                }}
+                disabled={!selectedMunicipality}>
                 <Icon
-                  name="terrain"
+                  name="nature-people"
                   size={20}
-                  color={cityId ? "#284F66" : "#ccc"}
+                  color={selectedMunicipality ? "#284F66" : "#999"}
                   style={styles.inputIcon}
                 />
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={village}
-                    onValueChange={(itemValue) => {
-                      console.log("Selected village:", itemValue);
-                      setVillage(itemValue);
-                    }}
-                    style={styles.picker}
-                    dropdownIconColor="#284F66"
-                    enabled={!!cityId}>
-                    <Picker.Item
-                      label={
-                        cityId
-                          ? "Selecciona una vereda"
-                          : "Selecciona un municipio primero"
-                      }
-                      value=""
-                      style={styles.pickerItem}
-                    />
-                    {availableVillages.length > 0 ? (
-                      availableVillages.map((v) => (
-                        <Picker.Item
-                          key={v.id || `ver-${Math.random()}`}
-                          label={v.label || "Opción sin nombre"}
-                          value={v.value || ""}
-                          style={styles.pickerItem}
-                        />
-                      ))
-                    ) : (
-                      <Picker.Item
-                        label="No hay veredas disponibles"
-                        value=""
-                        enabled={false}
-                        style={styles.pickerItem}
-                      />
-                    )}
-                  </Picker>
-                </View>
-                {isLoadingVillages && (
-                  <ActivityIndicator
-                    size="small"
-                    color="#284F66"
-                    style={styles.loadingIndicator}
-                  />
-                )}
-              </View>
-              <Text style={styles.infoText}>
-                {availableVillages.length} veredas disponibles
-              </Text>
+                <Text
+                  style={[
+                    styles.selectText,
+                    !selectedVillage && styles.placeholderText,
+                    !selectedMunicipality && styles.disabledText,
+                  ]}>
+                  {selectedVillage?.name || 
+                   (!selectedMunicipality 
+                     ? "Primero selecciona un municipio" 
+                     : "Selecciona una vereda")}
+                </Text>
+                <Icon 
+                  name="keyboard-arrow-down" 
+                  size={24} 
+                  color={selectedMunicipality ? "#284F66" : "#999"} 
+                />
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -969,6 +938,43 @@ export default function AddTerrainScreen({ navigation }) {
           </View>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Modales de ubicación */}
+      <LocationModal
+        visible={showCountryModal}
+        onClose={() => setShowCountryModal(false)}
+        title="Seleccionar País"
+        data={countries}
+        onSelect={(item) => handleLocationSelect("country", item)}
+        loading={false}
+      />
+
+      <LocationModal
+        visible={showDepartmentModal}
+        onClose={() => setShowDepartmentModal(false)}
+        title="Seleccionar Departamento"
+        data={departments}
+        onSelect={(item) => handleLocationSelect("department", item)}
+        loading={loadingLocationData}
+      />
+
+      <LocationModal
+        visible={showMunicipalityModal}
+        onClose={() => setShowMunicipalityModal(false)}
+        title="Seleccionar Municipio"
+        data={municipalities}
+        onSelect={(item) => handleLocationSelect("municipality", item)}
+        loading={loadingLocationData}
+      />
+
+      <LocationModal
+        visible={showVillageModal}
+        onClose={() => setShowVillageModal(false)}
+        title="Seleccionar Vereda"
+        data={villages}
+        onSelect={(item) => handleLocationSelect("village", item)}
+        loading={loadingLocationData}
+      />
 
       {/* Modal de tipos de cultivo mejorado */}
       <Modal
@@ -1184,7 +1190,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 15,
   },
-  selectedModalItemText:{
+  disabledContainer: {
+    backgroundColor: "#f1f5f9",
+    borderColor: "#d1d5db",
+    opacity: 0.6,
+  },
+  selectedModalItemText: {
     color: "#284F66",
   },
   selectText: {
@@ -1196,6 +1207,10 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: "#9ca3af",
   },
+  disabledText: {
+    color: "#9ca3af",
+    fontStyle: "italic",
+  },
   rowContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1203,39 +1218,6 @@ const styles = StyleSheet.create({
   },
   halfWidth: {
     flex: 1,
-  },
-  pickerWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
-    borderWidth: 2,
-    borderColor: "#e2e8f0",
-    borderRadius: 12,
-    paddingLeft: 15,
-  },
-  disabledWrapper: {
-    backgroundColor: "#f1f5f9",
-    opacity: 0.6,
-  },
-  pickerContainer: {
-    flex: 1,
-  },
-  picker: {
-    height: 50,
-    color: "#1f2937",
-  },
-  pickerItem: {
-    fontSize: 16,
-    color: "#374151",
-  },
-  loadingIndicator: {
-    marginRight: 15,
-  },
-  infoText: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginTop: 5,
-    fontStyle: "italic",
   },
   createButton: {
     backgroundColor: "#284F66",
@@ -1425,5 +1407,45 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     marginLeft: 6,
     fontWeight: "500",
+  },
+  locationModalContent: {
+    backgroundColor: COLORS.background.secondary,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "80%",
+    minHeight: "50%",
+  },
+  modalCloseButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.background.tertiary,
+  },
+  modalList: {
+    flex: 1,
+    paddingBottom: 20,
+  },
+  loadingModalState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  loadingModalText: {
+    fontSize: 16,
+    color: COLORS.text.secondary,
+    marginTop: 16,
+    textAlign: "center",
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: COLORS.text.tertiary,
+    marginTop: 16,
+    textAlign: "center",
   },
 });
