@@ -3,27 +3,29 @@ import { View, TouchableOpacity, Text, StyleSheet, Platform } from 'react-native
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const CustomTabBarWorker = ({ navigation, currentRoute }) => {
+interface CustomTabBarProps {
+  navigation: any;
+  currentRoute: string;
+}
+
+const CustomTabBarWorker: React.FC<CustomTabBarProps> = ({ navigation, currentRoute }) => {
   const insets = useSafeAreaInsets();
   
   const tabs = [
     { name: 'WorkerHome', icon: 'home', label: 'Inicio' },
-    { name: 'WorkerJobs', icon: 'briefcase', label: 'Trabajos' },
-    { name: 'WorkerApplications', icon: 'document-text', label: 'Postulaciones' },
+    { name: 'WorkerJob', icon: 'briefcase', label: 'Trabajos' },
+    { name: 'WorkerApplication', icon: 'document-text', label: 'Aplicacines' },
+    { name: 'WorkerMessage', icon: 'chatbubble', label: 'Mensajes' },
     { name: 'WorkerProfile', icon: 'person', label: 'Perfil' },
   ];
-
-  const handleTabPress = (tabName) => {
-    navigation.navigate('MainApp', {
-      screen: 'TabScreens',
-      params: {
-        screen: tabName
-      }
+  const handleTabPress = (tabName: string) => {
+    navigation.navigate('WorkerTabs', {
+      screen: tabName
     });
   };
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+    <View style={[styles.container]}>
       {tabs.map((tab) => {
         const isActive = currentRoute === tab.name;
         return (
@@ -33,13 +35,13 @@ const CustomTabBarWorker = ({ navigation, currentRoute }) => {
             onPress={() => handleTabPress(tab.name)}
           >
             <Ionicons
-              name={isActive ? tab.icon : `${tab.icon}-outline`}
+              name={isActive ? tab.icon : `${tab.icon}-outline` as any}
               size={24}
-              color={isActive ? '#284F66' : '284F66'}
+              color='#274F66'
             />
             <Text style={[
               styles.label,
-              { color: isActive ? '#284F66' : '284F66' }
+              { color: '#274F66' }
             ]}>
               {tab.label}
             </Text>
@@ -52,11 +54,18 @@ const CustomTabBarWorker = ({ navigation, currentRoute }) => {
 
 const styles = StyleSheet.create({
   container: {
+    position: 'absolute', // Posición absoluta
+    bottom: 0,           // Pegado al fondo
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
     paddingTop: 5,
+    paddingBottom: 10,
+    height: 70,
+    zIndex: 1000,       // Por encima de otros elementos
     ...Platform.select({
       ios: {
         shadowColor: '#000',

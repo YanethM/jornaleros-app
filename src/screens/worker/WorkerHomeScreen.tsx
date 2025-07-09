@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Text,
   View,
@@ -17,9 +17,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { getUserData } from "../../services/userService";
 import { useAuth } from "../../context/AuthContext";
-import { getAvailableJobOffers } from "../../services/jobOffers";
+import { getAvailableJobOffersForWorker } from "../../services/jobOffers";
 import { getWorkerApplications } from "../../services/workerService";
-import { createApplication, getApplicationsByUser } from "../../services/applicationService";
+import {
+  createApplication,
+} from "../../services/applicationService";
+import {
+  getMyRatingStatsService,
+} from "../../services/qualifitionService";
 import SuccessModal from "../../components/SuccessModal";
 
 const { width } = Dimensions.get("window");
@@ -40,7 +45,7 @@ const COLORS = {
   border: "#E2E8F0",
 };
 
-// Imágenes por defecto para diferentes tipos de cultivos
+// Imágenes por defecto
 const DEFAULT_JOB_IMAGES = {
   cafe: require("../../../assets/onboarding/slide1.png"),
   maiz: require("../../../assets/onboarding/slide1.png"),
@@ -60,9 +65,24 @@ export default function WorkerHomeScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalData, setSuccessModalData] = useState(null);
-
-  // ✅ Estado para prevenir doble postulación
   const [applyingJobs, setApplyingJobs] = useState(new Set());
+
+  // Estados para filtros
+  const [jobFilters, setJobFilters] = useState({
+    cropType: null,
+    location: null,
+    minSalary: null,
+    maxSalary: null,
+  });
+
+  // Estado para datos de evaluación
+  const [ratingData, setRatingData] = useState({
+    hasRatings: false,
+    averageRating: 0,
+    totalRatings: 0,
+    roleType: null,
+    loading: true,
+  });
 
   // Estados para estadísticas del dashboard
   const [dashboardStats, setDashboardStats] = useState({
@@ -73,8 +93,18 @@ export default function WorkerHomeScreen({ navigation }) {
     monthlyEarnings: 0,
   });
 
-  // Función para obtener el nombre amigable del status
-  const getStatusDisplayName = (status) => {
+  // ✅ Ref para controlar si el componente está montado
+  const isMountedRef = useRef(true);
+
+  // ✅ useEffect para cleanup
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // ✅ Memoizar funciones helper
+  const getStatusDisplayName = useMemo(() => (status) => {
     const statusMap = {
       Solicitado: "Enviada",
       En_revision: "En Revisión",
@@ -83,9 +113,9 @@ export default function WorkerHomeScreen({ navigation }) {
       Cancelado: "Cancelada",
     };
     return statusMap[status] || status || "Desconocido";
-  };
+  }, []);
 
-  const getStatusStyle = (status) => {
+  const getStatusStyle = useMemo(() => (status) => {
     switch (status) {
       case "Completado":
         return { backgroundColor: COLORS.success };
@@ -96,10 +126,9 @@ export default function WorkerHomeScreen({ navigation }) {
       default:
         return { backgroundColor: COLORS.primary };
     }
-  };
+  }, []);
 
-  // Función para determinar el rol del usuario
-  const getUserRole = () => {
+  const getUserRole = useMemo(() => {
     if (!user?.role) return "sin-rol";
     if (typeof user.role === "string") {
       return user.role.toLowerCase();
@@ -107,43 +136,86 @@ export default function WorkerHomeScreen({ navigation }) {
       return user.role.name.toLowerCase();
     }
     return "sin-rol";
-  };
+  }, [user?.role]);
 
-  const isWorker = getUserRole() === "trabajador";
+  const isWorker = useMemo(() => getUserRole === "trabajador", [getUserRole]);
 
-  const getWelcomeMessage = () => {
+  const getWelcomeMessage = useMemo(() => {
     const name = user?.name || "Usuario";
     return `¡Hola ${name}! Bienvenido`;
-  };
+  }, [user?.name]);
 
-  const getJobImage = (cropType) => {
+  const getJobImage = useCallback((cropType) => {
     if (!cropType) return DEFAULT_JOB_IMAGES.default;
-
     const cropKey = cropType.name.toLowerCase();
-    const imageSource =
-      DEFAULT_JOB_IMAGES[cropKey] || DEFAULT_JOB_IMAGES.default;
+    const imageSource = DEFAULT_JOB_IMAGES[cropKey] || DEFAULT_JOB_IMAGES.default;
     if (typeof imageSource === "number" || imageSource?.uri === undefined) {
       return imageSource;
     }
     return { uri: imageSource.uri };
-  };
+  }, []);
 
-  // ✅ Función fetchUserData
-  const fetchUserData = useCallback(async () => {
+  // ✅ Función para cargar evaluaciones del usuario
+  const loadMyRatings = useCallback(async () => {
+    if (!isMountedRef.current) return;
+    
     try {
-      if (!user || !user.id) {
-        throw new Error("No hay usuario autenticado");
-      }
+      console.log('🔍 Cargando evaluaciones del trabajador...');
+      
+      setRatingData(prev => ({ ...prev, loading: true }));
 
+      const response = await getMyRatingStatsService();
+      
+      if (!isMountedRef.current) return;
+      
+      if (response.success) {
+        console.log('✅ Evaluaciones cargadas:', response.data);
+        setRatingData({
+          ...response.data,
+          loading: false,
+        });
+      } else {
+        console.log('⚠️ No se pudieron cargar las evaluaciones');
+        setRatingData({
+          hasRatings: false,
+          averageRating: 0,
+          totalRatings: 0,
+          roleType: user?.role?.name || null,
+          loading: false,
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error cargando evaluaciones:", error);
+      if (!isMountedRef.current) return;
+      
+      setRatingData({
+        hasRatings: false,
+        averageRating: 0,
+        totalRatings: 0,
+        roleType: user?.role?.name || null,
+        loading: false,
+      });
+    }
+  }, [user?.role?.name]);
+
+  // ✅ Función fetchUserData optimizada
+  const fetchUserData = useCallback(async () => {
+    if (!user?.id || !isMountedRef.current) return null;
+    
+    try {
       const userData = await getUserData();
+      if (!isMountedRef.current) return null;
+      
       setUserData(userData);
       await AsyncStorage.setItem("@user_data", JSON.stringify(userData));
       return userData;
     } catch (error) {
       console.error("Error obteniendo datos del usuario:", error);
+      if (!isMountedRef.current) return null;
+      
       try {
         const storedUserData = await AsyncStorage.getItem("@user_data");
-        if (storedUserData) {
+        if (storedUserData && isMountedRef.current) {
           const parsedData = JSON.parse(storedUserData);
           setUserData(parsedData);
           return parsedData;
@@ -153,17 +225,17 @@ export default function WorkerHomeScreen({ navigation }) {
       }
       throw error;
     }
-  }, [user]);
+  }, [user?.id]);
 
-  // Función segura para obtener ID del trabajador
-  const getWorkerId = async () => {
+  // ✅ Función helper para obtener ID del trabajador
+  const getWorkerId = useCallback(async () => {
     try {
       let workerData = userData;
       if (!workerData) {
         workerData = await fetchUserData();
       }
 
-      if (!workerData.workerProfile) {
+      if (!workerData?.workerProfile) {
         throw new Error("El usuario no tiene perfil de trabajador");
       }
 
@@ -172,18 +244,19 @@ export default function WorkerHomeScreen({ navigation }) {
       console.error("Error obteniendo ID del trabajador:", error);
       throw error;
     }
-  };
+  }, [userData, fetchUserData]);
 
-  const hasAppliedToJob = (jobOfferId) => {
+  // ✅ Funciones helper para aplicaciones
+  const hasAppliedToJob = useCallback((jobOfferId) => {
     if (!myApplications || myApplications.length === 0) {
       return false;
     }
     return myApplications.some(
       (application) => application.jobOffer?.id === jobOfferId
     );
-  };
+  }, [myApplications]);
 
-  const getApplicationStatus = (jobOfferId) => {
+  const getApplicationStatus = useCallback((jobOfferId) => {
     if (!myApplications || myApplications.length === 0) {
       return null;
     }
@@ -191,141 +264,100 @@ export default function WorkerHomeScreen({ navigation }) {
       (app) => app.jobOffer?.id === jobOfferId
     );
     return application ? application.status?.name : null;
-  };
+  }, [myApplications]);
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Completado":
-        return COLORS.success;
-      case "En_revision":
-        return COLORS.warning;
-      case "Rechazado":
-        return COLORS.error;
-      case "Solicitado":
-        return COLORS.primary;
-      default:
-        return COLORS.primary;
-    }
-  };
-
-  // ✅ ACTUALIZADA: Cargar ofertas recomendadas - FILTRAR ofertas ya postuladas
-  const loadRecommendedJobs = async () => {
+  // ✅ Función para cargar ofertas recomendadas optimizada
+  const loadRecommendedJobs = useCallback(async (filters = jobFilters) => {
+    if (!isMountedRef.current) return;
+    
     try {
-      const availableJobsData = await getAvailableJobOffers();
-      
-      if (!availableJobsData || availableJobsData.length === 0) {
-        setRecommendedJobs([]);
+      console.log("🔄 Cargando ofertas recomendadas con filtros:", filters);
+
+      if (hasWorkerProfile === false) {
+        console.log("👤 Usuario sin perfil de trabajador");
+        if (isMountedRef.current) {
+          setRecommendedJobs([]);
+        }
         return;
       }
 
-      // ✅ Filtrar ofertas excluyendo aquellas a las que ya se ha postulado
-      const filteredJobs = availableJobsData.filter(job => {
-        // Si no hay aplicaciones aún, mostrar todas las ofertas
-        if (!myApplications || myApplications.length === 0) {
-          return true;
-        }
-        
-        // Verificar si ya se postuló a esta oferta
-        const hasApplied = myApplications.some(
-          application => application.jobOffer?.id === job.id
-        );
-        
-        // Solo incluir ofertas a las que NO se ha postulado
-        return !hasApplied;
+      const backendFilters = {
+        simple: "true",
+        limit: 5,
+        ...filters,
+      };
+
+      const response = await getAvailableJobOffersForWorker(backendFilters);
+      
+      if (!isMountedRef.current) return;
+      
+      console.log("✅ Respuesta del servicio:", {
+        totalOffers: response.total,
+        offersReturned: response.jobOffers?.length || 0,
+        message: response.message
       });
 
-      // ✅ Tomar solo las 5 más recientes de las ofertas filtradas
-      const recommended = filteredJobs
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) // Ordenar por más recientes
-        .slice(0, 5);
-      
-      console.log(`[DEBUG] Ofertas disponibles: ${availableJobsData.length}, Ofertas filtradas: ${filteredJobs.length}, Recomendadas: ${recommended.length}`);
-      
-      setRecommendedJobs(recommended);
+      const jobOffers = response.jobOffers || [];
+      setRecommendedJobs(jobOffers);
+
     } catch (error) {
-      console.error("Error cargando ofertas recomendadas:", error);
+      console.error("❌ Error cargando ofertas recomendadas:", error);
+      
+      if (!isMountedRef.current) return;
+      
+      if (error.status === 401) {
+        console.log("🔐 Usuario no autenticado");
+      } else if (error.status === 404) {
+        console.log("👤 Usuario sin perfil de trabajador");
+      } else {
+        console.error("🚨 Error de servidor:", error.message);
+      }
       setRecommendedJobs([]);
     }
-  };
+  }, [hasWorkerProfile, jobFilters]);
 
-  const loadMyApplications = async () => {
+  // ✅ Función para cargar aplicaciones optimizada
+  const loadMyApplications = useCallback(async () => {
+    if (!isMountedRef.current) return;
+    
     try {
       if (hasWorkerProfile === false) {
-        console.log(
-          "Usuario no tiene perfil de trabajador, omitiendo carga de aplicaciones"
-        );
-        setMyApplications([]);
-        setDashboardStats({
-          totalApplications: 0,
-          activeApplications: 0,
-          completedJobs: 0,
-          averageRating: 0,
-          monthlyEarnings: 0,
-        });
+        console.log("Usuario no tiene perfil de trabajador, omitiendo carga de aplicaciones");
+        if (isMountedRef.current) {
+          setMyApplications([]);
+          setDashboardStats({
+            totalApplications: 0,
+            activeApplications: 0,
+            completedJobs: 0,
+            averageRating: 0,
+            monthlyEarnings: 0,
+          });
+        }
         return;
       }
-  
-      if (!user?.id) {
-        throw new Error("No hay usuario autenticado");
+
+      if (!user?.id || !user?.workerProfile?.id) {
+        throw new Error("No hay usuario autenticado o sin perfil de trabajador");
       }
-  
+
       console.log("🔍 Cargando aplicaciones para usuario:", user.id);
-      
-      // ✅ Usar la función corregida del applicationService
+
       const response = await getWorkerApplications(user.workerProfile.id);
-      const applicationsData = response?.applications || [];
       
+      if (!isMountedRef.current) return;
+      
+      const applicationsData = response?.applications || [];
+
       console.log("✅ Aplicaciones cargadas exitosamente:", {
         count: applicationsData.length,
-        applications: applicationsData.map(app => ({
-          id: app.id,
-          jobTitle: app.jobOffer?.title,
-          status: app.status?.name,
-          createdAt: app.createdAt
-        }))
       });
-  
+
       setMyApplications(applicationsData);
-  
-      // Calcular estadísticas
-      const totalApplications = applicationsData.length;
-      const activeApplications = applicationsData.filter((app) =>
-        ["Solicitado", "En_revision"].includes(app.status?.name)
-      ).length;
-      const completedJobs = applicationsData.filter(
-        (app) => app.status?.name === "Completado"
-      ).length;
-  
-      const averageRating = userData?.workerProfile?.rating || 0;
-      const monthlyEarnings = completedJobs * 50000;
-  
-      setDashboardStats({
-        totalApplications,
-        activeApplications,
-        completedJobs,
-        averageRating,
-        monthlyEarnings,
-      });
-      
-      console.log("📊 Estadísticas actualizadas:", {
-        totalApplications,
-        activeApplications,
-        completedJobs,
-        averageRating,
-        monthlyEarnings
-      });
-  
+
     } catch (error) {
       console.error("❌ Error cargando aplicaciones:", error);
-      
-      // Mostrar más información sobre el error para debugging
-      if (error.status) {
-        console.error("📋 Error details:", {
-          status: error.status,
-          message: error.message,
-          data: error.data
-        });
-      }
+
+      if (!isMountedRef.current) return;
       
       setMyApplications([]);
       setDashboardStats({
@@ -336,9 +368,44 @@ export default function WorkerHomeScreen({ navigation }) {
         monthlyEarnings: 0,
       });
     }
-  };
-  
+  }, [hasWorkerProfile, user?.id, user?.workerProfile?.id]);
+
+  // ✅ Efecto para recalcular stats cuando cambian los datos
+  useEffect(() => {
+    if (!ratingData.loading && myApplications.length >= 0 && isMountedRef.current) {
+      const totalApplications = myApplications.length;
+      const activeApplications = myApplications.filter((app) =>
+        ["Solicitado", "En_revision"].includes(app.status?.name)
+      ).length;
+      const completedJobs = myApplications.filter(
+        (app) => app.status?.name === "Completado"
+      ).length;
+
+      const averageRating = ratingData.hasRatings ? ratingData.averageRating : 0;
+      const monthlyEarnings = completedJobs * 50000;
+
+      setDashboardStats({
+        totalApplications,
+        activeApplications,
+        completedJobs,
+        averageRating,
+        monthlyEarnings,
+      });
+
+      console.log("🔄 Estadísticas actualizadas:", {
+        totalApplications,
+        activeApplications,
+        completedJobs,
+        averageRating,
+        monthlyEarnings,
+      });
+    }
+  }, [ratingData.loading, ratingData.hasRatings, ratingData.averageRating, myApplications]);
+
+  // ✅ Función para aplicar a trabajo optimizada
   const applyToJob = useCallback(async (jobOfferId) => {
+    if (!isMountedRef.current) return;
+    
     try {
       if (hasWorkerProfile === false) {
         Alert.alert(
@@ -354,12 +421,11 @@ export default function WorkerHomeScreen({ navigation }) {
         );
         return;
       }
-  
-      // ✅ Verificar si ya se postuló a esta oferta
+
       if (hasAppliedToJob(jobOfferId)) {
         const status = getApplicationStatus(jobOfferId);
         const statusDisplayName = getStatusDisplayName(status);
-  
+
         Alert.alert(
           "🔄 Ya Postulado",
           `Ya te has postulado a esta oferta.\n\n📋 Estado actual: ${statusDisplayName}`,
@@ -374,60 +440,55 @@ export default function WorkerHomeScreen({ navigation }) {
         );
         return;
       }
-  
-      // ✅ Prevenir múltiples clics
+
       if (applyingJobs.has(jobOfferId)) {
         console.log(`[DEBUG] Ya aplicando a job ${jobOfferId}`);
         return;
       }
-  
-      console.log(`[DEBUG] Marcando como aplicando job ${jobOfferId}`);
-      setApplyingJobs(prev => new Set([...prev, jobOfferId]));
-  
+
+      setApplyingJobs((prev) => new Set([...prev, jobOfferId]));
+
       const selectedJob = recommendedJobs.find((job) => job.id === jobOfferId);
       const jobTitle = selectedJob?.title || "Trabajo agrícola";
-      const farmName = selectedJob?.farm?.name || "Finca no especificada";
+      const farmName = selectedJob?.farm?.name || selectedJob?.farmInfo?.name || "Finca no especificada";
       const employerName =
         selectedJob?.employer?.user?.name ||
         selectedJob?.employer?.name ||
+        selectedJob?.employerInfo?.name ||
         "el productor";
-  
-      console.log(`[DEBUG] Llamando createApplication para job ${jobOfferId}`);
-      
-      // ✅ Usar createApplication del applicationService
-      await createApplication(jobOfferId, { 
-        userId: user.id
+
+      await createApplication(jobOfferId, {
+        userId: user.id,
       });
-  
-      console.log(`[DEBUG] Aplicación exitosa para job ${jobOfferId}`);
-  
-      // ✅ Remover del estado de aplicando
-      setApplyingJobs(prev => {
+
+      if (!isMountedRef.current) return;
+
+      setApplyingJobs((prev) => {
         const newSet = new Set(prev);
         newSet.delete(jobOfferId);
         return newSet;
       });
-  
+
       setSuccessModalData({
         jobTitle,
         farmName,
         employerName,
       });
       setShowSuccessModal(true);
-  
-      // ✅ Recargar TODOS los datos para actualizar tanto aplicaciones como ofertas recomendadas
+
+      // Recargar datos después de aplicar
       await loadAllData();
-      
     } catch (error) {
       console.error(`[DEBUG] Error aplicando a job ${jobOfferId}:`, error);
+
+      if (!isMountedRef.current) return;
       
-      // ✅ Remover del estado de aplicando en caso de error
-      setApplyingJobs(prev => {
+      setApplyingJobs((prev) => {
         const newSet = new Set(prev);
         newSet.delete(jobOfferId);
         return newSet;
       });
-  
+
       Alert.alert(
         "❌ Error en la Postulación",
         "No se pudo enviar tu postulación. Por favor, verifica tu conexión e intenta nuevamente.",
@@ -437,59 +498,76 @@ export default function WorkerHomeScreen({ navigation }) {
         ]
       );
     }
-  }, [hasWorkerProfile, hasAppliedToJob, getApplicationStatus, getStatusDisplayName, 
-      setActiveTab, applyingJobs, recommendedJobs, user.id, navigation, loadAllData]);
-  
+  }, [
+    hasWorkerProfile,
+    hasAppliedToJob,
+    getApplicationStatus,
+    getStatusDisplayName,
+    applyingJobs,
+    recommendedJobs,
+    user?.id,
+    navigation,
+  ]);
 
-  // ✅ ACTUALIZADA: Función principal para cargar todos los datos en el orden correcto
-  const loadAllData = async (isRefreshing = false) => {
+  // ✅ Función principal para cargar todos los datos
+  const loadAllData = useCallback(async (isRefreshing = false) => {
+    if (!isMountedRef.current) return;
+    
     try {
       if (!isRefreshing) {
         setLoading(true);
       }
 
-      // ✅ Primero cargar aplicaciones, luego ofertas recomendadas (para filtrarlas)
-      await loadMyApplications();
-      await loadRecommendedJobs();
-      
-    } catch (error) {
-      console.error("Error cargando datos:", error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+      console.log("🔄 Iniciando carga de datos...");
 
-  // Función para refrescar los datos
-  const onRefresh = () => {
+      // Cargar evaluaciones si es trabajador
+      if (hasWorkerProfile !== false) {
+        await loadMyRatings();
+      }
+      
+      // Cargar aplicaciones
+      await loadMyApplications();
+      
+      // Cargar ofertas recomendadas
+      await loadRecommendedJobs();
+
+      console.log("✅ Datos cargados exitosamente");
+    } catch (error) {
+      console.error("❌ Error cargando datos:", error);
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, [loadMyRatings, loadMyApplications, loadRecommendedJobs, hasWorkerProfile]);
+
+  // ✅ Función para refrescar
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadAllData(true);
-  };
+  }, [loadAllData]);
 
+  // ✅ Efecto principal optimizado
   useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        await fetchUserData();
-        await loadAllData();
-      } catch (error) {
-        console.error("Error cargando datos iniciales:", error);
-        setLoading(false);
-      }
-    };
+    if (user?.id && isMountedRef.current) {
+      const loadInitialData = async () => {
+        try {
+          await fetchUserData();
+          await loadAllData();
+        } catch (error) {
+          console.error("Error cargando datos iniciales:", error);
+          if (isMountedRef.current) {
+            setLoading(false);
+          }
+        }
+      };
 
-    if (user?.id) {
       loadInitialData();
     }
-  }, [user?.id, fetchUserData]);
+  }, [user?.id]); // Solo depende de user.id
 
-  // ✅ useEffect para recargar ofertas cuando cambian las aplicaciones
-  useEffect(() => {
-    if (myApplications.length >= 0) {
-      loadRecommendedJobs();
-    }
-  }, [myApplications.length]);
-
-  // ✅ Funciones para manejar el modal
+  // ✅ Funciones para manejar modales
   const handleCloseSuccessModal = useCallback(() => {
     setShowSuccessModal(false);
     setSuccessModalData(null);
@@ -499,8 +577,42 @@ export default function WorkerHomeScreen({ navigation }) {
     setActiveTab("applications");
   }, []);
 
-  // Componente Dashboard (mismo código que antes...)
-  const WorkerDashboardSection = () => (
+  // ✅ Funciones de filtros optimizadas
+  const applyJobFilters = useCallback(async (newFilters = {}) => {
+    try {
+      console.log("🔍 Aplicando filtros:", newFilters);
+      setJobFilters(newFilters);
+      await loadRecommendedJobs(newFilters);
+    } catch (error) {
+      console.error("❌ Error aplicando filtros:", error);
+    }
+  }, [loadRecommendedJobs]);
+
+  const clearJobFilters = useCallback(async () => {
+    const emptyFilters = {
+      cropType: null,
+      location: null,
+      minSalary: null,
+      maxSalary: null,
+    };
+    await applyJobFilters(emptyFilters);
+  }, [applyJobFilters]);
+
+  const getActiveFiltersCount = useCallback(() => {
+    return Object.values(jobFilters).filter(filter => filter !== null && filter !== '').length;
+  }, [jobFilters]);
+
+  const getFiltersSummary = useCallback(() => {
+    const activeFilters = [];
+    if (jobFilters.cropType) activeFilters.push(`Cultivo: ${jobFilters.cropType}`);
+    if (jobFilters.location) activeFilters.push(`Ubicación: ${jobFilters.location}`);
+    if (jobFilters.minSalary) activeFilters.push(`Min: $${jobFilters.minSalary}`);
+    if (jobFilters.maxSalary) activeFilters.push(`Max: $${jobFilters.maxSalary}`);
+    return activeFilters.join(' • ');
+  }, [jobFilters]);
+
+  // ✅ Componente Dashboard memoizado
+  const WorkerDashboardSection = useMemo(() => (
     <View style={styles.dashboardContainer}>
       <Text style={styles.sectionTitle}>Mi Panel</Text>
 
@@ -526,7 +638,7 @@ export default function WorkerHomeScreen({ navigation }) {
 
         <View style={styles.statCard}>
           <LinearGradient
-            colors={["#F59E0B", "#FBBF24"]}
+            colors={["#274F66", "#3A6B85"]}
             style={styles.statCardGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}>
@@ -544,7 +656,7 @@ export default function WorkerHomeScreen({ navigation }) {
 
         <View style={styles.statCard}>
           <LinearGradient
-            colors={["#10B981", "#34D399"]}
+            colors={["#274F66", "#3A6B85"]}
             style={styles.statCardGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}>
@@ -560,6 +672,7 @@ export default function WorkerHomeScreen({ navigation }) {
           </LinearGradient>
         </View>
 
+        {/* Tarjeta de calificación con datos reales */}
         <View style={styles.statCard}>
           <LinearGradient
             colors={["#B6883E", "#D4A55C"]}
@@ -568,13 +681,29 @@ export default function WorkerHomeScreen({ navigation }) {
             end={{ x: 1, y: 1 }}>
             <View style={styles.statIconContainer}>
               <View style={styles.statIcon}>
-                <Ionicons name="star" size={24} color="#FFFFFF" />
+                {ratingData.loading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="star" size={24} color="#FFFFFF" />
+                )}
               </View>
             </View>
             <Text style={styles.statNumberWhite}>
-              {dashboardStats.averageRating.toFixed(1)}
+              {ratingData.loading 
+                ? "..." 
+                : ratingData.hasRatings 
+                  ? dashboardStats.averageRating.toFixed(1)
+                  : "--"
+              }
             </Text>
-            <Text style={styles.statLabelWhite}>Calificación</Text>
+            <Text style={styles.statLabelWhite}>
+              {ratingData.loading 
+                ? "Cargando..." 
+                : ratingData.hasRatings 
+                  ? `Calificación (${ratingData.totalRatings})`
+                  : "Sin evaluaciones"
+              }
+            </Text>
           </LinearGradient>
         </View>
       </View>
@@ -608,13 +737,44 @@ export default function WorkerHomeScreen({ navigation }) {
         </View>
       )}
 
+      {/* Banner informativo sobre evaluaciones */}
+      {hasWorkerProfile !== false && ratingData.hasRatings && ratingData.totalRatings > 0 && (
+        <View style={styles.ratingInfoBanner}>
+          <LinearGradient
+            colors={["#10B981", "#059669"]}
+            style={styles.bannerGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}>
+            <View style={styles.bannerContent}>
+              <View style={styles.bannerIconContainer}>
+                <Ionicons name="star" size={28} color="#FFFFFF" />
+              </View>
+              <View style={styles.bannerTextContainer}>
+                <Text style={styles.bannerTitle}>
+                  ¡Excelente trabajo!
+                </Text>
+                <Text style={styles.bannerSubtitle}>
+                  Tienes {ratingData.averageRating.toFixed(1)} estrellas basado en {ratingData.totalRatings} evaluación{ratingData.totalRatings > 1 ? 'es' : ''}
+                </Text>
+              </View>
+              {/* <TouchableOpacity
+                style={styles.bannerButton}
+                onPress={() => navigation.navigate("MyEvaluations")}>
+                <Text style={styles.bannerButtonText}>Ver</Text>
+                <Ionicons name="arrow-forward" size={16} color="#10B981" />
+              </TouchableOpacity> */}
+            </View>
+          </LinearGradient>
+        </View>
+      )}
+
       {/* Acciones rápidas */}
       <View style={styles.quickActions}>
         <Text style={styles.quickActionsTitle}>Acciones Rápidas</Text>
         <View style={styles.quickActionsGrid}>
           <TouchableOpacity
             style={[styles.quickActionButton, styles.primaryQuickAction]}
-            onPress={() => setActiveTab("jobs")}>
+            onPress={() => navigation.navigate("WorkerJob")}>
             <View style={styles.quickActionIconContainer}>
               <Ionicons name="search" size={28} color={COLORS.primary} />
             </View>
@@ -658,57 +818,62 @@ export default function WorkerHomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Card de ingresos */}
-      {isWorker && (
-        <View style={styles.earningsCard}>
-          <LinearGradient
-            colors={["#274E66", "#3A6B85"]}
-            style={styles.earningsGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}>
-            <View style={styles.earningsContent}>
-              <View style={styles.earningsHeader}>
-                <View style={styles.earningsIconContainer}>
-                  <Ionicons name="wallet" size={28} color="#FFFFFF" />
-                </View>
-                <Text style={styles.earningsTitleWhite}>Ingresos Este Mes</Text>
-              </View>
-              <Text style={styles.earningsAmountWhite}>
-                $
-                {new Intl.NumberFormat("es-CO").format(
-                  dashboardStats.monthlyEarnings
-                )}
-              </Text>
-              <Text style={styles.earningsSubtextWhite}>
-                Basado en {dashboardStats.completedJobs} trabajos completados
-              </Text>
-            </View>
-          </LinearGradient>
-        </View>
-      )}
     </View>
-  );
-  
-  // ✅ ACTUALIZADA: RecommendedJobsSection simplificada - ahora las ofertas ya vienen filtradas
-  const RecommendedJobsSection = () => (
+  ), [
+    dashboardStats,
+    ratingData,
+    hasWorkerProfile,
+    navigation,
+    isWorker,
+  ]);
+
+  // ✅ Componente de ofertas recomendadas memoizado
+  const RecommendedJobsSection = useMemo(() => (
     <View style={styles.recommendedJobsContainer}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Nuevas Oportunidades</Text>
         <TouchableOpacity
           style={styles.seeAllButton}
-          onPress={() => setActiveTab("jobs")}>
+          onPress={() => navigation.navigate("WorkerJob")}>
           <Text style={styles.seeAllText}>Ver todas</Text>
           <Ionicons name="arrow-forward" size={16} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
 
+      {getActiveFiltersCount() > 0 && (
+        <View style={styles.filtersIndicator}>
+          <Ionicons name="filter" size={16} color={COLORS.primary} />
+          <Text style={styles.filtersText}>
+            {getActiveFiltersCount()} filtro{getActiveFiltersCount() > 1 ? 's' : ''} activo{getActiveFiltersCount() > 1 ? 's' : ''}
+          </Text>
+          <TouchableOpacity
+            style={styles.clearFiltersButton}
+            onPress={clearJobFilters}>
+            <Text style={styles.clearFiltersText}>Limpiar</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {recommendedJobs.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {recommendedJobs.map((job, index) => {
-            // ✅ Estados simplificados ya que las ofertas ya vienen filtradas
             const isApplying = applyingJobs.has(job.id);
             
+            const getDisplayLocation = () => {
+              if (job.displayLocation) {
+                return [
+                  job.displayLocation.village,
+                  job.displayLocation.city,
+                  job.displayLocation.department || job.displayLocation.state,
+                  job.displayLocation.country
+                ].filter(Boolean).join(", ");
+              }
+              
+              return [job.village, job.city, job.state, job.country]
+                .filter(Boolean)
+                .join(", ") || "Ubicación no especificada";
+            };
+
             return (
               <TouchableOpacity
                 key={job.id}
@@ -720,7 +885,6 @@ export default function WorkerHomeScreen({ navigation }) {
                   navigation.navigate("JobOfferDetail", { jobOfferId: job.id })
                 }>
                 <View style={styles.jobCardContainer}>
-                  {/* Header con tipo de cultivo y valor */}
                   <View style={styles.jobHeader}>
                     <View style={styles.cropTypeBadge}>
                       <Ionicons name="leaf" size={16} color="#FFFFFF" />
@@ -730,15 +894,17 @@ export default function WorkerHomeScreen({ navigation }) {
                     </View>
                     <View style={styles.salaryContainer}>
                       <Text style={styles.salaryText}>
-                        ${new Intl.NumberFormat("es-CO").format(job.salary || 0)}
+                        $
+                        {new Intl.NumberFormat("es-CO").format(job.salary || 0)}
                       </Text>
                       <Text style={styles.paymentTypeText}>
-                        {job.paymentType === "Por_dia" ? "por día" : "por tarea"}
+                        {job.paymentType === "Por_dia"
+                          ? "por día"
+                          : "por tarea"}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Imagen del trabajo */}
                   <View style={styles.jobImageContainer}>
                     <Image
                       source={getJobImage(job.cropType)}
@@ -747,7 +913,6 @@ export default function WorkerHomeScreen({ navigation }) {
                     />
                   </View>
 
-                  {/* Información principal */}
                   <View style={styles.jobMainInfo}>
                     <Text style={styles.jobTitle} numberOfLines={2}>
                       {job.title || "Trabajo agrícola"}
@@ -759,31 +924,29 @@ export default function WorkerHomeScreen({ navigation }) {
                         color={COLORS.textSecondary}
                       />
                       <Text style={styles.farmName}>
-                        {job.farm?.name || "Finca no especificada"}
+                        {job.farm?.name || job.farmInfo?.name || "Finca no especificada"}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Ubicación */}
                   <View style={styles.locationContainer}>
                     <Ionicons name="location" size={16} color={COLORS.error} />
                     <View style={styles.locationTextContainer}>
                       <Text style={styles.locationText}>
-                        {[job.village, job.city, job.state, job.country]
-                          .filter(Boolean)
-                          .join(", ")}
+                        {getDisplayLocation()}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Beneficios */}
                   <View style={styles.benefitsContainer}>
                     <View style={styles.benefitItem}>
                       <Ionicons
                         name="restaurant"
                         size={16}
                         color={
-                          job.includesFood ? COLORS.success : COLORS.textSecondary
+                          job.includesFood
+                            ? COLORS.success
+                            : COLORS.textSecondary
                         }
                       />
                       <Text
@@ -817,7 +980,6 @@ export default function WorkerHomeScreen({ navigation }) {
                     </View>
                   </View>
 
-                  {/* Duración y forma de pago */}
                   <View style={styles.metaInfoContainer}>
                     <View style={styles.metaItem}>
                       <Ionicons
@@ -844,7 +1006,6 @@ export default function WorkerHomeScreen({ navigation }) {
                     </View>
                   </View>
 
-                  {/* ✅ BOTÓN DE POSTULACIÓN SIMPLIFICADO */}
                   <TouchableOpacity
                     style={[
                       styles.applyButton,
@@ -857,13 +1018,11 @@ export default function WorkerHomeScreen({ navigation }) {
                       colors={
                         !isWorker
                           ? ["#718096", "#718096"]
-                          : isApplying 
+                          : isApplying
                           ? ["#F59E0B", "#FBBF24"]
                           : ["#274F66", "#3A6B85"]
                       }
                       style={styles.applyButtonGradient}>
-                      
-                      {/* ✅ Mostrar loading cuando se está aplicando */}
                       {isApplying ? (
                         <ActivityIndicator size="small" color="#FFFFFF" />
                       ) : (
@@ -873,7 +1032,7 @@ export default function WorkerHomeScreen({ navigation }) {
                           color="#FFFFFF"
                         />
                       )}
-                      
+
                       <Text style={styles.applyButtonTextWhite}>
                         {!isWorker
                           ? "Crear Perfil"
@@ -898,19 +1057,41 @@ export default function WorkerHomeScreen({ navigation }) {
             />
           </View>
           <Text style={styles.emptyStateTitle}>
-            {myApplications.length > 0 ? 
-              "¡Has visto todas las ofertas!" : 
-              "No hay ofertas disponibles"}
+            {getActiveFiltersCount() > 0
+              ? "No hay ofertas con estos filtros"
+              : myApplications.length > 0
+              ? "¡Has visto todas las ofertas!"
+              : "No hay ofertas disponibles"}
           </Text>
           <Text style={styles.emptyStateSubtitle}>
-            {myApplications.length > 0 ? 
-              "Te notificaremos cuando haya nuevas oportunidades" :
-              "Te notificaremos cuando haya nuevas oportunidades"}
+            {getActiveFiltersCount() > 0
+              ? "Intenta ajustar tus filtros de búsqueda"
+              : myApplications.length > 0
+              ? "Te notificaremos cuando haya nuevas oportunidades"
+              : "Te notificaremos cuando haya nuevas oportunidades"}
           </Text>
+          {getActiveFiltersCount() > 0 && (
+            <TouchableOpacity
+              style={styles.adjustFiltersButton}
+              onPress={clearJobFilters}>
+              <Ionicons name="refresh" size={16} color={COLORS.surface} />
+              <Text style={styles.adjustFiltersText}>Limpiar Filtros</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </View>
-  );
+  ), [
+    recommendedJobs,
+    applyingJobs,
+    getActiveFiltersCount,
+    clearJobFilters,
+    myApplications.length,
+    navigation,
+    applyToJob,
+    isWorker,
+    getJobImage,
+  ]);
 
   if (loading) {
     return (
@@ -928,7 +1109,7 @@ export default function WorkerHomeScreen({ navigation }) {
       <View style={styles.container}>
         {/* Header con bienvenida */}
         <View style={styles.header}>
-          <Text style={styles.welcomeText}>{getWelcomeMessage()}</Text>
+          <Text style={styles.welcomeText}>{getWelcomeMessage}</Text>
         </View>
 
         {/* Navegación por tabs */}
@@ -1000,8 +1181,8 @@ export default function WorkerHomeScreen({ navigation }) {
           showsVerticalScrollIndicator={false}>
           {activeTab === "dashboard" && (
             <>
-              <WorkerDashboardSection />
-              <RecommendedJobsSection />
+              {WorkerDashboardSection}
+              {RecommendedJobsSection}
             </>
           )}
 
@@ -1137,7 +1318,7 @@ export default function WorkerHomeScreen({ navigation }) {
                   </Text>
                   <TouchableOpacity
                     style={styles.exploreJobsButton}
-                    onPress={() => setActiveTab("jobs")}>
+                    onPress={() => navigation.navigate("WorkerJob")}>
                     <Ionicons
                       name="search-outline"
                       size={20}
@@ -1153,8 +1334,7 @@ export default function WorkerHomeScreen({ navigation }) {
           )}
         </ScrollView>
       </View>
-      
-      {/* ✅ SuccessModal */}
+
       <SuccessModal
         visible={showSuccessModal}
         successData={successModalData}
@@ -1165,7 +1345,7 @@ export default function WorkerHomeScreen({ navigation }) {
   );
 }
 
-// Estilos (mantén los mismos estilos que tenías antes)
+// Estilos (mantener los mismos estilos originales)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1305,6 +1485,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
+  ratingInfoBanner: {
+    borderRadius: 16,
+    marginBottom: 24,
+    overflow: "hidden",
+    elevation: 4,
+    shadowColor: "#10B981",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
   bannerGradient: {
     padding: 20,
   },
@@ -1411,55 +1601,6 @@ const styles = StyleSheet.create({
   quickActionTextDisabled: {
     color: COLORS.textLight,
   },
-  earningsCard: {
-    borderRadius: 20,
-    marginTop: 16,
-    overflow: "hidden",
-    elevation: 8,
-    shadowColor: "#274F66",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  earningsGradient: {
-    padding: 24,
-  },
-  earningsContent: {
-    alignItems: "center",
-  },
-  earningsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  earningsIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  earningsTitleWhite: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  earningsAmountWhite: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: "#FFFFFF",
-    marginBottom: 8,
-    textShadowColor: "rgba(0, 0, 0, 0.3)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  earningsSubtextWhite: {
-    fontSize: 14,
-    color: "rgba(255, 255, 255, 0.8)",
-    marginBottom: 16,
-  },
   recommendedJobsContainer: {
     padding: 20,
     paddingTop: 0,
@@ -1476,6 +1617,48 @@ const styles = StyleSheet.create({
   seeAllText: {
     fontSize: 14,
     color: COLORS.primary,
+    fontWeight: "600",
+  },
+  filtersIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: `${COLORS.primary}08`,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  filtersText: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: "500",
+  },
+  clearFiltersButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
+  },
+  clearFiltersText: {
+    fontSize: 12,
+    color: COLORS.surface,
+    fontWeight: "600",
+  },
+  adjustFiltersButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+    marginTop: 16,
+  },
+  adjustFiltersText: {
+    color: COLORS.surface,
+    fontSize: 14,
     fontWeight: "600",
   },
   emptyState: {

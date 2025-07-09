@@ -12,7 +12,6 @@ import {
   Dimensions,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
-
 import {
   useNavigation,
   useRoute,
@@ -21,34 +20,31 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import ScreenLayout from "../../components/ScreenLayout";
 import CustomTabBar from "../../components/CustomTabBar";
-import {
-  changeStatusJobOfferById,
-  deleteJobOfferById,
-  getJobOfferById,
-} from "../../services/jobOffers";
+import { getJobOfferById } from "../../services/jobOffers";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get("window");
 
 const COLORS = {
-  primary: "#274F66",
-  secondary: "#B6883E",
-  background: "#F8FAFC",
-  surface: "#FFFFFF",
-  text: "#1A202C",
-  textSecondary: "#4A5568",
-  textLight: "#718096",
-  success: "#10B981",
+  primary: "#284E66", // Azul más moderno
+  secondary: "#B6883F", // Amber más vibrante
+  white: "#FFFFFF",
+  lightGray: "#F8FAFC", // Fondo más suave
+  darkGray: "#1E293B", // Texto más legible
+  mediumGray: "#475569",
+  lightText: "#64748B",
+  success: "#284E60", // Verde más moderno
   warning: "#F59E0B",
   error: "#EF4444",
   border: "#E2E8F0",
-  accent: "#667EEA",
-  info: "#3B82F6",
+  accent: "#8B5CF6", // Púrpura moderno
   plant: "#059669",
-  phase: "#8B5CF6",
+  phase: "#7C3AED",
+  background: "#F1F5F9", // Fondo alternativo
+  cardShadow: "rgba(0, 0, 0, 0.08)",
 };
 
-// Componente Hero con información principal mejorado
+// Componente Hero con diseño más moderno
 const HeroSection = ({ jobOffer }) => {
   const formatCurrency = (amount) => {
     if (!amount) return "No especificado";
@@ -68,102 +64,93 @@ const HeroSection = ({ jobOffer }) => {
       case "Finalizado":
         return COLORS.error;
       default:
-        return COLORS.textLight;
+        return COLORS.lightText;
     }
   };
 
-  // Obtener la fase específica de la oferta
   const getCurrentPhase = () => {
     if (!jobOffer?.phaseId || !jobOffer?.availablePhasesForCrop) return null;
-    return jobOffer.availablePhasesForCrop.find(phase => phase.id === jobOffer.phaseId);
+    return jobOffer.availablePhasesForCrop.find(
+      (phase) => phase.id === jobOffer.phaseId
+    );
   };
 
   const currentPhase = getCurrentPhase();
 
   return (
-    <View style={styles.heroSection}>
-      <View style={styles.heroGradient}>
-        <View style={styles.heroContent}>
-          <View style={styles.heroHeader}>
-            <View style={styles.statusContainer}>
-              <View
-                style={[
-                  styles.statusBadge,
-                  { backgroundColor: `${getStatusColor(jobOffer?.status)}20` },
-                ]}>
-                <View
-                  style={[
-                    styles.statusDot,
-                    { backgroundColor: getStatusColor(jobOffer?.status) },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.statusText,
-                    { color: getStatusColor(jobOffer?.status) },
-                  ]}>
-                  {jobOffer?.status || "Estado desconocido"}
-                </Text>
-              </View>
-            </View>
+    <View style={styles.heroContainer}>
+      {/* Estado con diseño más elegante */}
+      <View style={styles.heroHeader}>
+        <View
+          style={[
+            styles.statusBadge,
+            { backgroundColor: getStatusColor(jobOffer?.status) },
+          ]}>
+          <Text style={styles.statusText}>
+            {jobOffer?.status || "Estado desconocido"}
+          </Text>
+        </View>
+      </View>
 
-            {/* Trabajadores requeridos prominente */}
-            {jobOffer?.workersNeeded && (
-              <View style={styles.workersNeededBadge}>
-                <Icon name="groups" size={18} color={COLORS.secondary} />
-                <Text style={styles.workersNeededText}>
-                  Se necesitan {jobOffer.workersNeeded} {jobOffer.workersNeeded === 1 ? 'trabajador' : 'trabajadores'}
-                </Text>
-              </View>
-            )}
+      {/* Título principal */}
+      <Text style={styles.heroTitle}>{jobOffer?.title}</Text>
 
-            <Text style={styles.heroTitle}>{jobOffer?.title}</Text>
-            
-            {/* Información del cultivo y fase específica */}
-            <View style={styles.cropPhaseInfo}>
-              <View style={styles.cropInfo}>
-                <Icon name="eco" size={16} color="rgba(255,255,255,0.8)" />
-                <Text style={styles.cropName}>
-                  {jobOffer?.cropType?.name || "Cultivo no especificado"}
-                </Text>
-              </View>
-              {currentPhase && (
-                <View style={styles.phaseInfo}>
-                  <Icon name="timeline" size={16} color="rgba(255,255,255,0.8)" />
-                  <Text style={styles.phaseName}>
-                    {currentPhase.name.replace(/^[🌾🌱🌿🌼🌰🧺🍫♻️]\s*\d+\.\s*/, "")}
-                  </Text>
-                </View>
-              )}
+      {/* Información del cultivo con mejor diseño */}
+      <View style={styles.cropInfoContainer}>
+        <View style={styles.cropInfoItem}>
+          <View style={styles.cropIcon}>
+            <Icon name="eco" size={16} color={COLORS.success} />
+          </View>
+          <Text style={styles.cropInfoText}>
+            {jobOffer?.cropType?.name || "Cultivo no especificado"}
+          </Text>
+        </View>
+
+        {currentPhase && (
+          <View style={styles.cropInfoItem}>
+            <View style={styles.cropIcon}>
+              <Icon name="timeline" size={16} color={COLORS.accent} />
             </View>
+            <Text style={styles.cropInfoText}>
+              {currentPhase.name.replace(/^[🌾🌱🌿🌼🌰🧺🍫♻️]\s*\d+\.\s*/, "")}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Estadísticas principales con nuevo diseño */}
+      <View style={styles.heroStats}>
+        <View style={styles.salaryCard}>
+          <Text style={styles.salaryLabel}>Salario</Text>
+          <Text style={styles.salaryAmount}>
+            {formatCurrency(jobOffer?.salary)}
+          </Text>
+          <Text style={styles.salaryPeriod}>
+            {jobOffer?.paymentType === "Por_dia"
+              ? "por día"
+              : "por trabajo completo"}
+          </Text>
+        </View>
+
+        <View style={styles.statsGrid}>
+          <View style={styles.statItem}>
+            <Icon name="people" size={24} color={COLORS.primary} />
+            <Text style={styles.statValue}>
+              {jobOffer?.applicationsCount || 0}
+            </Text>
+            <Text style={styles.statLabel}>Postulantes</Text>
           </View>
 
-          <View style={styles.heroStats}>
-            <View style={styles.heroPrimaryCard}>
-              <Text style={styles.salaryAmount}>
-                {formatCurrency(jobOffer?.salary)}
-              </Text>
-              <Text style={styles.salaryPeriod}>
-                {jobOffer?.paymentType === "Por_dia" ? "por día" : "por trabajo completo"}
-              </Text>
-            </View>
+          <View style={styles.statItem}>
+            <Icon name="schedule" size={24} color={COLORS.warning} />
+            <Text style={styles.statValue}>{jobOffer?.duration || 0}</Text>
+            <Text style={styles.statLabel}>Días</Text>
+          </View>
 
-            <View style={styles.heroMetrics}>
-              <View style={styles.metricItem}>
-                <Icon name="people" size={20} color={COLORS.success} />
-                <Text style={styles.metricValue}>
-                  {jobOffer?.applicationsCount || 0}
-                </Text>
-                <Text style={styles.metricLabel}>Postulantes</Text>
-              </View>
-              <View style={styles.metricItem}>
-                <Icon name="schedule" size={20} color={COLORS.secondary} />
-                <Text style={styles.metricValue}>
-                  {jobOffer?.duration || 0}
-                </Text>
-                <Text style={styles.metricLabel}>Días</Text>
-              </View>
-            </View>
+          <View style={styles.statItem}>
+            <Icon name="groups" size={24} color={COLORS.success} />
+            <Text style={styles.statValue}>{jobOffer?.workersNeeded || 0}</Text>
+            <Text style={styles.statLabel}>Necesarios</Text>
           </View>
         </View>
       </View>
@@ -171,184 +158,137 @@ const HeroSection = ({ jobOffer }) => {
   );
 };
 
-// Componente mejorado de información de la finca
-const EnhancedFarmInfoCard = ({ jobOffer }) => {
+// Tarjeta de información con diseño mejorado
+const InfoCard = ({
+  icon,
+  iconColor,
+  title,
+  subtitle,
+  children,
+  highlight = false,
+}) => {
+  return (
+    <View style={[styles.card, highlight && styles.highlightCard]}>
+      <View style={styles.cardHeader}>
+        <View style={[styles.cardIcon, { backgroundColor: iconColor }]}>
+          {typeof icon === "string" ? (
+            <Icon name={icon} size={20} color={COLORS.white} />
+          ) : (
+            icon
+          )}
+        </View>
+        <View style={styles.cardHeaderText}>
+          <Text style={styles.cardTitle}>{title}</Text>
+          <Text style={styles.cardSubtitle}>{subtitle}</Text>
+        </View>
+      </View>
+      <View style={styles.cardContent}>{children}</View>
+    </View>
+  );
+};
+
+// Componente de información de la finca
+const FarmInfoCard = ({ jobOffer }) => {
   const farmInfo = jobOffer?.farmInfo || jobOffer?.farm;
 
   return (
-    <View style={styles.infoCard}>
-      <View style={styles.cardHeader}>
-        <View style={[styles.cardIcon, { backgroundColor: COLORS.success }]}>
-          <Icon name="agriculture" size={24} color="#FFFFFF" />
-        </View>
-        <View style={styles.cardHeaderText}>
-          <Text style={styles.cardTitle}>Información de la Finca</Text>
-          <Text style={styles.cardSubtitle}>Detalles del lugar de trabajo</Text>
-        </View>
+    <InfoCard
+      icon="agriculture"
+      iconColor={COLORS.success}
+      title="Información de la Finca"
+      subtitle="Detalles del lugar de trabajo">
+      <View style={styles.detailGrid}>
+        <DetailItem
+          icon="business"
+          iconColor={COLORS.primary}
+          label="Nombre de la Finca"
+          value={farmInfo?.name || "Sin nombre especificado"}
+        />
+
+        <DetailItem
+          icon="eco"
+          iconColor={COLORS.success}
+          label="Tipo de Cultivo"
+          value={jobOffer?.cropType?.name || "No especificado"}
+        />
+
+        <DetailItem
+          icon="nature"
+          iconColor={COLORS.plant}
+          label="Plantas en la Finca"
+          value={
+            farmInfo?.plantCount
+              ? `${farmInfo.plantCount.toLocaleString()} plantas`
+              : "No especificado"
+          }
+        />
+
+        <DetailItem
+          icon="straighten"
+          iconColor={COLORS.warning}
+          label="Tamaño de la Finca"
+          value={
+            farmInfo?.size ? `${farmInfo.size} hectáreas` : "No especificado"
+          }
+        />
       </View>
-
-      <View style={styles.cardContent}>
-        <View style={styles.farmDetailGrid}>
-          <View style={styles.farmDetailItem}>
-            <View style={styles.farmDetailIcon}>
-              <Icon name="business" size={18} color={COLORS.primary} />
-            </View>
-            <View style={styles.farmDetailContent}>
-              <Text style={styles.farmDetailLabel}>Nombre de la Finca</Text>
-              <Text style={styles.farmDetailValue}>
-                {farmInfo?.name || "Sin nombre especificado"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.farmDetailItem}>
-            <View style={styles.farmDetailIcon}>
-              <Icon name="eco" size={18} color={COLORS.success} />
-            </View>
-            <View style={styles.farmDetailContent}>
-              <Text style={styles.farmDetailLabel}>Tipo de Cultivo</Text>
-              <Text style={styles.farmDetailValue}>
-                {jobOffer?.cropType?.name || "No especificado"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.farmDetailItem}>
-            <View style={styles.farmDetailIcon}>
-              <Icon name="nature" size={18} color={COLORS.accent} />
-            </View>
-            <View style={styles.farmDetailContent}>
-              <Text style={styles.farmDetailLabel}>Plantas en la Finca</Text>
-              <Text style={styles.farmDetailValue}>
-                {farmInfo?.plantCount
-                  ? `${farmInfo.plantCount.toLocaleString()} plantas`
-                  : "No especificado"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.farmDetailItem}>
-            <View style={styles.farmDetailIcon}>
-              <Icon name="straighten" size={18} color={COLORS.warning} />
-            </View>
-            <View style={styles.farmDetailContent}>
-              <Text style={styles.farmDetailLabel}>Tamaño de la Finca</Text>
-              <Text style={styles.farmDetailValue}>
-                {farmInfo?.size
-                  ? `${farmInfo.size} hectáreas`
-                  : "No especificado"}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-    </View>
+    </InfoCard>
   );
 };
 
-// Componente especializado para mostrar la fase específica de trabajo
+// Componente para mostrar la fase de trabajo
 const WorkPhaseCard = ({ jobOffer }) => {
-  // Obtener la fase específica de la oferta
   const getCurrentPhase = () => {
     if (!jobOffer?.phaseId || !jobOffer?.availablePhasesForCrop) return null;
-    return jobOffer.availablePhasesForCrop.find(phase => phase.id === jobOffer.phaseId);
+    return jobOffer.availablePhasesForCrop.find(
+      (phase) => phase.id === jobOffer.phaseId
+    );
   };
 
-  // Obtener orden de la fase desde el nombre
-  const getPhaseOrder = (phaseName) => {
-    const match = phaseName?.match(/(\d+)\./);
-    return match ? parseInt(match[1]) : 0;
-  };
-
-  // Limpiar nombre de la fase removiendo emoji y número
-  const getCleanPhaseName = (phaseName) => {
-    return phaseName?.replace(/^[🌾🌱🌿🌼🌰🧺🍫♻️]\s*\d+\.\s*/, "") || "";
-  };
-
-  // Obtener emoji de la fase
   const getPhaseEmoji = (phaseName) => {
     const match = phaseName?.match(/^([🌾🌱🌿🌼🌰🧺🍫♻️])/);
     return match ? match[1] : "🌱";
   };
 
   const currentPhase = getCurrentPhase();
-  const availablePhases = jobOffer?.availablePhasesForCrop || [];
 
-  if (!currentPhase) {
-    return (
-      <View style={styles.infoCard}>
-        <View style={styles.cardHeader}>
-          <View style={[styles.cardIcon, { backgroundColor: COLORS.phase }]}>
-            <Icon name="timeline" size={24} color="#FFFFFF" />
-          </View>
-          <View style={styles.cardHeaderText}>
-            <Text style={styles.cardTitle}>Fase del Cultivo</Text>
-            <Text style={styles.cardSubtitle}>No se pudo identificar la fase</Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
+  if (!currentPhase) return null;
 
-  const phaseOrder = getPhaseOrder(currentPhase.name);
   const phaseEmoji = getPhaseEmoji(currentPhase.name);
-  const cleanPhaseName = getCleanPhaseName(currentPhase.name);
-
-  // Ordenar todas las fases disponibles
-  const sortedPhases = [...availablePhases].sort((a, b) => 
-    getPhaseOrder(a.name) - getPhaseOrder(b.name)
-  );
-
-  // Encontrar índice de la fase actual
-  const currentPhaseIndex = sortedPhases.findIndex(phase => phase.id === currentPhase.id);
+  const cleanPhaseName =
+    currentPhase.name?.replace(/^[🌾🌱🌿🌼🌰🧺🍫♻️]\s*\d+\.\s*/, "") || "";
 
   return (
-    <View style={styles.infoCard}>
-      <View style={styles.cardHeader}>
-        <View style={[styles.cardIcon, { backgroundColor: COLORS.phase }]}>
-          <Text style={styles.phaseEmoji}>{phaseEmoji}</Text>
-        </View>
-        <View style={styles.cardHeaderText}>
-          <Text style={styles.cardTitle}>Fase de Trabajo Específica</Text>
-          <Text style={styles.cardSubtitle}>
-            Etapa del cultivo {jobOffer?.cropType?.name}
-          </Text>
-        </View>
-      </View>
+    <InfoCard
+      icon={<Text style={styles.phaseEmoji}>{phaseEmoji}</Text>}
+      iconColor={COLORS.phase}
+      title="Fase de Trabajo"
+      subtitle={`Etapa del cultivo ${jobOffer?.cropType?.name}`}
+      highlight={true}>
+      <View style={styles.phaseCard}>
+        <Text style={styles.phaseName}>{cleanPhaseName}</Text>
 
-      <View style={styles.cardContent}>
-        {/* Fase actual destacada */}
-        <View style={styles.currentWorkPhaseCard}>
-          <View style={styles.currentPhaseHeader}>
-            <View style={styles.currentPhaseNumber}>
-              <Text style={styles.currentPhaseNumberText}>{phaseOrder}</Text>
-            </View>
-            <View style={styles.currentPhaseInfo}>
-              <Text style={styles.currentPhaseTitle}>Trabajo a Realizar</Text>
-              <Text style={styles.currentPhaseNameText}>{cleanPhaseName}</Text>
-              {currentPhase.description && (
-                <Text style={styles.currentPhaseDescription}>
-                  {currentPhase.description}
-                </Text>
-              )}
-              {currentPhase.duration && (
-                <View style={styles.phaseDurationBadge}>
-                  <Icon name="schedule" size={14} color={COLORS.phase} />
-                  <Text style={styles.phaseDurationText}>
-                    Duración estimada: {currentPhase.duration} días
-                  </Text>
-                </View>
-              )}
-            </View>
+        {currentPhase.description && (
+          <Text style={styles.phaseDescription}>
+            {currentPhase.description}
+          </Text>
+        )}
+
+        {currentPhase.duration && (
+          <View style={styles.phaseDuration}>
+            <Icon name="schedule" size={16} color={COLORS.phase} />
+            <Text style={styles.phaseDurationText}>
+              Duración estimada: {currentPhase.duration} días
+            </Text>
           </View>
-        </View>
+        )}
       </View>
-    </View>
+    </InfoCard>
   );
 };
 
-// Componente detallado de pago y beneficios mejorado para mostrar pago por planta
-const PaymentAndBenefitsCard = ({ jobOffer = {} }) => {
+// Componente de pago y beneficios
+const PaymentCard = ({ jobOffer }) => {
   const formatCurrency = (amount) => {
     if (!amount) return "No especificado";
     return new Intl.NumberFormat("es-CO", {
@@ -358,248 +298,74 @@ const PaymentAndBenefitsCard = ({ jobOffer = {} }) => {
     }).format(amount);
   };
 
-  const getPaymentTypeText = (type) => {
-    switch (type) {
-      case "Por_dia":
-        return "Por día trabajado";
-      case "Por_labor":
-        return "Por plantas trabajadas";
-      default:
-        return "No especificado";
-    }
-  };
-
-  const getWorkTypeText = (workType) => {
-    switch (workType) {
-      case "Podar":
-        return "Poda de plantas";
-      case "Injertar":
-        return "Injerto de plantas";
-      case "Podar_Injertar":
-        return "Poda e injerto";
-      case "Otro":
-        return "Trabajo especializado";
-      default:
-        return workType || "No especificado";
-    }
-  };
-
   const isPlantPayment = jobOffer.paymentType === "Por_labor";
 
   return (
-    <View style={styles.infoCard}>
-      <View style={styles.cardHeader}>
-        <View style={[styles.cardIcon, { backgroundColor: COLORS.secondary }]}>
-          <Icon name="payments" size={24} color="#FFFFFF" />
-        </View>
-        <View style={styles.cardHeaderText}>
-          <Text style={styles.cardTitle}>Pago y Beneficios</Text>
-          <Text style={styles.cardSubtitle}>
-            {isPlantPayment ? "Trabajo por plantas" : "Trabajo por jornada"}
+    <InfoCard
+      icon="payments"
+      iconColor={COLORS.secondary}
+      title="Pago y Beneficios"
+      subtitle={isPlantPayment ? "Trabajo por plantas" : "Trabajo por jornada"}
+      highlight={true}>
+      <View style={styles.paymentMainCard}>
+        <View style={styles.paymentHeader}>
+          <Icon
+            name={isPlantPayment ? "local-florist" : "schedule"}
+            size={24}
+            color={COLORS.secondary}
+          />
+          <Text style={styles.paymentTitle}>
+            {isPlantPayment ? "Pago Total por Trabajo" : "Salario Diario"}
           </Text>
         </View>
+        <Text style={styles.paymentAmount}>
+          {formatCurrency(jobOffer.salary)}
+        </Text>
       </View>
 
-      <View style={styles.cardContent}>
-        <View style={styles.paymentGrid}>
-          {/* Tarjeta principal de salario */}
-          <View style={styles.paymentMainCard}>
-            <View style={styles.paymentMainHeader}>
-              <Icon 
-                name={isPlantPayment ? "local-florist" : "schedule"} 
-                size={20} 
-                color={COLORS.success} 
-              />
-              <Text style={styles.paymentMainTitle}>
-                {isPlantPayment ? "Pago Total por Trabajo" : "Salario Diario"}
-              </Text>
-            </View>
-            <Text style={styles.paymentMainAmount}>
-              {formatCurrency(jobOffer.salary)}
-            </Text>
-            <Text style={styles.paymentMainType}>
-              {getPaymentTypeText(jobOffer.paymentType)}
-            </Text>
-          </View>
+      {/* Detalles específicos para pago por planta */}
+      {isPlantPayment && jobOffer.plantCount && (
+        <View style={styles.plantDetails}>
+          <DetailItem
+            icon="nature"
+            iconColor={COLORS.plant}
+            label="Plantas a trabajar"
+            value={`${parseInt(jobOffer.plantCount).toLocaleString()} plantas`}
+          />
 
-          {/* Detalles específicos para pago por planta */}
-          {isPlantPayment && (
-            <View style={styles.plantPaymentDetails}>
-              <Text style={styles.plantPaymentTitle}>Detalles del Trabajo por Plantas</Text>
-              
-              <View style={styles.plantDetailsGrid}>
-                {jobOffer.plantCount && (
-                  <View style={styles.plantDetailItem}>
-                    <View style={styles.plantDetailIcon}>
-                      <Icon name="nature" size={20} color={COLORS.plant} />
-                    </View>
-                    <View style={styles.plantDetailContent}>
-                      <Text style={styles.plantDetailLabel}>Cantidad de Plantas</Text>
-                      <Text style={styles.plantDetailValue}>
-                        {parseInt(jobOffer.plantCount).toLocaleString()} plantas
-                      </Text>
-                    </View>
-                  </View>
-                )}
-
-                {jobOffer.pricePerUnit && (
-                  <View style={styles.plantDetailItem}>
-                    <View style={styles.plantDetailIcon}>
-                      <Icon name="attach-money" size={20} color={COLORS.plant} />
-                    </View>
-                    <View style={styles.plantDetailContent}>
-                      <Text style={styles.plantDetailLabel}>Precio por Planta</Text>
-                      <Text style={styles.plantDetailValue}>
-                        {formatCurrency(jobOffer.pricePerUnit)}
-                      </Text>
-                    </View>
-                  </View>
-                )}
-
-                {jobOffer.workType && (
-                  <View style={styles.plantDetailItem}>
-                    <View style={styles.plantDetailIcon}>
-                      <Icon name="build" size={20} color={COLORS.plant} />
-                    </View>
-                    <View style={styles.plantDetailContent}>
-                      <Text style={styles.plantDetailLabel}>Tipo de Trabajo</Text>
-                      <Text style={styles.plantDetailValue}>
-                        {getWorkTypeText(jobOffer.workType)}
-                      </Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              {/* Cálculo visual si tenemos los datos */}
-              {jobOffer.plantCount && jobOffer.pricePerUnit && (
-                <View style={styles.paymentCalculation}>
-                  <Text style={styles.calculationTitle}>Cálculo del Pago Total</Text>
-                  <View style={styles.calculationBreakdown}>
-                    <View style={styles.calculationRow}>
-                      <Text style={styles.calculationText}>
-                        {parseInt(jobOffer.plantCount).toLocaleString()} plantas
-                      </Text>
-                      <Text style={styles.calculationOperator}>×</Text>
-                      <Text style={styles.calculationText}>
-                        {formatCurrency(jobOffer.pricePerUnit)}
-                      </Text>
-                      <Text style={styles.calculationOperator}>=</Text>
-                      <Text style={styles.calculationResult}>
-                        {formatCurrency(jobOffer.salary)}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Información general de pago */}
-          <View style={styles.paymentDetailsGrid}>
-            <View style={styles.paymentDetailItem}>
-              <Icon name="payment" size={20} color={COLORS.primary} />
-              <View style={styles.paymentDetailContent}>
-                <Text style={styles.paymentDetailLabel}>Método de Pago</Text>
-                <Text style={styles.paymentDetailValue}>
-                  {jobOffer.paymentMode || "Efectivo"}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.paymentDetailItem}>
-              <Icon name="schedule" size={20} color={COLORS.accent} />
-              <View style={styles.paymentDetailContent}>
-                <Text style={styles.paymentDetailLabel}>Duración</Text>
-                <Text style={styles.paymentDetailValue}>
-                  {jobOffer.duration
-                    ? `${jobOffer.duration} días`
-                    : "No especificado"}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Información de tipo de labor para pagos por planta */}
-          {jobOffer.laborType && isPlantPayment && (
-            <View style={styles.laborTypeCard}>
-              <Icon name="work-outline" size={20} color={COLORS.info} />
-              <View style={styles.laborTypeContent}>
-                <Text style={styles.laborTypeLabel}>Descripción del Trabajo</Text>
-                <Text style={styles.laborTypeValue}>{jobOffer.laborType}</Text>
-              </View>
-            </View>
+          {jobOffer.pricePerUnit && (
+            <DetailItem
+              icon="attach-money"
+              iconColor={COLORS.plant}
+              label="Precio por planta"
+              value={formatCurrency(jobOffer.pricePerUnit)}
+            />
           )}
         </View>
+      )}
 
-        {/* Beneficios adicionales */}
-        <View style={styles.benefitsSection}>
-          <Text style={styles.benefitsSectionTitle}>Beneficios Incluidos</Text>
-          <View style={styles.benefitsGrid}>
-            <View
-              style={[
-                styles.benefitItem,
-                jobOffer.includesFood
-                  ? styles.benefitIncluded
-                  : styles.benefitNotIncluded,
-              ]}>
-              <Icon
-                name={jobOffer.includesFood ? "restaurant" : "no-meals"}
-                size={20}
-                color={
-                  jobOffer.includesFood ? COLORS.success : COLORS.textLight
-                }
-              />
-              <Text
-                style={[
-                  styles.benefitText,
-                  jobOffer.includesFood
-                    ? styles.benefitIncludedText
-                    : styles.benefitNotIncludedText,
-                ]}>
-                Alimentación
-              </Text>
-              {jobOffer.includesFood && (
-                <Icon name="check-circle" size={16} color={COLORS.success} />
-              )}
-            </View>
-
-            <View
-              style={[
-                styles.benefitItem,
-                jobOffer.includesLodging
-                  ? styles.benefitIncluded
-                  : styles.benefitNotIncluded,
-              ]}>
-              <Icon
-                name={jobOffer.includesLodging ? "hotel" : "no-meeting-room"}
-                size={20}
-                color={
-                  jobOffer.includesLodging ? COLORS.success : COLORS.textLight
-                }
-              />
-              <Text
-                style={[
-                  styles.benefitText,
-                  jobOffer.includesLodging
-                    ? styles.benefitIncludedText
-                    : styles.benefitNotIncludedText,
-                ]}>
-                Alojamiento
-              </Text>
-              {jobOffer.includesLodging && (
-                <Icon name="check-circle" size={16} color={COLORS.success} />
-              )}
-            </View>
-          </View>
+      {/* Beneficios */}
+      <View style={styles.benefitsSection}>
+        <Text style={styles.sectionTitle}>Beneficios Incluidos</Text>
+        <View style={styles.benefitsGrid}>
+          <BenefitItem
+            included={jobOffer.includesFood}
+            icon={jobOffer.includesFood ? "restaurant" : "no-meals"}
+            label="Alimentación"
+          />
+          <BenefitItem
+            included={jobOffer.includesLodging}
+            icon={jobOffer.includesLodging ? "hotel" : "no-meeting-room"}
+            label="Alojamiento"
+          />
         </View>
       </View>
-    </View>
+    </InfoCard>
   );
 };
 
-// Componente mejorado de ubicación completa
-const LocationDetailCard = ({ jobOffer }) => {
+// Componente de ubicación
+const LocationCard = ({ jobOffer }) => {
   const location = jobOffer?.farmInfo?.location || jobOffer?.displayLocation;
 
   const getCompleteLocation = () => {
@@ -613,75 +379,49 @@ const LocationDetailCard = ({ jobOffer }) => {
   };
 
   return (
-    <View style={styles.infoCard}>
-      <View style={styles.cardHeader}>
-        <View style={[styles.cardIcon, { backgroundColor: COLORS.info }]}>
-          <Icon name="place" size={24} color="#FFFFFF" />
-        </View>
-        <View style={styles.cardHeaderText}>
-          <Text style={styles.cardTitle}>Ubicación de la Finca</Text>
-          <Text style={styles.cardSubtitle}>
-            Dirección completa del trabajo
-          </Text>
-        </View>
+    <InfoCard
+      icon="place"
+      iconColor={COLORS.accent}
+      title="Ubicación de la Finca"
+      subtitle="Dirección completa del trabajo">
+      <View style={styles.locationMain}>
+        <Icon name="location-on" size={24} color={COLORS.accent} />
+        <Text style={styles.locationText}>{getCompleteLocation()}</Text>
       </View>
 
-      <View style={styles.cardContent}>
-        <View style={styles.locationDetailContainer}>
-          <View style={styles.locationItem}>
-            <Icon name="location-on" size={20} color={COLORS.primary} />
-            <View style={styles.locationContent}>
-              <Text style={styles.locationLabel}>Dirección Completa</Text>
-              <Text style={styles.locationValue}>{getCompleteLocation()}</Text>
-            </View>
-          </View>
+      <View style={styles.locationDetails}>
+        {location?.country && (
+          <DetailItem
+            icon="public"
+            iconColor={COLORS.success}
+            label="País"
+            value={location.country}
+          />
+        )}
 
-          {location?.country && (
-            <View style={styles.locationItem}>
-              <Icon name="public" size={20} color={COLORS.success} />
-              <View style={styles.locationContent}>
-                <Text style={styles.locationLabel}>País</Text>
-                <Text style={styles.locationValue}>{location.country}</Text>
-              </View>
-            </View>
-          )}
+        {location?.department && (
+          <DetailItem
+            icon="map"
+            iconColor={COLORS.secondary}
+            label="Departamento"
+            value={location.department}
+          />
+        )}
 
-          {location?.department && (
-            <View style={styles.locationItem}>
-              <Icon name="map" size={20} color={COLORS.secondary} />
-              <View style={styles.locationContent}>
-                <Text style={styles.locationLabel}>Departamento</Text>
-                <Text style={styles.locationValue}>{location.department}</Text>
-              </View>
-            </View>
-          )}
-
-          {location?.city && (
-            <View style={styles.locationItem}>
-              <Icon name="location-city" size={20} color={COLORS.accent} />
-              <View style={styles.locationContent}>
-                <Text style={styles.locationLabel}>Ciudad/Municipio</Text>
-                <Text style={styles.locationValue}>{location.city}</Text>
-              </View>
-            </View>
-          )}
-
-          {location?.village && (
-            <View style={styles.locationItem}>
-              <Icon name="landscape" size={20} color={COLORS.warning} />
-              <View style={styles.locationContent}>
-                <Text style={styles.locationLabel}>Vereda</Text>
-                <Text style={styles.locationValue}>{location.village}</Text>
-              </View>
-            </View>
-          )}
-        </View>
+        {location?.city && (
+          <DetailItem
+            icon="location-city"
+            iconColor={COLORS.accent}
+            label="Ciudad/Municipio"
+            value={location.city}
+          />
+        )}
       </View>
-    </View>
+    </InfoCard>
   );
 };
 
-// Componente de detalles adicionales mejorado
+// Componente de detalles adicionales
 const AdditionalDetailsCard = ({ jobOffer }) => {
   const formatDate = (dateString) => {
     if (!dateString) return "No especificado";
@@ -693,151 +433,125 @@ const AdditionalDetailsCard = ({ jobOffer }) => {
   };
 
   return (
-    <View style={styles.infoCard}>
-      <View style={styles.cardHeader}>
-        <View style={[styles.cardIcon, { backgroundColor: COLORS.accent }]}>
-          <Icon name="info" size={24} color="#FFFFFF" />
-        </View>
-        <View style={styles.cardHeaderText}>
-          <Text style={styles.cardTitle}>Detalles Adicionales</Text>
-          <Text style={styles.cardSubtitle}>
-            Información complementaria importante
-          </Text>
-        </View>
+    <InfoCard
+      icon="info"
+      iconColor={COLORS.primary}
+      title="Detalles Adicionales"
+      subtitle="Información complementaria importante">
+      <View style={styles.detailsGrid}>
+        <DetailItem
+          icon="event"
+          iconColor={COLORS.success}
+          label="Fecha de inicio"
+          value={formatDate(jobOffer?.startDate)}
+        />
+
+        <DetailItem
+          icon="event-busy"
+          iconColor={COLORS.error}
+          label="Fecha de fin"
+          value={formatDate(jobOffer?.endDate)}
+        />
+
+        <DetailItem
+          icon="schedule"
+          iconColor={COLORS.primary}
+          label="Horario de trabajo"
+          value={
+            jobOffer?.workSchedule || "Horario estándar (6:00 AM - 2:00 PM)"
+          }
+        />
+
+        {jobOffer?.requirements && (
+          <DetailItem
+            icon="checklist"
+            iconColor={COLORS.accent}
+            label="Requisitos"
+            value={jobOffer.requirements}
+          />
+        )}
       </View>
-
-      <View style={styles.cardContent}>
-        <View style={styles.additionalDetailsGrid}>
-          <View style={styles.detailSection}>
-            <Text style={styles.detailSectionTitle}>Fechas del Trabajo</Text>
-            <View style={styles.detailRow}>
-              <View style={styles.detailItem}>
-                <Icon name="event" size={20} color={COLORS.success} />
-                <View style={styles.detailContent}>
-                  <Text style={styles.detailLabel}>Fecha de inicio</Text>
-                  <Text style={styles.detailValue}>
-                    {formatDate(jobOffer?.startDate)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.detailItem}>
-                <Icon name="event-busy" size={20} color={COLORS.error} />
-                <View style={styles.detailContent}>
-                  <Text style={styles.detailLabel}>Fecha de fin</Text>
-                  <Text style={styles.detailValue}>
-                    {formatDate(jobOffer?.endDate)}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.detailSection}>
-            <Text style={styles.detailSectionTitle}>
-              Condiciones de Trabajo
-            </Text>
-            <View style={styles.detailRow}>
-              <View style={styles.detailItem}>
-                <Icon name="schedule" size={20} color={COLORS.primary} />
-                <View style={styles.detailContent}>
-                  <Text style={styles.detailLabel}>Horario de trabajo</Text>
-                  <Text style={styles.detailValue}>
-                    {jobOffer?.workSchedule ||
-                      "Horario estándar (6:00 AM - 2:00 PM)"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.detailRow}>
-              <View style={styles.detailItem}>
-                <Icon name="groups" size={20} color={COLORS.secondary} />
-                <View style={styles.detailContent}>
-                  <Text style={styles.detailLabel}>
-                    Trabajadores requeridos
-                  </Text>
-                  <Text style={styles.detailValue}>
-                    {jobOffer?.workersNeeded 
-                      ? `${jobOffer.workersNeeded} ${jobOffer.workersNeeded === 1 ? 'persona' : 'personas'}`
-                      : "No especificado"
-                    }
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* Sección de Requerimientos */}
-          {jobOffer?.requirements && (
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>
-                Requisitos de la Oferta
-              </Text>
-              <View style={styles.requirementsContainer}>
-                <View style={styles.requirementItem}>
-                  <Icon name="checklist" size={18} color={COLORS.info} />
-                  <Text style={styles.requirementText}>
-                    {jobOffer.requirements}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-        </View>
-      </View>
-    </View>
+    </InfoCard>
   );
 };
 
-// Información del empleador/productor mejorada
+// Componente de información del empleador
 const EmployerCard = ({ jobOffer }) => {
   const employer = jobOffer?.employer;
   const user = employer?.user;
 
   return (
-    <View style={styles.infoCard}>
-      <View style={styles.cardHeader}>
-        <View style={[styles.cardIcon, { backgroundColor: COLORS.primary }]}>
-          <Icon name="person" size={24} color="#FFFFFF" />
-        </View>
-        <View style={styles.cardHeaderText}>
-          <Text style={styles.cardTitle}>Información del Productor</Text>
-          <Text style={styles.cardSubtitle}>
-            Empleador de la oferta de trabajo
+    <InfoCard
+      icon="person"
+      iconColor={COLORS.primary}
+      title="Información del Productor"
+      subtitle="Empleador de la oferta de trabajo">
+      <View style={styles.employerContainer}>
+        <View style={styles.employerAvatar}>
+          <Text style={styles.employerInitial}>
+            {user?.name?.charAt(0)?.toUpperCase() || "P"}
           </Text>
         </View>
-      </View>
 
-      <View style={styles.cardContent}>
-        <View style={styles.employerHeader}>
-          <View style={styles.employerAvatar}>
-            <Text style={styles.employerInitial}>
-              {user?.name?.charAt(0)?.toUpperCase() || "P"}
+        <View style={styles.employerInfo}>
+          <Text style={styles.employerName}>
+            {user?.name} {user?.lastname}
+          </Text>
+
+          <View style={styles.employerLocation}>
+            <Icon name="place" size={14} color={COLORS.mediumGray} />
+            <Text style={styles.employerLocationText}>
+              {employer?.city}, {employer?.state}
             </Text>
           </View>
-          <View style={styles.employerInfo}>
-            <Text style={styles.employerName}>
-              {user?.name} {user?.lastname}
+
+          <View style={styles.employerContact}>
+            <Icon name="business" size={14} color={COLORS.primary} />
+            <Text style={styles.employerContactText}>
+              {employer?.farms?.length || 0} fincas registradas
             </Text>
-            <View style={styles.employerLocation}>
-              <Icon name="place" size={14} color={COLORS.textLight} />
-              <Text style={styles.employerLocationText}>
-                {employer?.city}, {employer?.state}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.employerStats}>
-            <Text style={styles.employerStatsNumber}>
-              {employer?.farms?.length || 0}
-            </Text>
-            <Text style={styles.employerStatsLabel}>Fincas</Text>
           </View>
         </View>
       </View>
-    </View>
+    </InfoCard>
   );
 };
+
+// Componente reutilizable para ítems de detalle
+const DetailItem = ({ icon, iconColor, label, value }) => (
+  <View style={styles.detailItem}>
+    <View style={[styles.detailIcon, { backgroundColor: `${iconColor}15` }]}>
+      <Icon name={icon} size={16} color={iconColor} />
+    </View>
+    <View style={styles.detailContent}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
+  </View>
+);
+
+// Componente reutilizable para beneficios
+const BenefitItem = ({ included, icon, label }) => (
+  <View
+    style={[
+      styles.benefitItem,
+      included ? styles.benefitIncluded : styles.benefitNotIncluded,
+    ]}>
+    <Icon
+      name={icon}
+      size={20}
+      color={included ? COLORS.success : COLORS.mediumGray}
+    />
+    <Text
+      style={[
+        styles.benefitText,
+        included ? styles.benefitIncludedText : styles.benefitNotIncludedText,
+      ]}>
+      {label}
+    </Text>
+    {included && <Icon name="check-circle" size={16} color={COLORS.success} />}
+  </View>
+);
 
 // Componente principal
 const JobOfferDetail = () => {
@@ -853,8 +567,6 @@ const JobOfferDetail = () => {
     try {
       setLoading(true);
       const jobOfferData = await getJobOfferById(jobOfferId);
-
-      console.log("Job offer response:", jobOfferData);
 
       if (jobOfferData) {
         setJobOffer(jobOfferData);
@@ -882,14 +594,11 @@ const JobOfferDetail = () => {
   const handleShare = async () => {
     if (!jobOffer) return;
 
-    const location = jobOffer?.farmInfo?.location || jobOffer?.displayLocation || {};
-    const getCurrentPhase = () => {
-      if (!jobOffer?.phaseId || !jobOffer?.availablePhasesForCrop) return null;
-      return jobOffer.availablePhasesForCrop.find(phase => phase.id === jobOffer.phaseId);
-    };
-
-    const currentPhase = getCurrentPhase();
-    const cleanPhaseName = currentPhase?.name?.replace(/^[🌾🌱🌿🌼🌰🧺🍫♻️]\s*\d+\.\s*/, "") || "No especificada";
+    const location =
+      jobOffer?.farmInfo?.location || jobOffer?.displayLocation || {};
+    const currentPhase = jobOffer?.availablePhasesForCrop?.find(
+      (phase) => phase.id === jobOffer.phaseId
+    );
 
     const fullLocation = [
       location?.village && `Vereda ${location.village}`,
@@ -900,50 +609,20 @@ const JobOfferDetail = () => {
       .filter(Boolean)
       .join(", ");
 
-    const includesFood = jobOffer.includesFood
-      ? "✔ Alimentación incluida"
-      : "✘ Sin alimentación";
-    const includesLodging = jobOffer.includesLodging
-      ? "✔ Alojamiento incluido"
-      : "✘ Sin alojamiento";
-    const cropType = jobOffer?.cropType?.name || "No especificado";
-
-    const formattedSalary = jobOffer.salary
-      ? new Intl.NumberFormat("es-CO", {
-          style: "currency",
-          currency: "COP",
-          maximumFractionDigits: 0,
-        }).format(jobOffer.salary)
-      : "No especificado";
-
-    const workersNeeded = jobOffer?.workersNeeded 
-      ? `\n🔹 *Trabajadores requeridos:* ${jobOffer.workersNeeded} ${jobOffer.workersNeeded === 1 ? 'persona' : 'personas'}`
-      : '';
-
-    const phaseInfo = `\n🔹 *Fase del cultivo:* ${cleanPhaseName}`;
-
-    const paymentDetails = jobOffer.paymentType === "Por_labor" && jobOffer.plantCount
-      ? `\n🔹 *Plantas a trabajar:* ${parseInt(jobOffer.plantCount).toLocaleString()} plantas`
-      : '';
-
-    const requirements = jobOffer?.requirements 
-      ? `\n🔹 *Requisitos:* ${jobOffer.requirements}`
-      : '';
-
-    const message = `📢 *Nueva oportunidad laboral disponible*\n
+    const message = `📢 *Oportunidad laboral en ${
+      jobOffer?.cropType?.name || "agricultura"
+    }*\n
 🔹 *Cargo:* ${jobOffer.title}
 🔹 *Ubicación:* ${fullLocation}
-🔹 *Tipo de cultivo:* ${cropType}${phaseInfo}
-🔹 *Remuneración:* ${formattedSalary} (${
-      jobOffer.paymentType === "Por_dia"
-        ? "por día trabajado"
-        : "por trabajo completo"
-    })${paymentDetails}${workersNeeded}
-🔹 *Beneficios:*
-  - ${includesFood}
-  - ${includesLodging}${requirements}
+🔹 *Salario:* ${new Intl.NumberFormat("es-CO", {
+      style: "currency",
+      currency: "COP",
+      maximumFractionDigits: 0,
+    }).format(jobOffer.salary)}
+🔹 *Duración:* ${jobOffer.duration || "No especificado"} días
+🔹 *Postulantes:* ${jobOffer.applicationsCount || 0}
 
-📲 Conoce más detalles descargando la app *Jornaleros*.`;
+📲 Más detalles en la app *Jornaleros*.`;
 
     try {
       await Share.share({
@@ -986,18 +665,18 @@ const JobOfferDetail = () => {
   return (
     <ScreenLayout navigation={navigation}>
       <View style={styles.container}>
-        {/* Header minimalista */}
+        {/* Header mejorado */}
         <View style={styles.header}>
           <TouchableOpacity
-            style={styles.headerButton}
+            style={styles.backButton}
             onPress={() => navigation.goBack()}>
             <Icon name="arrow-back" size={24} color={COLORS.primary} />
           </TouchableOpacity>
 
           <Text style={styles.headerTitle}>Detalles de la Oferta</Text>
 
-          <TouchableOpacity style={styles.headerButton} onPress={handleShare}>
-            <Icon name="share" size={24} color={COLORS.primary} />
+          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+            <Icon name="share" size={20} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
 
@@ -1005,74 +684,60 @@ const JobOfferDetail = () => {
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          {/* Hero Section */}
+          {/* Sección Hero */}
           <HeroSection jobOffer={jobOffer} />
 
-          {/* Ubicación Detallada */}
-          <LocationDetailCard jobOffer={jobOffer} />
-
-          {/* Información Mejorada de la Finca */}
-          <EnhancedFarmInfoCard jobOffer={jobOffer} />
-
-          {/* Fase específica de trabajo */}
+          {/* Tarjetas de información */}
+          <LocationCard jobOffer={jobOffer} />
+          <PaymentCard jobOffer={jobOffer} />
           <WorkPhaseCard jobOffer={jobOffer} />
-
-          {/* Pago y Beneficios Mejorado */}
-          <PaymentAndBenefitsCard jobOffer={jobOffer} />
-          
-          {/* Detalles Adicionales */}
+          <FarmInfoCard jobOffer={jobOffer} />
           <AdditionalDetailsCard jobOffer={jobOffer} />
-          
+
           {/* Descripción */}
           {jobOffer?.description && (
-            <View style={styles.infoCard}>
-              <View style={styles.cardHeader}>
-                <View
-                  style={[styles.cardIcon, { backgroundColor: COLORS.accent }]}>
-                  <Icon name="description" size={24} color="#FFFFFF" />
-                </View>
-                <View style={styles.cardHeaderText}>
-                  <Text style={styles.cardTitle}>Descripción del Trabajo</Text>
-                </View>
-              </View>
-              <View style={styles.cardContent}>
-                <Text style={styles.descriptionText}>
-                  {jobOffer.description}
-                </Text>
-              </View>
-            </View>
+            <InfoCard
+              icon="description"
+              iconColor={COLORS.accent}
+              title="Descripción del Trabajo"
+              subtitle="Detalles adicionales sobre la oferta">
+              <Text style={styles.descriptionText}>{jobOffer.description}</Text>
+            </InfoCard>
           )}
-          
-          {/* Información del Empleador */}
+
+          {/* Información del empleador */}
           <EmployerCard jobOffer={jobOffer} />
+
+          {/* Botones de acción - AHORA DENTRO DEL SCROLL */}
+          <View style={styles.actionSection}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.editButton]}
+              onPress={() =>
+                navigation.navigate("EditJobOffer", {
+                  jobOfferId: jobOffer.id,
+                })
+              }>
+              <Icon name="edit" size={20} color={COLORS.white} />
+              <Text style={styles.actionButtonText}>Editar Oferta</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, styles.applicantsButton]}
+              onPress={() =>
+                navigation.navigate("JobApplications", {
+                  jobOfferId: jobOffer.id,
+                })
+              }>
+              <Icon name="people" size={20} color={COLORS.white} />
+              <Text style={styles.actionButtonText}>
+                Ver Postulantes ({jobOffer?.applicationsCount || 0})
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.bottomSpacing} />
         </ScrollView>
-
-        {/* Botones de acción fijos */}
-        <View style={styles.actionBar}>
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: COLORS.primary }]}
-            onPress={() =>
-              navigation.navigate("EditJobOffer", { jobOfferId: jobOffer.id })
-            }>
-            <Icon name="edit" size={18} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Editar</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: COLORS.secondary }]}
-            onPress={() =>
-              navigation.navigate("JobApplications", {
-                jobOfferId: jobOffer.id,
-              })
-            }>
-            <Icon name="people" size={18} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>
-              Postulantes ({jobOffer?.applicationsCount || 0})
-            </Text>
-          </TouchableOpacity>
-        </View>
       </View>
-      <CustomTabBar navigation={navigation} currentRoute="JobOffers" />
+      <CustomTabBar navigation={navigation} currentRoute="JobOfferDetail" />
     </ScreenLayout>
   );
 };
@@ -1080,18 +745,60 @@ const JobOfferDetail = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.lightGray,
   },
+
+  // Header styles mejorados
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    shadowColor: COLORS.cardShadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: `${COLORS.primary}10`,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.darkGray,
+  },
+  shareButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: `${COLORS.primary}10`,
+  },
+
+  // Scroll view
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+
+  // Loading and error states
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.lightGray,
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: 16,
     fontSize: 16,
-    color: COLORS.textSecondary,
+    color: COLORS.mediumGray,
     fontWeight: "500",
   },
   errorContainer: {
@@ -1102,7 +809,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: COLORS.textSecondary,
+    color: COLORS.mediumGray,
     textAlign: "center",
     marginVertical: 16,
   },
@@ -1110,199 +817,151 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   retryButtonText: {
-    color: "#FFFFFF",
+    color: COLORS.white,
     fontSize: 16,
     fontWeight: "600",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: COLORS.surface,
-    paddingTop: Platform.OS === "ios" ? 50 : 20,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  headerButton: {
-    width: 40,
-    height: 40,
+
+  // Hero section mejorada
+  heroContainer: {
+    backgroundColor: COLORS.white,
+    margin: 16,
     borderRadius: 20,
-    backgroundColor: `${COLORS.primary}10`,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
-  // Hero Section Styles
-  heroSection: {
-    backgroundColor: COLORS.surface,
-    marginBottom: 16,
-  },
-  heroGradient: {
-    backgroundColor: COLORS.primary,
-  },
-  heroContent: {
     padding: 24,
+    shadowColor: COLORS.cardShadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
   },
   heroHeader: {
-    marginBottom: 24,
-  },
-  statusContainer: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    alignItems: "center",
     marginBottom: 16,
   },
   statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    gap: 6,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
   statusText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
+    color: COLORS.white,
     textTransform: "uppercase",
   },
-  // Estilos para trabajadores requeridos en Hero
-  workersNeededBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.25)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignSelf: "flex-start",
-    marginBottom: 16,
-    gap: 8,
-  },
-  workersNeededText: {
-    fontSize: 14,
-    color: "#FFFFFF",
-    fontWeight: "600",
-  },
   heroTitle: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    marginBottom: 12,
-    lineHeight: 34,
+    fontSize: 24,
+    fontWeight: "800",
+    color: COLORS.darkGray,
+    marginBottom: 16,
+    lineHeight: 30,
   },
-  // Nuevos estilos para cultivo y fase
-  cropPhaseInfo: {
-    gap: 8,
+  cropInfoContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 20,
   },
-  cropInfo: {
+  cropInfoItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    backgroundColor: COLORS.background,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
   },
-  cropName: {
-    fontSize: 16,
-    color: "rgba(255,255,255,0.9)",
+  cropIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.white,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cropInfoText: {
+    fontSize: 14,
+    color: COLORS.darkGray,
     fontWeight: "600",
   },
-  phaseInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+
+  // Estadísticas del hero
+  heroStats: {
+    gap: 16,
   },
-  phaseName: {
+  salaryCard: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  salaryLabel: {
     fontSize: 14,
     color: "rgba(255,255,255,0.8)",
     fontWeight: "500",
-  },
-  heroStats: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 20,
-  },
-  heroPrimaryCard: {
-    backgroundColor: "rgba(255,255,255,0.15)",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: "center",
-    flex: 1,
+    marginBottom: 4,
   },
   salaryAmount: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    fontSize: 28,
+    fontWeight: "800",
+    color: COLORS.white,
     marginBottom: 4,
   },
   salaryPeriod: {
     fontSize: 14,
-    color: "rgba(255,255,255,0.8)",
+    color: "rgba(255,255,255,0.9)",
     fontWeight: "500",
   },
-  heroMetrics: {
+  statsGrid: {
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
   },
-  metricItem: {
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+  statItem: {
+    flex: 1,
+    backgroundColor: COLORS.background,
     borderRadius: 12,
-    minWidth: 65,
+    padding: 16,
+    alignItems: "center",
+    gap: 8,
   },
-  metricValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    marginTop: 4,
-    marginBottom: 2,
+  statValue: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: COLORS.darkGray,
   },
-  metricLabel: {
-    fontSize: 11,
-    color: "rgba(255,255,255,0.7)",
+  statLabel: {
+    fontSize: 12,
+    color: COLORS.mediumGray,
     fontWeight: "500",
+    textAlign: "center",
   },
-  // Card Styles
-  infoCard: {
-    backgroundColor: COLORS.surface,
+
+  // Card styles mejorados
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
     marginHorizontal: 16,
     marginBottom: 16,
-    borderRadius: 16,
-    overflow: "hidden",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    shadowColor: COLORS.cardShadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  highlightCard: {
+    borderWidth: 2,
+    borderColor: `${COLORS.primary}20`,
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     padding: 20,
-    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -1312,7 +971,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 16,
   },
   cardHeaderText: {
     flex: 1,
@@ -1320,410 +979,155 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: COLORS.text,
+    color: COLORS.darkGray,
     marginBottom: 2,
   },
   cardSubtitle: {
     fontSize: 13,
-    color: COLORS.textSecondary,
+    color: COLORS.mediumGray,
     fontWeight: "500",
   },
   cardContent: {
     padding: 20,
   },
-  // Estilos para fase específica de trabajo
-  phaseEmoji: {
-    fontSize: 20,
-  },
-  currentWorkPhaseCard: {
-    backgroundColor: `${COLORS.phase}10`,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: `${COLORS.phase}30`,
-  },
-  currentPhaseHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
+
+  // Detail items mejorados
+  detailGrid: {
     gap: 16,
   },
-  currentPhaseNumber: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.phase,
+  detailItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  detailIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
+    marginTop: 2,
   },
-  currentPhaseNumberText: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  currentPhaseInfo: {
+  detailContent: {
     flex: 1,
   },
-  currentPhaseTitle: {
-    fontSize: 12,
-    color: COLORS.phase,
+  detailLabel: {
+    fontSize: 13,
+    color: COLORS.mediumGray,
     fontWeight: "600",
     marginBottom: 4,
-    textTransform: "uppercase",
   },
-  currentPhaseNameText: {
-    fontSize: 18,
-    color: COLORS.text,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  currentPhaseDescription: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
+  detailValue: {
+    fontSize: 15,
+    color: COLORS.darkGray,
+    fontWeight: "600",
     lineHeight: 20,
-    marginBottom: 8,
   },
-  phaseDurationBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: `${COLORS.phase}20`,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    alignSelf: "flex-start",
-    gap: 6,
-  },
-  phaseDurationText: {
-    fontSize: 12,
-    color: COLORS.phase,
-    fontWeight: "500",
-  },
-  // Timeline de fases
-  phaseProgressSection: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 20,
-  },
-  progressTitle: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-    marginBottom: 16,
-  },
-  phaseTimeline: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  timelinePhaseItem: {
-    alignItems: "center",
-    flex: 1,
-    position: "relative",
-  },
-  timelinePhaseCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.border,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  timelinePhaseCircleCurrent: {
-    backgroundColor: COLORS.phase,
-  },
-  timelinePhaseCirclePast: {
-    backgroundColor: COLORS.success,
-  },
-  timelinePhaseEmoji: {
-    fontSize: 16,
-  },
-  timelinePhaseNumber: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.textLight,
-  },
-  timelinePhaseNumberPast: {
-    color: "#FFFFFF",
-  },
-  timelinePhaseName: {
-    fontSize: 10,
-    color: COLORS.textLight,
-    fontWeight: "500",
-    textAlign: "center",
-    lineHeight: 12,
-  },
-  timelinePhaseNameCurrent: {
-    color: COLORS.phase,
-    fontWeight: "700",
-  },
-  timelineConnector: {
-    position: "absolute",
-    top: 18,
-    right: -25,
-    width: 50,
-    height: 2,
-    backgroundColor: COLORS.border,
-    zIndex: -1,
-  },
-  timelineConnectorPast: {
-    backgroundColor: COLORS.success,
-  },
-  morePhaseText: {
-    fontSize: 11,
-    color: COLORS.textLight,
-    fontWeight: "500",
-    fontStyle: "italic",
-    textAlign: "center",
-    marginTop: 12,
-  },
-  // Location Detail Styles
-  locationDetailContainer: {
-    gap: 16,
-  },
-  locationItem: {
+
+  // Location específicos
+  locationMain: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
-  },
-  locationContent: {
-    flex: 1,
-  },
-  locationLabel: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    fontWeight: "500",
-    marginBottom: 4,
-  },
-  locationValue: {
-    fontSize: 15,
-    color: COLORS.text,
-    fontWeight: "600",
-    lineHeight: 22,
-  },
-  // Enhanced Farm Info Styles
-  farmDetailGrid: {
-    gap: 20,
-  },
-  farmDetailItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  farmDetailIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: `${COLORS.primary}10`,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  farmDetailContent: {
-    flex: 1,
-  },
-  farmDetailLabel: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    fontWeight: "500",
-    marginBottom: 2,
-  },
-  farmDetailValue: {
-    fontSize: 15,
-    color: COLORS.text,
-    fontWeight: "600",
-  },
-  // Payment and Benefits Styles Mejorados
-  paymentGrid: {
-    marginBottom: 24,
-  },
-  paymentMainCard: {
-    backgroundColor: `${COLORS.success}10`,
-    padding: 20,
-    borderRadius: 16,
-    alignItems: "center",
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: `${COLORS.success}30`,
-  },
-  paymentMainHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-    gap: 8,
-  },
-  paymentMainTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.text,
-  },
-  paymentMainAmount: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: COLORS.success,
-    marginBottom: 4,
-  },
-  paymentMainType: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-  // Estilos específicos para pago por planta
-  plantPaymentDetails: {
-    backgroundColor: `${COLORS.plant}10`,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: `${COLORS.plant}30`,
-  },
-  plantPaymentTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: COLORS.plant,
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  plantDetailsGrid: {
-    gap: 12,
-    marginBottom: 16,
-  },
-  plantDetailItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.surface,
-    padding: 12,
-    borderRadius: 12,
-    gap: 12,
-  },
-  plantDetailIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: `${COLORS.plant}20`,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  plantDetailContent: {
-    flex: 1,
-  },
-  plantDetailLabel: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    fontWeight: "500",
-    marginBottom: 2,
-  },
-  plantDetailValue: {
-    fontSize: 15,
-    color: COLORS.text,
-    fontWeight: "600",
-  },
-  // Cálculo de pago
-  paymentCalculation: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 16,
-  },
-  calculationTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  calculationBreakdown: {
-    alignItems: "center",
-  },
-  calculationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  calculationText: {
-    fontSize: 14,
-    color: COLORS.text,
-    fontWeight: "500",
-  },
-  calculationOperator: {
-    fontSize: 16,
-    color: COLORS.plant,
-    fontWeight: "700",
-  },
-  calculationResult: {
-    fontSize: 16,
-    color: COLORS.plant,
-    fontWeight: "700",
-  },
-  paymentDetailsGrid: {
-    flexDirection: "row",
-    gap: 16,
-    marginBottom: 16,
-  },
-  paymentDetailItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: COLORS.background,
     padding: 16,
     borderRadius: 12,
-    gap: 12,
-  },
-  paymentDetailContent: {
-    flex: 1,
-  },
-  paymentDetailLabel: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    fontWeight: "500",
-    marginBottom: 2,
-  },
-  paymentDetailValue: {
-    fontSize: 14,
-    color: COLORS.text,
-    fontWeight: "600",
-  },
-  laborTypeCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: `${COLORS.info}10`,
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: `${COLORS.info}30`,
-  },
-  laborTypeContent: {
-    flex: 1,
-  },
-  laborTypeLabel: {
-    fontSize: 12,
-    color: COLORS.info,
-    fontWeight: "500",
-    marginBottom: 2,
-  },
-  laborTypeValue: {
-    fontSize: 14,
-    color: COLORS.text,
-    fontWeight: "600",
-  },
-  benefitsSection: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 20,
-  },
-  benefitsSectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: COLORS.text,
     marginBottom: 16,
   },
-  benefitsGrid: {
+  locationText: {
+    flex: 1,
+    fontSize: 15,
+    color: COLORS.darkGray,
+    fontWeight: "600",
+    lineHeight: 22,
+  },
+  locationDetails: {
     gap: 12,
+  },
+
+  // Phase card mejorada
+  phaseCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 16,
+  },
+  phaseEmoji: {
+    fontSize: 20,
+  },
+  phaseName: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.darkGray,
+    marginBottom: 8,
+  },
+  phaseDescription: {
+    fontSize: 15,
+    color: COLORS.mediumGray,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  phaseDuration: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  phaseDurationText: {
+    fontSize: 14,
+    color: COLORS.phase,
+    fontWeight: "600",
+  },
+
+  // Payment card mejorada
+  paymentMainCard: {
+    backgroundColor: `${COLORS.secondary}10`,
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: `${COLORS.secondary}20`,
+  },
+  paymentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  paymentTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.darkGray,
+  },
+  paymentAmount: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: COLORS.secondary,
+  },
+  plantDetails: {
+    gap: 12,
+    marginBottom: 16,
+  },
+
+  // Benefits section mejorada
+  benefitsSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.darkGray,
+    marginBottom: 12,
+  },
+  benefitsGrid: {
+    gap: 8,
   },
   benefitItem: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    borderRadius: 12,
+    padding: 12,
+    borderRadius: 8,
     gap: 12,
   },
   benefitIncluded: {
@@ -1739,105 +1143,42 @@ const styles = StyleSheet.create({
   benefitText: {
     flex: 1,
     fontSize: 15,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   benefitIncludedText: {
-    color: COLORS.text,
+    color: COLORS.darkGray,
   },
   benefitNotIncludedText: {
-    color: COLORS.textLight,
+    color: COLORS.mediumGray,
   },
-  // Additional Details Styles
-  additionalDetailsGrid: {
-    gap: 24,
-  },
-  detailSection: {
-    gap: 12,
-  },
-  detailSectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: COLORS.text,
-    marginBottom: 8,
-  },
-  detailRow: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  detailItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    backgroundColor: COLORS.background,
-    padding: 16,
-    borderRadius: 12,
-  },
-  detailContent: {
-    flex: 1,
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    fontWeight: "500",
-    marginBottom: 4,
-  },
-  detailValue: {
-    fontSize: 14,
-    color: COLORS.text,
-    fontWeight: "600",
-    lineHeight: 20,
-  },
-  // Estilos para sección de requerimientos
-  requirementsContainer: {
-    backgroundColor: `${COLORS.info}10`,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: `${COLORS.info}30`,
-  },
-  requirementItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    backgroundColor: COLORS.background,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  requirementText: {
-    flex: 1,
-    fontSize: 14,
-    color: COLORS.text,
-    lineHeight: 20,
-  },
-  // Employer Card Styles
-  employerHeader: {
+
+  // Employer card mejorada
+  employerContainer: {
     flexDirection: "row",
     alignItems: "center",
   },
   employerAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: COLORS.primary,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
   },
   employerInitial: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: COLORS.white,
   },
   employerInfo: {
     flex: 1,
+    gap: 4,
   },
   employerName: {
     fontSize: 16,
     fontWeight: "700",
-    color: COLORS.text,
-    marginBottom: 4,
+    color: COLORS.darkGray,
   },
   employerLocation: {
     flexDirection: "row",
@@ -1846,62 +1187,68 @@ const styles = StyleSheet.create({
   },
   employerLocationText: {
     fontSize: 13,
-    color: COLORS.textLight,
+    color: COLORS.mediumGray,
     fontWeight: "500",
   },
-  employerStats: {
+  employerContact: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 4,
   },
-  employerStatsNumber: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: COLORS.secondary,
-  },
-  employerStatsLabel: {
-    fontSize: 11,
-    color: COLORS.textLight,
+  employerContactText: {
+    fontSize: 13,
+    color: COLORS.primary,
     fontWeight: "500",
   },
+
+  // Description
   descriptionText: {
     fontSize: 15,
-    color: COLORS.text,
+    color: COLORS.darkGray,
     lineHeight: 24,
   },
-  // Action Bar Styles
-  actionBar: {
-    position: "absolute",
-    bottom: 16,
-    left: 16,
-    right: 16,
-    flexDirection: "row",
+
+  // Action section - NUEVA SECCIÓN DENTRO DEL SCROLL
+  actionSection: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 16,
     gap: 12,
-    backgroundColor: COLORS.background,
-    paddingTop: 16,
   },
   actionButton: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
+    shadowColor: COLORS.cardShadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  editButton: {
+    backgroundColor: COLORS.primary,
+  },
+  applicantsButton: {
+    backgroundColor: COLORS.secondary,
+    marginBottom: 40,
   },
   actionButtonText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.white,
+  },
+
+  // Bottom spacing para CustomTabBar
+  bottomSpacing: {
+    height: 20,
+  },
+
+  // Details grid
+  detailsGrid: {
+    gap: 16,
   },
 });
 

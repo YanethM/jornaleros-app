@@ -75,3 +75,100 @@ export const updateEmployerProfile = async (employerProfileId, updateData) => {
     throw error;
   }
 };
+
+export const getApprovedWorkersByEmployer = async (employerId) => {
+  try {
+    const response = await ApiClient.get(`/employer/${employerId}/approved-workers`);
+    return response;
+  } catch (error) {
+    console.error('Error fetching approved workers by employer ID:', error);
+    throw error;
+  }
+};
+
+
+export const acceptApplication = async (applicationId, employerId, message = null) => {
+  try {
+    console.log("=== SERVICIO: ACEPTANDO APLICACIÓN ===");
+    console.log("Application ID:", applicationId);
+    console.log("Employer ID:", employerId);
+    console.log("Message:", message);
+    console.log("=====================================");
+
+    const requestData = {
+      employerId,
+      ...(message && { message })
+    };
+
+    const response = await ApiClient.post(`/employer/applications/${applicationId}/accept`, requestData);
+
+    return response.data;
+  } catch (error) {
+    console.error("=== SERVICIO: ERROR ACEPTANDO APLICACIÓN ===");
+    console.error("Application ID:", applicationId);
+    console.error("Error:", error);
+    console.error("Response data:", error.response?.data);
+    throw error;
+  }
+};
+
+export const rejectApplication = async (applicationId, employerId, reason = null) => {
+  try {
+    console.log("=== SERVICIO: RECHAZANDO APLICACIÓN ===");
+    console.log("Application ID:", applicationId);
+    console.log("Employer ID:", employerId);
+    console.log("Reason:", reason);
+    console.log("======================================");
+
+    const requestData = {
+      employerId,
+      ...(reason && { reason })
+    };
+
+    const response = await ApiClient.post(`/applications/${applicationId}/reject`, requestData);
+
+    console.log("=== SERVICIO: APLICACIÓN RECHAZADA ===");
+    console.log("Success:", response.data.success);
+    console.log("Worker:", response.data.data?.application?.worker?.name, response.data.data?.application?.worker?.lastname);
+    console.log("Reason:", response.data.data?.application?.reason);
+    console.log("=====================================");
+
+    return response.data;
+  } catch (error) {
+    console.error("=== SERVICIO: ERROR RECHAZANDO APLICACIÓN ===");
+    console.error("Application ID:", applicationId);
+    console.error("Error:", error);
+    console.error("Response data:", error.response?.data);
+    console.error("Response status:", error.response?.status);
+    console.error("============================================");
+    throw error;
+  }
+};
+
+export const getApplicationHistory = async (applicationId) => {
+  try {
+    console.log("=== SERVICIO: OBTENIENDO HISTORIAL ===");
+    console.log("Application ID:", applicationId);
+    console.log("=====================================");
+
+    const response = await ApiClient.get(`/applications/${applicationId}/history`);
+
+    console.log("=== SERVICIO: HISTORIAL OBTENIDO ===");
+    console.log("Success:", response.data.success);
+    console.log("Current status:", response.data.data?.application?.currentStatus);
+    console.log("History entries:", response.data.data?.application?.history?.length || 0);
+    console.log("Worker:", response.data.data?.application?.worker?.name, response.data.data?.application?.worker?.lastname);
+    console.log("Job:", response.data.data?.application?.jobOffer?.title);
+    console.log("===================================");
+
+    return response.data;
+  } catch (error) {
+    console.error("=== SERVICIO: ERROR HISTORIAL ===");
+    console.error("Application ID:", applicationId);
+    console.error("Error:", error);
+    console.error("Response data:", error.response?.data);
+    console.error("Response status:", error.response?.status);
+    console.error("================================");
+    throw error;
+  }
+};

@@ -696,7 +696,7 @@ const styles = StyleSheet.create({
   publicViewChip: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#6366f1", // Color índigo/violeta para destacar
+    backgroundColor: PRIMARY_COLOR,
     borderRadius: 25,
     paddingHorizontal: 16,
     paddingVertical: 10,

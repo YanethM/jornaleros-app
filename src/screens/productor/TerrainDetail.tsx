@@ -943,7 +943,7 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
                     <Icon
                       name="business"
                       size={16}
-                      color={COLORS.text.secondary}
+                      color={COLORS.text.primary}
                     />
                     <Text style={styles.locationText}>
                       Organización: {employerProfile.organization}
@@ -1309,9 +1309,9 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
                 <View
                   style={[
                     styles.infoIconContainer,
-                    { backgroundColor: COLORS.secondaryLight },
+                    { backgroundColor: COLORS.primaryLight },
                   ]}>
-                  <Icon name="nature" size={20} color={COLORS.secondary} />
+                  <Icon name="nature" size={20} color={COLORS.primary} />
                 </View>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Total de Plantas</Text>
@@ -1341,12 +1341,12 @@ const TerrainDetail: React.FC<TerrainDetailProps> = ({ navigation, route }) => {
                 <View
                   style={[
                     styles.infoIconContainer,
-                    { backgroundColor: COLORS.warningLight },
+                    { backgroundColor: COLORS.primaryLight },
                   ]}>
                   <Icon
                     name="calendar-today"
                     size={20}
-                    color={COLORS.warning}
+                    color={COLORS.primary}
                   />
                 </View>
                 <View style={styles.infoContent}>
@@ -1825,12 +1825,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // Action buttons
   actionContainer: {
     flexDirection: "row",
     marginHorizontal: 20,
     gap: 12,
     marginTop: 8,
+    marginBottom: 50,
   },
   actionButton: {
     flex: 1,

@@ -23,7 +23,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from 'expo-linear-gradient';
+import { LinearGradient } from "expo-linear-gradient";
 
 // Services imports
 import { getUserData } from "../../../../services/userService";
@@ -35,16 +35,18 @@ import {
 import { getAvailableWorkers } from "../../../../services/workerService";
 import { getFarmByemployerId } from "../../../../services/farmService";
 import { getCropType } from "../../../../services/cropTypeService";
+
 import ScreenLayout from "../../../../components/ScreenLayout";
+import { getMyRatingStatsService } from "../../../../services/qualifitionService";
 
 const { width, height } = Dimensions.get("window");
 
-// Enhanced Design System
+// Enhanced Design System (igual que antes...)
 const DESIGN_SYSTEM = {
   colors: {
     primary: {
       50: "#f0f4f7",
-      100: "#dae4ea", 
+      100: "#dae4ea",
       500: "#284F66",
       600: "#1e3d52",
       700: "#162d3d",
@@ -157,7 +159,7 @@ const DESIGN_SYSTEM = {
   },
 };
 
-// Enhanced crop type configurations
+// Enhanced crop type configurations (igual que antes...)
 const CROP_CONFIGS = {
   Cacao: {
     gradient: ["#8B4513", "#A0522D"],
@@ -202,7 +204,7 @@ const TABS = {
   OFFERS: "offers",
 };
 
-// State Management (same as before)
+// ✅ ACTUALIZAR STATE INICIAL PARA INCLUIR DATOS DE EVALUACIÓN
 const initialState = {
   userData: null,
   myJobOffers: [],
@@ -210,8 +212,16 @@ const initialState = {
   availableWorkers: [],
   farmsData: [],
   cropTypes: [],
+  // ✅ NUEVO: Estado para evaluaciones
+  ratingData: {
+    hasRatings: false,
+    averageRating: 0,
+    totalRatings: 0,
+    roleType: null,
+    loading: true,
+  },
   dashboardStats: {
-    employerRating: 4.5,
+    employerRating: 0, // ✅ CAMBIAR: Ahora será dinámico
     totalOffers: 0,
     activeOffers: 0,
     totalApplications: 0,
@@ -229,7 +239,7 @@ const initialState = {
 
 const actionTypes = {
   SET_LOADING: "SET_LOADING",
-  SET_REFRESHING: "SET_REFRESHING", 
+  SET_REFRESHING: "SET_REFRESHING",
   SET_ERROR: "SET_ERROR",
   SET_USER_DATA: "SET_USER_DATA",
   SET_JOB_OFFERS: "SET_JOB_OFFERS",
@@ -238,6 +248,8 @@ const actionTypes = {
   SET_CROP_TYPES: "SET_CROP_TYPES",
   SET_AVAILABLE_WORKERS: "SET_AVAILABLE_WORKERS",
   SET_DASHBOARD_STATS: "SET_DASHBOARD_STATS",
+  // ✅ NUEVO: Acción para datos de evaluación
+  SET_RATING_DATA: "SET_RATING_DATA",
   RESET_STATE: "RESET_STATE",
 };
 
@@ -263,6 +275,9 @@ function dashboardReducer(state, action) {
       return { ...state, availableWorkers: action.payload };
     case actionTypes.SET_DASHBOARD_STATS:
       return { ...state, dashboardStats: action.payload };
+    // ✅ NUEVO: Reducer para datos de evaluación
+    case actionTypes.SET_RATING_DATA:
+      return { ...state, ratingData: action.payload };
     case actionTypes.RESET_STATE:
       return initialState;
     default:
@@ -270,29 +285,39 @@ function dashboardReducer(state, action) {
   }
 }
 
-// Enhanced Components
+// Enhanced Components (mismos que antes, pero actualizar EnhancedRatingCard)
+
 const ModernHeader = React.memo(({ user, onProfilePress }) => (
   <View style={styles.header}>
-    <StatusBar barStyle="dark-content" backgroundColor={DESIGN_SYSTEM.colors.white} />
+    <StatusBar
+      barStyle="dark-content"
+      backgroundColor={DESIGN_SYSTEM.colors.white}
+    />
     <LinearGradient
       colors={[DESIGN_SYSTEM.colors.white, DESIGN_SYSTEM.colors.gray[50]]}
-      style={styles.headerGradient}
-    >
+      style={styles.headerGradient}>
       <View style={styles.headerContent}>
         <View style={styles.headerLeft}>
           <Text style={styles.greetingText}>
-            Hola, <Text style={styles.userName}>{user?.name || "Productor"}</Text>
+            Hola,{" "}
+            <Text style={styles.userName}>{user?.name || "Productor"}</Text>
           </Text>
           <Text style={styles.roleText}>
-            <Ionicons name="shield-checkmark" size={14} color={DESIGN_SYSTEM.colors.success[600]} />
-            {" "}{user?.role?.name || "Empleador"} • Panel de Control
+            <Ionicons
+              name="shield-checkmark"
+              size={14}
+              color={DESIGN_SYSTEM.colors.success[600]}
+            />{" "}
+            {user?.role?.name || "Empleador"} • Panel de Control
           </Text>
         </View>
         <TouchableOpacity style={styles.profileButton} onPress={onProfilePress}>
           <LinearGradient
-            colors={[DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600]]}
-            style={styles.profileAvatar}
-          >
+            colors={[
+              DESIGN_SYSTEM.colors.primary[500],
+              DESIGN_SYSTEM.colors.primary[600],
+            ]}
+            style={styles.profileAvatar}>
             <Text style={styles.profileInitial}>
               {user?.name?.charAt(0)?.toUpperCase() || "P"}
             </Text>
@@ -313,13 +338,16 @@ const ModernTabs = React.memo(({ activeTab, setActiveTab }) => (
             key={tab}
             style={[styles.tab, isActive && styles.tabActive]}
             onPress={() => setActiveTab(tab)}
-            activeOpacity={0.7}
-          >
+            activeOpacity={0.7}>
             {isActive && <View style={styles.tabActiveIndicator} />}
             <Ionicons
               name={tab === TABS.DASHBOARD ? "home" : "briefcase"}
               size={18}
-              color={isActive ? DESIGN_SYSTEM.colors.primary[600] : DESIGN_SYSTEM.colors.gray[500]}
+              color={
+                isActive
+                  ? DESIGN_SYSTEM.colors.primary[600]
+                  : DESIGN_SYSTEM.colors.gray[500]
+              }
             />
             <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
               {tab === TABS.DASHBOARD ? "Dashboard" : "Ofertas"}
@@ -331,279 +359,424 @@ const ModernTabs = React.memo(({ activeTab, setActiveTab }) => (
   </View>
 ));
 
-const EnhancedStatsCard = React.memo(({ title, value, subtitle, icon, color, trend }) => (
-  <View style={styles.enhancedStatsCard}>
-    <LinearGradient
-      colors={[DESIGN_SYSTEM.colors.white, DESIGN_SYSTEM.colors.gray[50]]}
-      style={styles.statsCardGradient}
-    >
-      <View style={styles.statsCardHeader}>
-        <View style={[styles.statsIconContainer, { backgroundColor: color + "15" }]}>
-          <LinearGradient
-            colors={[color + "20", color + "10"]}
-            style={styles.statsIconGradient}
-          >
-            <Ionicons name={icon} size={24} color={color} />
-          </LinearGradient>
-        </View>
-        <View style={styles.statsInfo}>
-          <Text style={styles.statsValue}>{value}</Text>
-          <Text style={styles.statsTitle}>{title}</Text>
-        </View>
-      </View>
-      
-      {subtitle && (
-        <Text style={styles.statsSubtitle}>{subtitle}</Text>
-      )}
-      
-      {trend && (
-        <View style={styles.statsTrend}>
-          <View style={[styles.trendIndicator, { 
-            backgroundColor: trend.direction === "up" ? DESIGN_SYSTEM.colors.success[50] : DESIGN_SYSTEM.colors.error[50] 
-          }]}>
-            <Ionicons 
-              name={trend.direction === "up" ? "trending-up" : "trending-down"} 
-              size={12} 
-              color={trend.direction === "up" ? DESIGN_SYSTEM.colors.success[600] : DESIGN_SYSTEM.colors.error[600]} 
-            />
-          </View>
-          <Text style={[
-            styles.statsTrendText,
-            { color: trend.direction === "up" ? DESIGN_SYSTEM.colors.success[600] : DESIGN_SYSTEM.colors.error[600] }
-          ]}>
-            {trend.text}
-          </Text>
-        </View>
-      )}
-    </LinearGradient>
-  </View>
-));
-
-const EnhancedRatingCard = React.memo(({ rating, totalReviews }) => (
-  <View style={styles.enhancedRatingCard}>
-    <LinearGradient
-      colors={[DESIGN_SYSTEM.colors.secondary[500], DESIGN_SYSTEM.colors.secondary[600], DESIGN_SYSTEM.colors.secondary[700]]}
-      style={styles.ratingGradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
-      <View style={styles.ratingOverlay}>
-        <View style={styles.ratingContent}>
-          <View style={styles.ratingHeader}>
-            <View style={styles.ratingIconContainer}>
-              <Ionicons name="star" size={28} color={DESIGN_SYSTEM.colors.white} />
-            </View>
-            <Text style={styles.ratingTitle}>Mi Calificación</Text>
-          </View>
-          
-          <View style={styles.ratingScore}>
-            <Text style={styles.ratingNumber}>{rating.toFixed(1)}</Text>
-            <View style={styles.ratingStars}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <View key={star} style={styles.starContainer}>
-                  <Ionicons
-                    name={star <= Math.floor(rating) ? "star" : "star-outline"}
-                    size={18}
-                    color={DESIGN_SYSTEM.colors.white}
-                    style={{ opacity: star <= Math.floor(rating) ? 1 : 0.6 }}
-                  />
-                </View>
-              ))}
-            </View>
-          </View>
-          
-          <Text style={styles.ratingSubtext}>
-            Basado en {totalReviews} evaluaciones de trabajadores
-          </Text>
-        </View>
-      </View>
-    </LinearGradient>
-  </View>
-));
-
-const EnhancedQuickActionButton = React.memo(({ title, icon, color, onPress }) => (
-  <TouchableOpacity
-    style={styles.enhancedQuickActionButton}
-    onPress={onPress}
-    activeOpacity={0.8}
-  >
-    <LinearGradient
-      colors={[color, color + "DD", color + "BB"]}
-      style={styles.quickActionGradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
-      <View style={styles.quickActionIconContainer}>
-        <Ionicons name={icon} size={28} color={DESIGN_SYSTEM.colors.white} />
-      </View>
-      <Text style={styles.quickActionText}>{title}</Text>
-      <View style={styles.quickActionArrow}>
-        <Ionicons name="arrow-forward" size={16} color={DESIGN_SYSTEM.colors.white} />
-      </View>
-    </LinearGradient>
-  </TouchableOpacity>
-));
-
-// Enhanced Offer Card - The main improvement
-const EnhancedOfferCard = React.memo(({ offer, onPress, isMyOffer = false }) => {
-  const cropConfig = CROP_CONFIGS[offer.cropType?.name || offer.cropType] || {
-    gradient: [DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600]],
-    icon: "leaf-outline",
-    lightColor: DESIGN_SYSTEM.colors.primary[50],
-    darkColor: DESIGN_SYSTEM.colors.primary[500],
-  };
-
-  const animatedValue = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(animatedValue, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }, []);
-
-  return (
-    <Animated.View style={[
-      styles.enhancedOfferCard,
-      isMyOffer && styles.myOfferCard,
-      {
-        opacity: animatedValue,
-        transform: [{
-          translateY: animatedValue.interpolate({
-            inputRange: [0, 1],
-            outputRange: [20, 0],
-          }),
-        }],
-      },
-    ]}>
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.9}
-        style={styles.offerCardTouchable}
-      >
-        {/* Background Gradient */}
-        <LinearGradient
-          colors={[DESIGN_SYSTEM.colors.white, DESIGN_SYSTEM.colors.gray[25] || "#fefefe"]}
-          style={styles.offerCardBackground}
-        >
-          {/* Header with crop type and my offer badge */}
-          <View style={styles.enhancedOfferHeader}>
+const EnhancedStatsCard = React.memo(
+  ({ title, value, subtitle, icon, color, trend }) => (
+    <View style={styles.enhancedStatsCard}>
+      <View style={styles.statsCardGradient}>
+        <View style={styles.statsCardHeader}>
+          <View
+            style={[
+              styles.statsIconContainer,
+              { backgroundColor: color + "15" },
+            ]}>
             <LinearGradient
-              colors={cropConfig.gradient}
-              style={styles.cropTypeHeader}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              <View style={styles.cropTypeContent}>
-                <View style={styles.cropIconContainer}>
-                  <Ionicons name={cropConfig.icon} size={20} color={DESIGN_SYSTEM.colors.white} />
-                </View>
-                <Text style={styles.cropTypeText}>
-                  {offer.cropType?.name || offer.cropType}
-                </Text>
-              </View>
-              {isMyOffer && (
-                <View style={styles.myOfferBadgeHeader}>
-                  <Ionicons name="checkmark-circle" size={16} color={DESIGN_SYSTEM.colors.white} />
-                  <Text style={styles.myOfferBadgeHeaderText}>Mi Oferta</Text>
-                </View>
-              )}
+              colors={[color + "20", color + "10"]}
+              style={styles.statsIconGradient}>
+              <Ionicons name={icon} size={24} color={color} />
             </LinearGradient>
           </View>
+          <View style={styles.statsInfo}>
+            <Text style={styles.statsValue}>{value}</Text>
+            <Text style={styles.statsTitle}>{title}</Text>
+          </View>
+        </View>
 
-          {/* Main Content */}
-          <View style={styles.enhancedOfferContent}>
-            {/* Title */}
-            <Text style={styles.enhancedOfferTitle} numberOfLines={2}>
-              {offer.title}
+        {subtitle && <Text style={styles.statsSubtitle}>{subtitle}</Text>}
+
+        {trend && (
+          <View style={styles.statsTrend}>
+            <View
+              style={[
+                styles.trendIndicator,
+                {
+                  backgroundColor:
+                    trend.direction === "up"
+                      ? DESIGN_SYSTEM.colors.success[50]
+                      : DESIGN_SYSTEM.colors.error[50],
+                },
+              ]}>
+              <Ionicons
+                name={
+                  trend.direction === "up" ? "trending-up" : "trending-down"
+                }
+                size={12}
+                color={
+                  trend.direction === "up"
+                    ? DESIGN_SYSTEM.colors.success[600]
+                    : DESIGN_SYSTEM.colors.error[600]
+                }
+              />
+            </View>
+            <Text
+              style={[
+                styles.statsTrendText,
+                {
+                  color:
+                    trend.direction === "up"
+                      ? DESIGN_SYSTEM.colors.success[600]
+                      : DESIGN_SYSTEM.colors.error[600],
+                },
+              ]}>
+              {trend.text}
             </Text>
+          </View>
+        )}
+      </View>
+    </View>
+  )
+);
 
-            {/* Location with enhanced styling */}
-            <View style={styles.enhancedOfferLocation}>
-              <View style={styles.locationIconContainer}>
-                <Ionicons name="location" size={16} color={cropConfig.darkColor} />
-              </View>
-              <Text style={styles.enhancedLocationText}>
-                {offer.displayLocation?.city || offer.city}, {offer.displayLocation?.department || offer.state}
+// ✅ ACTUALIZAR EnhancedRatingCard para usar datos reales
+const EnhancedRatingCard = React.memo(({ ratingData }) => {
+  const { hasRatings, averageRating, totalRatings, loading, roleType } = ratingData;
+
+  if (loading) {
+    return (
+      <View style={styles.enhancedRatingCard}>
+        <LinearGradient
+          colors={[
+            DESIGN_SYSTEM.colors.secondary[500],
+            DESIGN_SYSTEM.colors.secondary[600],
+            DESIGN_SYSTEM.colors.secondary[700],
+          ]}
+          style={styles.ratingGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}>
+          <View style={styles.ratingOverlay}>
+            <View style={styles.ratingContent}>
+              <ActivityIndicator 
+                size="small" 
+                color={DESIGN_SYSTEM.colors.white} 
+              />
+              <Text style={styles.ratingLoadingText}>
+                Cargando calificaciones...
               </Text>
-            </View>
-
-            {/* Details - Simple Layout */}
-            <View style={styles.enhancedOfferDetails}>
-              <View style={styles.offerDetailItem}>
-                <Ionicons name="calendar-outline" size={16} color={DESIGN_SYSTEM.colors.gray[500]} />
-                <Text style={styles.offerDetailText}>{offer.duration} días</Text>
-              </View>
-              
-              <View style={styles.offerDetailItem}>
-                <Ionicons name="cash-outline" size={16} color={DESIGN_SYSTEM.colors.gray[500]} />
-                <Text style={styles.offerDetailText}>${offer.salary?.toLocaleString()}/día</Text>
-              </View>
-              
-              {isMyOffer && (
-                <View style={styles.offerDetailItem}>
-                  <Ionicons name="people-outline" size={16} color={DESIGN_SYSTEM.colors.gray[500]} />
-                  <Text style={styles.offerDetailText}>{offer.applicationsCount || 0} aplicaciones</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Benefits */}
-            {(offer.includesFood || offer.includesLodging) && (
-              <View style={styles.enhancedOfferBenefits}>
-                <Text style={styles.benefitsTitle}>Beneficios incluidos:</Text>
-                <View style={styles.benefitsContainer}>
-                  {offer.includesFood && (
-                    <View style={styles.enhancedBenefitBadge}>
-                      <LinearGradient
-                        colors={[DESIGN_SYSTEM.colors.success[500], DESIGN_SYSTEM.colors.success[600]]}
-                        style={styles.benefitBadgeGradient}
-                      >
-                        <Ionicons name="restaurant" size={14} color={DESIGN_SYSTEM.colors.white} />
-                        <Text style={styles.enhancedBenefitText}>Comida</Text>
-                      </LinearGradient>
-                    </View>
-                  )}
-                  {offer.includesLodging && (
-                    <View style={styles.enhancedBenefitBadge}>
-                      <LinearGradient
-                        colors={[DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600]]}
-                        style={styles.benefitBadgeGradient}
-                      >
-                        <Ionicons name="home" size={14} color={DESIGN_SYSTEM.colors.white} />
-                        <Text style={styles.enhancedBenefitText}>Hospedaje</Text>
-                      </LinearGradient>
-                    </View>
-                  )}
-                </View>
-              </View>
-            )}
-
-            {/* Footer with action indicator */}
-            <View style={styles.offerCardFooter}>
-              <Text style={styles.offerTimeAgo}>Publicado hace 2 días</Text>
-              <View style={styles.actionIndicator}>
-                <Text style={styles.actionText}>Ver detalles</Text>
-                <Ionicons name="arrow-forward" size={16} color={cropConfig.darkColor} />
-              </View>
             </View>
           </View>
         </LinearGradient>
-      </TouchableOpacity>
-    </Animated.View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.enhancedRatingCard}>
+      <LinearGradient
+        colors={[
+          DESIGN_SYSTEM.colors.secondary[500],
+          DESIGN_SYSTEM.colors.secondary[600],
+          DESIGN_SYSTEM.colors.secondary[700],
+        ]}
+        style={styles.ratingGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}>
+        <View style={styles.ratingOverlay}>
+          <View style={styles.ratingContent}>
+            <View style={styles.ratingHeader}>
+              <View style={styles.ratingIconContainer}>
+                <Ionicons
+                  name="star"
+                  size={28}
+                  color={DESIGN_SYSTEM.colors.white}
+                />
+              </View>
+              <Text style={styles.ratingTitle}>Mi Calificación</Text>
+            </View>
+
+            {hasRatings ? (
+              <>
+                <View style={styles.ratingScore}>
+                  <Text style={styles.ratingNumber}>{averageRating.toFixed(1)}</Text>
+                  <View style={styles.ratingStars}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <View key={star} style={styles.starContainer}>
+                        <Ionicons
+                          name={star <= Math.floor(averageRating) ? "star" : "star-outline"}
+                          size={18}
+                          color={DESIGN_SYSTEM.colors.white}
+                          style={{ opacity: star <= Math.floor(averageRating) ? 1 : 0.6 }}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
+                <Text style={styles.ratingSubtext}>
+                  Basado en {totalRatings} evaluación{totalRatings !== 1 ? 'es' : ''} 
+                  {roleType === 'Productor' ? ' de trabajadores' : ' de empleadores'}
+                </Text>
+              </>
+            ) : (
+              <>
+                <View style={styles.ratingScore}>
+                  <Text style={styles.ratingNumber}>--</Text>
+                  <View style={styles.ratingStars}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <View key={star} style={styles.starContainer}>
+                        <Ionicons
+                          name="star-outline"
+                          size={18}
+                          color={DESIGN_SYSTEM.colors.white}
+                          style={{ opacity: 0.6 }}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
+                <Text style={styles.ratingSubtext}>
+                  Aún no has recibido evaluaciones
+                </Text>
+              </>
+            )}
+          </View>
+        </View>
+      </LinearGradient>
+    </View>
   );
 });
 
-// Enhanced Search Bar
+// Resto de componentes igual...
+const EnhancedQuickActionButton = React.memo(
+  ({ title, icon, color, onPress }) => (
+    <TouchableOpacity
+      style={styles.enhancedQuickActionButton}
+      onPress={onPress}
+      activeOpacity={0.8}>
+      <LinearGradient
+        colors={[color, color + "DD", color + "BB"]}
+        style={styles.quickActionGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}>
+        <View style={styles.quickActionIconContainer}>
+          <Ionicons name={icon} size={28} color={DESIGN_SYSTEM.colors.white} />
+        </View>
+        <Text style={styles.quickActionText}>{title}</Text>
+        <View style={styles.quickActionArrow}>
+          <Ionicons
+            name="arrow-forward"
+            size={16}
+            color={DESIGN_SYSTEM.colors.white}
+          />
+        </View>
+      </LinearGradient>
+    </TouchableOpacity>
+  )
+);
+
+// Enhanced Offer Card (igual que antes...)
+const EnhancedOfferCard = React.memo(
+  ({ offer, onPress, isMyOffer = false }) => {
+    const cropConfig = CROP_CONFIGS[offer.cropType?.name || offer.cropType] || {
+      gradient: [
+        DESIGN_SYSTEM.colors.primary[500],
+        DESIGN_SYSTEM.colors.primary[600],
+      ],
+      icon: "leaf-outline",
+      lightColor: DESIGN_SYSTEM.colors.primary[50],
+      darkColor: DESIGN_SYSTEM.colors.primary[500],
+    };
+
+    const animatedValue = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+      Animated.timing(animatedValue, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }, []);
+
+    return (
+      <Animated.View
+        style={[
+          styles.enhancedOfferCard,
+          isMyOffer && styles.myOfferCard,
+          {
+            opacity: animatedValue,
+            transform: [
+              {
+                translateY: animatedValue.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              },
+            ],
+          },
+        ]}>
+        <TouchableOpacity
+          onPress={onPress}
+          activeOpacity={0.9}
+          style={styles.offerCardTouchable}>
+          <LinearGradient
+            colors={[
+              DESIGN_SYSTEM.colors.white,
+              DESIGN_SYSTEM.colors.gray[25] || "#fefefe",
+            ]}
+            style={styles.offerCardBackground}>
+            <View style={styles.enhancedOfferHeader}>
+              <LinearGradient
+                colors={cropConfig.gradient}
+                style={styles.cropTypeHeader}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}>
+                <View style={styles.cropTypeContent}>
+                  <View style={styles.cropIconContainer}>
+                    <Ionicons
+                      name={cropConfig.icon}
+                      size={20}
+                      color={DESIGN_SYSTEM.colors.white}
+                    />
+                  </View>
+                  <Text style={styles.cropTypeText}>
+                    {offer.cropType?.name || offer.cropType}
+                  </Text>
+                </View>
+                {isMyOffer && (
+                  <View style={styles.myOfferBadgeHeader}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={16}
+                      color={DESIGN_SYSTEM.colors.white}
+                    />
+                    <Text style={styles.myOfferBadgeHeaderText}>Mi Oferta</Text>
+                  </View>
+                )}
+              </LinearGradient>
+            </View>
+
+            <View style={styles.enhancedOfferContent}>
+              <Text style={styles.enhancedOfferTitle} numberOfLines={2}>
+                {offer.title}
+              </Text>
+
+              <View style={styles.enhancedOfferLocation}>
+                <View style={styles.locationIconContainer}>
+                  <Ionicons
+                    name="location"
+                    size={16}
+                    color={cropConfig.darkColor}
+                  />
+                </View>
+                <Text style={styles.enhancedLocationText}>
+                  {offer.displayLocation?.city || offer.city},{" "}
+                  {offer.displayLocation?.department || offer.state}
+                </Text>
+              </View>
+
+              <View style={styles.enhancedOfferDetails}>
+                <View style={styles.offerDetailItem}>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={16}
+                    color={DESIGN_SYSTEM.colors.gray[500]}
+                  />
+                  <Text style={styles.offerDetailText}>
+                    {offer.duration} días
+                  </Text>
+                </View>
+
+                <View style={styles.offerDetailItem}>
+                  <Ionicons
+                    name="cash-outline"
+                    size={16}
+                    color={DESIGN_SYSTEM.colors.gray[500]}
+                  />
+                  <Text style={styles.offerDetailText}>
+                    ${offer.salary?.toLocaleString()}/día
+                  </Text>
+                </View>
+
+                {isMyOffer && (
+                  <View style={styles.offerDetailItem}>
+                    <Ionicons
+                      name="people-outline"
+                      size={16}
+                      color={DESIGN_SYSTEM.colors.gray[500]}
+                    />
+                    <Text style={styles.offerDetailText}>
+                      {offer.applicationsCount || 0} aplicaciones
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {(offer.includesFood || offer.includesLodging) && (
+                <View style={styles.enhancedOfferBenefits}>
+                  <Text style={styles.benefitsTitle}>
+                    Beneficios incluidos:
+                  </Text>
+                  <View style={styles.benefitsContainer}>
+                    {offer.includesFood && (
+                      <View style={styles.enhancedBenefitBadge}>
+                        <LinearGradient
+                          colors={[
+                            DESIGN_SYSTEM.colors.success[500],
+                            DESIGN_SYSTEM.colors.success[600],
+                          ]}
+                          style={styles.benefitBadgeGradient}>
+                          <Ionicons
+                            name="restaurant"
+                            size={14}
+                            color={DESIGN_SYSTEM.colors.white}
+                          />
+                          <Text style={styles.enhancedBenefitText}>Comida</Text>
+                        </LinearGradient>
+                      </View>
+                    )}
+                    {offer.includesLodging && (
+                      <View style={styles.enhancedBenefitBadge}>
+                        <LinearGradient
+                          colors={[
+                            DESIGN_SYSTEM.colors.primary[500],
+                            DESIGN_SYSTEM.colors.primary[600],
+                          ]}
+                          style={styles.benefitBadgeGradient}>
+                          <Ionicons
+                            name="home"
+                            size={14}
+                            color={DESIGN_SYSTEM.colors.white}
+                          />
+                          <Text style={styles.enhancedBenefitText}>
+                            Hospedaje
+                          </Text>
+                        </LinearGradient>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.offerCardFooter}>
+                <Text style={styles.offerTimeAgo}>Publicado hace 2 días</Text>
+                <View style={styles.actionIndicator}>
+                  <Text style={styles.actionText}>Ver detalles</Text>
+                  <Ionicons
+                    name="arrow-forward"
+                    size={16}
+                    color={cropConfig.darkColor}
+                  />
+                </View>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }
+);
+
+// Enhanced Search Bar y Filter Chip (iguales que antes...)
 const EnhancedSearchBar = React.memo(({ value, onChangeText, placeholder }) => (
   <View style={styles.enhancedSearchContainer}>
     <LinearGradient
       colors={[DESIGN_SYSTEM.colors.white, DESIGN_SYSTEM.colors.gray[50]]}
-      style={styles.searchGradient}
-    >
+      style={styles.searchGradient}>
       <View style={styles.searchIconContainer}>
-        <Ionicons name="search" size={20} color={DESIGN_SYSTEM.colors.primary[600]} />
+        <Ionicons
+          name="search"
+          size={20}
+          color={DESIGN_SYSTEM.colors.primary[600]}
+        />
       </View>
       <TextInput
         style={styles.enhancedSearchInput}
@@ -613,39 +786,54 @@ const EnhancedSearchBar = React.memo(({ value, onChangeText, placeholder }) => (
         placeholderTextColor={DESIGN_SYSTEM.colors.gray[400]}
       />
       {value ? (
-        <TouchableOpacity onPress={() => onChangeText('')} style={styles.clearButton}>
-          <Ionicons name="close-circle" size={20} color={DESIGN_SYSTEM.colors.gray[400]} />
+        <TouchableOpacity
+          onPress={() => onChangeText("")}
+          style={styles.clearButton}>
+          <Ionicons
+            name="close-circle"
+            size={20}
+            color={DESIGN_SYSTEM.colors.gray[400]}
+          />
         </TouchableOpacity>
       ) : null}
     </LinearGradient>
   </View>
 ));
 
-// Enhanced Filter Chip
 const EnhancedFilterChip = React.memo(({ title, isActive, onPress }) => (
   <TouchableOpacity
     style={styles.enhancedFilterChip}
     onPress={onPress}
-    activeOpacity={0.7}
-  >
+    activeOpacity={0.7}>
     <LinearGradient
-      colors={isActive 
-        ? [DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600]]
-        : [DESIGN_SYSTEM.colors.white, DESIGN_SYSTEM.colors.gray[50]]
+      colors={
+        isActive
+          ? [
+              DESIGN_SYSTEM.colors.primary[500],
+              DESIGN_SYSTEM.colors.primary[600],
+            ]
+          : [DESIGN_SYSTEM.colors.white, DESIGN_SYSTEM.colors.gray[50]]
       }
-      style={styles.filterChipGradient}
-    >
-      <Text style={[styles.enhancedFilterChipText, isActive && styles.filterChipTextActive]}>
+      style={styles.filterChipGradient}>
+      <Text
+        style={[
+          styles.enhancedFilterChipText,
+          isActive && styles.filterChipTextActive,
+        ]}>
         {title}
       </Text>
       {isActive && (
-        <Ionicons name="checkmark" size={16} color={DESIGN_SYSTEM.colors.white} />
+        <Ionicons
+          name="checkmark"
+          size={16}
+          color={DESIGN_SYSTEM.colors.white}
+        />
       )}
     </LinearGradient>
   </TouchableOpacity>
 ));
 
-// Custom Hook (same as before)
+// ✅ ACTUALIZAR Custom Hook para incluir carga de evaluaciones
 const useEmployerData = (user) => {
   const [state, dispatch] = useReducer(dashboardReducer, initialState);
   const isInitializedRef = useRef(false);
@@ -655,6 +843,54 @@ const useEmployerData = (user) => {
     userIdRef.current = user?.id;
   }, [user?.id]);
 
+  // ✅ NUEVA FUNCIÓN: Cargar evaluaciones del usuario
+  const loadMyRatings = useCallback(async () => {
+    try {
+      dispatch({
+        type: actionTypes.SET_RATING_DATA,
+        payload: { ...state.ratingData, loading: true },
+      });
+
+      const response = await getMyRatingStatsService();
+      
+      if (response.success) {
+        dispatch({
+          type: actionTypes.SET_RATING_DATA,
+          payload: {
+            ...response.data,
+            loading: false,
+          },
+        });
+      } else {
+        // Si no hay datos, establecer valores por defecto
+        dispatch({
+          type: actionTypes.SET_RATING_DATA,
+          payload: {
+            hasRatings: false,
+            averageRating: 0,
+            totalRatings: 0,
+            roleType: user?.role?.name || null,
+            loading: false,
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Error cargando evaluaciones:", error);
+      // En caso de error, establecer valores por defecto
+      dispatch({
+        type: actionTypes.SET_RATING_DATA,
+        payload: {
+          hasRatings: false,
+          averageRating: 0,
+          totalRatings: 0,
+          roleType: user?.role?.name || null,
+          loading: false,
+        },
+      });
+    }
+  }, [user?.role?.name]);
+
+  // Resto de funciones igual que antes...
   const fetchUserData = useCallback(async () => {
     try {
       if (!userIdRef.current) {
@@ -676,69 +912,87 @@ const useEmployerData = (user) => {
     }
   }, []);
 
-  const getEmployerId = useCallback(async (userData = null) => {
-    try {
-      let employerData = userData || state.userData;
-      if (!employerData) {
-        employerData = await fetchUserData();
-      }
-      if (!employerData?.employerProfile) {
-        throw new Error("El usuario no tiene perfil de empleador");
-      }
-      return employerData.employerProfile.id;
-    } catch (error) {
-      console.error("Error obteniendo ID del empleador:", error);
-      throw error;
-    }
-  }, [state.userData, fetchUserData]);
-
-  const loadEmployerFarms = useCallback(async (userData = null) => {
-    try {
-      const employerId = await getEmployerId(userData);
+  const getEmployerId = useCallback(
+    async (userData = null) => {
       try {
-        const farmsResponse = await getFarmByemployerId(employerId);
-        dispatch({ type: actionTypes.SET_FARMS_DATA, payload: farmsResponse?.data || [] });
-      } catch (apiError) {
-        const simulatedFarms = [
-          {
-            id: "1",
-            name: "Finca La Esperanza",
-            size: 25.5,
-            plantCount: 1200,
-            workers: 8,
-            offers: 3,
-            cropTypesInfo: [{ name: "Cacao" }],
-            locationString: "Fortul, Arauca, Colombia",
-          },
-          {
-            id: "2", 
-            name: "Finca El Progreso",
-            size: 18.2,
-            plantCount: 850,
-            workers: 6,
-            offers: 2,
-            cropTypesInfo: [{ name: "Café" }],
-            locationString: "Tame, Arauca, Colombia",
-          },
-        ];
-        dispatch({ type: actionTypes.SET_FARMS_DATA, payload: simulatedFarms });
+        let employerData = userData || state.userData;
+        if (!employerData) {
+          employerData = await fetchUserData();
+        }
+        if (!employerData?.employerProfile) {
+          throw new Error("El usuario no tiene perfil de empleador");
+        }
+        return employerData.employerProfile.id;
+      } catch (error) {
+        console.error("Error obteniendo ID del empleador:", error);
+        throw error;
       }
-    } catch (error) {
-      console.error("Error cargando fincas del empleador:", error);
-      dispatch({ type: actionTypes.SET_FARMS_DATA, payload: [] });
-    }
-  }, [getEmployerId]);
+    },
+    [state.userData, fetchUserData]
+  );
 
-  const loadMyJobOffers = useCallback(async (userData = null) => {
-    try {
-      const employerId = await getEmployerId(userData);
-      const jobOffersData = await getJobOffersByEmployerId(employerId);
-      dispatch({ type: actionTypes.SET_JOB_OFFERS, payload: jobOffersData || [] });
-    } catch (error) {
-      console.error("Error cargando mis ofertas:", error);
-      dispatch({ type: actionTypes.SET_ERROR, payload: error.message });
-    }
-  }, [getEmployerId]);
+  const loadEmployerFarms = useCallback(
+    async (userData = null) => {
+      try {
+        const employerId = await getEmployerId(userData);
+        try {
+          const farmsResponse = await getFarmByemployerId(employerId);
+          dispatch({
+            type: actionTypes.SET_FARMS_DATA,
+            payload: farmsResponse?.data || [],
+          });
+        } catch (apiError) {
+          const simulatedFarms = [
+            {
+              id: "1",
+              name: "Finca La Esperanza",
+              size: 25.5,
+              plantCount: 1200,
+              workers: 8,
+              offers: 3,
+              cropTypesInfo: [{ name: "Cacao" }],
+              locationString: "Fortul, Arauca, Colombia",
+            },
+            {
+              id: "2",
+              name: "Finca El Progreso",
+              size: 18.2,
+              plantCount: 850,
+              workers: 6,
+              offers: 2,
+              cropTypesInfo: [{ name: "Café" }],
+              locationString: "Tame, Arauca, Colombia",
+            },
+          ];
+          dispatch({
+            type: actionTypes.SET_FARMS_DATA,
+            payload: simulatedFarms,
+          });
+        }
+      } catch (error) {
+        console.error("Error cargando fincas del empleador:", error);
+        dispatch({ type: actionTypes.SET_FARMS_DATA, payload: [] });
+      }
+    },
+    [getEmployerId]
+  );
+
+  const loadMyJobOffers = useCallback(
+    async (userData = null) => {
+      try {
+        const employerId = await getEmployerId(userData);
+        const jobOffersData = await getJobOffersByEmployerId(employerId);
+        dispatch({
+          type: actionTypes.SET_JOB_OFFERS,
+          payload: jobOffersData || [],
+        });
+      } catch (error) {
+        console.error("Error cargando mis ofertas:", error);
+        dispatch({ type: actionTypes.SET_ERROR, payload: error.message });
+      }
+    },
+    [getEmployerId]
+  );
 
   const loadAllJobOffers = useCallback(async () => {
     try {
@@ -789,7 +1043,10 @@ const useEmployerData = (user) => {
           },
         ];
       }
-      dispatch({ type: actionTypes.SET_ALL_JOB_OFFERS, payload: allOffersData || [] });
+      dispatch({
+        type: actionTypes.SET_ALL_JOB_OFFERS,
+        payload: allOffersData || [],
+      });
     } catch (error) {
       console.error("Error cargando todas las ofertas:", error);
       dispatch({ type: actionTypes.SET_ALL_JOB_OFFERS, payload: [] });
@@ -819,50 +1076,86 @@ const useEmployerData = (user) => {
   const loadAvailableWorkers = useCallback(async () => {
     try {
       const workers = await getAvailableWorkers();
-      dispatch({ type: actionTypes.SET_AVAILABLE_WORKERS, payload: workers || [] });
+      dispatch({
+        type: actionTypes.SET_AVAILABLE_WORKERS,
+        payload: workers || [],
+      });
     } catch (error) {
       console.error("Error cargando trabajadores:", error);
     }
   }, []);
 
-  const loadAllData = useCallback(async (isRefreshing = false) => {
-    try {
-      if (!isRefreshing) {
-        dispatch({ type: actionTypes.SET_LOADING, payload: true });
-      }
-      dispatch({ type: actionTypes.SET_ERROR, payload: null });
+  // ✅ ACTUALIZAR loadAllData para incluir carga de evaluaciones
+  const loadAllData = useCallback(
+    async (isRefreshing = false) => {
+      try {
+        if (!isRefreshing) {
+          dispatch({ type: actionTypes.SET_LOADING, payload: true });
+        }
+        dispatch({ type: actionTypes.SET_ERROR, payload: null });
 
-      const userData = await fetchUserData();
-      await loadEmployerFarms(userData);
-      await Promise.all([
-        loadAvailableWorkers(),
-        loadCropTypes(),
-        loadMyJobOffers(userData),
-        loadAllJobOffers(),
-      ]);
-    } catch (error) {
-      console.error("Error cargando datos:", error);
-      dispatch({
-        type: actionTypes.SET_ERROR,
-        payload: error.message || "Error al cargar los datos",
-      });
-    } finally {
-      dispatch({ type: actionTypes.SET_LOADING, payload: false });
-      dispatch({ type: actionTypes.SET_REFRESHING, payload: false });
-    }
-  }, [fetchUserData, loadEmployerFarms, loadAvailableWorkers, loadCropTypes, loadMyJobOffers, loadAllJobOffers]);
-
-  useEffect(() => {
-    if (state.myJobOffers && state.farmsData && state.userData) {
-      const calculateDashboardStats = (jobOffers, farms, userData) => {
-        const offersArray = Array.isArray(jobOffers) ? jobOffers : [];
+        const userData = await fetchUserData();
+        await loadEmployerFarms(userData);
         
+        // ✅ AGREGAR carga de evaluaciones
+        await Promise.all([
+          loadAvailableWorkers(),
+          loadCropTypes(),
+          loadMyJobOffers(userData),
+          loadAllJobOffers(),
+          loadMyRatings(), // ← NUEVA FUNCIÓN
+        ]);
+      } catch (error) {
+        console.error("Error cargando datos:", error);
+        dispatch({
+          type: actionTypes.SET_ERROR,
+          payload: error.message || "Error al cargar los datos",
+        });
+      } finally {
+        dispatch({ type: actionTypes.SET_LOADING, payload: false });
+        dispatch({ type: actionTypes.SET_REFRESHING, payload: false });
+      }
+    },
+    [
+      fetchUserData,
+      loadEmployerFarms,
+      loadAvailableWorkers,
+      loadCropTypes,
+      loadMyJobOffers,
+      loadAllJobOffers,
+      loadMyRatings, // ← NUEVA DEPENDENCIA
+    ]
+  );
+
+  // ✅ ACTUALIZAR cálculo de stats para usar evaluación real
+  useEffect(() => {
+    if (
+      state.myJobOffers &&
+      state.farmsData &&
+      state.userData &&
+      state.availableWorkers &&
+      state.ratingData
+    ) {
+      const calculateDashboardStats = (
+        jobOffers,
+        farms,
+        userData,
+        availableWorkers,
+        ratingData
+      ) => {
+        const offersArray = Array.isArray(jobOffers) ? jobOffers : [];
+        const farmsArray = Array.isArray(farms) ? farms : [];
+        const availableWorkersArray = Array.isArray(availableWorkers)
+          ? availableWorkers
+          : [];
+
         const totalOffers = offersArray.length;
         const activeOffers = offersArray.filter(
           (offer) => offer.status === "Activo" || offer.status === "activo"
         ).length;
         const totalApplications = offersArray.reduce(
-          (sum, offer) => sum + (offer.applicationsCount || 0), 0
+          (sum, offer) => sum + (offer.applicationsCount || 0),
+          0
         );
 
         const currentMonth = new Date().getMonth();
@@ -872,34 +1165,56 @@ const useEmployerData = (user) => {
           return offerMonth === currentMonth;
         }).length;
 
-        const farmsArray = Array.isArray(farms) ? farms : [];
         const totalFarms = farmsArray.length;
-        const totalHectares = farmsArray.reduce((sum, farm) => sum + (farm.size || 0), 0);
-        const totalPlants = farmsArray.reduce((sum, farm) => sum + (farm.plantCount || 0), 0);
-        const totalWorkers = farmsArray.reduce((sum, farm) => sum + (farm.workers || 0), 0);
+        const totalHectares = farmsArray.reduce(
+          (sum, farm) => sum + (farm.size || 0),
+          0
+        );
+        const totalPlants = farmsArray.reduce(
+          (sum, farm) => sum + (farm.plantCount || 0),
+          0
+        );
+
+        const totalWorkers = availableWorkersArray.length;
 
         const farmOffers = offersArray.filter((offer) => offer.farmId);
-        const offersPerFarm = totalFarms > 0 ? Math.round(farmOffers.length / totalFarms) : 0;
-        const workersPerFarm = totalFarms > 0 ? Math.round(totalWorkers / totalFarms) : 0;
+        const offersPerFarm =
+          totalFarms > 0 ? Math.round(farmOffers.length / totalFarms) : 0;
+        const workersPerFarm =
+          totalFarms > 0 ? Math.round(totalWorkers / totalFarms) : 0;
 
         return {
-          employerRating: userData?.employerProfile?.rating || 4.5,
+          // ✅ USAR evaluación real en lugar de hardcodeada
+          employerRating: ratingData.hasRatings ? ratingData.averageRating : 0,
           totalOffers,
           activeOffers,
           totalApplications,
           totalFarms,
           totalHectares,
           totalPlants,
+          totalWorkers,
           workersPerFarm,
           offersPerFarm,
           monthlyOffers,
         };
       };
-
-      const newStats = calculateDashboardStats(state.myJobOffers, state.farmsData, state.userData);
+      
+      const newStats = calculateDashboardStats(
+        state.myJobOffers,
+        state.farmsData,
+        state.userData,
+        state.availableWorkers,
+        state.ratingData // ← NUEVO parámetro
+      );
       dispatch({ type: actionTypes.SET_DASHBOARD_STATS, payload: newStats });
     }
-  }, [state.myJobOffers, state.farmsData, state.userData]);
+  }, [
+    state.myJobOffers,
+    state.farmsData,
+    state.userData,
+    state.availableWorkers,
+    state.ratingData, // ← NUEVA DEPENDENCIA
+  ]);
 
   useEffect(() => {
     if (userIdRef.current && !isInitializedRef.current) {
@@ -925,7 +1240,7 @@ const useEmployerData = (user) => {
 };
 
 // Main Component
-export default function ModernProducerDashboard({ navigation }) {
+export default function HomeScreen({ navigation }) {
   const { user } = useAuth();
   const { state, onRefresh } = useEmployerData(user);
   const [activeTab, setActiveTab] = useState(TABS.DASHBOARD);
@@ -933,22 +1248,36 @@ export default function ModernProducerDashboard({ navigation }) {
   const [selectedLocation, setSelectedLocation] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const handleQuickActionPress = useCallback(
+    (action) => {
+      if (action.params) {
+        navigation.navigate(action.route, action.params);
+      } else {
+        navigation.navigate(action.route);
+      }
+    },
+    [navigation]
+  );
+
+  // Resto de useMemo igual que antes...
   const combinedOffers = useMemo(() => {
     const myOffers = Array.isArray(state.myJobOffers) ? state.myJobOffers : [];
-    const allOffers = Array.isArray(state.allJobOffers) ? state.allJobOffers : [];
-    
-    const myOfferIds = new Set(myOffers.map(offer => offer.id));
-    
-    const processedOffers = allOffers.map(offer => ({
+    const allOffers = Array.isArray(state.allJobOffers)
+      ? state.allJobOffers
+      : [];
+
+    const myOfferIds = new Set(myOffers.map((offer) => offer.id));
+
+    const processedOffers = allOffers.map((offer) => ({
       ...offer,
-      isMyOffer: myOfferIds.has(offer.id)
+      isMyOffer: myOfferIds.has(offer.id),
     }));
 
-    myOffers.forEach(myOffer => {
-      if (!allOffers.some(offer => offer.id === myOffer.id)) {
+    myOffers.forEach((myOffer) => {
+      if (!allOffers.some((offer) => offer.id === myOffer.id)) {
         processedOffers.push({
           ...myOffer,
-          isMyOffer: true
+          isMyOffer: true,
         });
       }
     });
@@ -961,26 +1290,34 @@ export default function ModernProducerDashboard({ navigation }) {
     let filtered = [...offers];
 
     if (searchQuery) {
-      filtered = filtered.filter(offer =>
-        offer.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        offer.cropType?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        offer.cropType?.toLowerCase().includes(searchQuery.toLowerCase())
+      filtered = filtered.filter(
+        (offer) =>
+          offer.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          offer.cropType?.name
+            ?.toLowerCase()
+            .includes(searchQuery.toLowerCase()) ||
+          offer.cropType?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
     if (selectedCropType) {
       filtered = filtered.filter(
         (offer) =>
-          offer.cropType?.name === selectedCropType || offer.cropType === selectedCropType
+          offer.cropType?.name === selectedCropType ||
+          offer.cropType === selectedCropType
       );
     }
 
     if (selectedLocation) {
       filtered = filtered.filter(
         (offer) =>
-          offer.displayLocation?.city?.toLowerCase().includes(selectedLocation.toLowerCase()) ||
+          offer.displayLocation?.city
+            ?.toLowerCase()
+            .includes(selectedLocation.toLowerCase()) ||
           offer.city?.toLowerCase().includes(selectedLocation.toLowerCase()) ||
-          offer.displayLocation?.department?.toLowerCase().includes(selectedLocation.toLowerCase()) ||
+          offer.displayLocation?.department
+            ?.toLowerCase()
+            .includes(selectedLocation.toLowerCase()) ||
           offer.state?.toLowerCase().includes(selectedLocation.toLowerCase())
       );
     }
@@ -992,70 +1329,76 @@ export default function ModernProducerDashboard({ navigation }) {
     });
   }, [combinedOffers, selectedCropType, selectedLocation, searchQuery]);
 
-  const quickActions = useMemo(() => [
-    {
-      title: "Nueva Oferta",
-      icon: "add-circle",
-      color: DESIGN_SYSTEM.colors.primary[600],
-      route: "CreateJobOffer",
-    },
-    {
-      title: "Agregar Finca", 
-      icon: "map",
-      color: DESIGN_SYSTEM.colors.success[600],
-      route: "AddTerrain",
-    },
-    {
-      title: "Trabajadores",
-      icon: "people",
-      color: DESIGN_SYSTEM.colors.accent[600],
-      route: "WorkerList",
-    },
-    {
-      title: "Aplicaciones",
-      icon: "document-text",
-      color: DESIGN_SYSTEM.colors.secondary[600],
-      route: "JobApplications",
-    },
-  ], []);
+  const quickActions = useMemo(
+    () => [
+      {
+        title: "Agregar Finca",
+        icon: "map",
+        color: DESIGN_SYSTEM.colors.success[600],
+        route: "AddTerrain",
+      },
+      {
+        title: "Nueva Oferta",
+        icon: "add-circle",
+        color: DESIGN_SYSTEM.colors.primary[600],
+        route: "CreateJobOffer",
+      },
+      {
+        title: "Trabajadores",
+        icon: "people",
+        color: DESIGN_SYSTEM.colors.accent[600],
+        route: "WorkerList",
+      },
+    ],
+    [state.userData]
+  );
 
-  const statsData = useMemo(() => [
-    {
-      title: "Ofertas Totales",
-      value: state.dashboardStats.totalOffers,
-      subtitle: `${state.dashboardStats.activeOffers} activas`,
-      icon: "briefcase",
-      color: DESIGN_SYSTEM.colors.primary[600],
-      trend: { direction: "up", text: `+${state.dashboardStats.monthlyOffers} este mes` },
-    },
-    {
-      title: "Fincas",
-      value: state.dashboardStats.totalFarms,
-      subtitle: `${state.dashboardStats.totalHectares.toFixed(1)} hectáreas`,
-      icon: "leaf",
-      color: DESIGN_SYSTEM.colors.success[600],
-    },
-    {
-      title: "Plantas",
-      value: state.dashboardStats.totalPlants > 999 
-        ? `${(state.dashboardStats.totalPlants / 1000).toFixed(1)}K`
-        : state.dashboardStats.totalPlants,
-      subtitle: "Total cultivado",
-      icon: "flower",
-      color: DESIGN_SYSTEM.colors.secondary[600],
-    },
-    {
-      title: "Trabajadores",
-      value: state.dashboardStats.workersPerFarm,
-      subtitle: "Promedio por finca",
-      icon: "people",
-      color: DESIGN_SYSTEM.colors.accent[600],
-    },
-  ], [state.dashboardStats]);
+  const statsData = useMemo(
+    () => [
+      {
+        title: "Ofertas Totales",
+        value: state.dashboardStats.totalOffers,
+        subtitle: `${state.dashboardStats.activeOffers} activas`,
+        icon: "briefcase",
+        color: DESIGN_SYSTEM.colors.primary[600],
+        trend: {
+          direction: "up",
+          text: `+${state.dashboardStats.monthlyOffers} este mes`,
+        },
+      },
+      {
+        title: "Fincas",
+        value: state.dashboardStats.totalFarms,
+        subtitle: `${state.dashboardStats.totalHectares.toFixed(1)} hectáreas`,
+        icon: "leaf",
+        color: DESIGN_SYSTEM.colors.success[600],
+      },
+      {
+        title: "Postulados",
+        value:
+          state.dashboardStats.totalApplications > 999
+            ? `${(state.dashboardStats.totalApplications / 1000).toFixed(1)}K`
+            : state.dashboardStats.totalApplications,
+        subtitle: "Total recibidos",
+        icon: "document-text",
+        color: DESIGN_SYSTEM.colors.secondary[600],
+      },
+      {
+        title: "Trabajadores",
+        value: state.dashboardStats.totalWorkers,
+        subtitle: "Disponibles",
+        icon: "people",
+        color: DESIGN_SYSTEM.colors.accent[600],
+      },
+    ],
+    [state.dashboardStats]
+  );
 
   const cropTypeFilters = useMemo(() => {
     const offers = Array.isArray(combinedOffers) ? combinedOffers : [];
-    const cropTypes = [...new Set(offers.map(offer => offer.cropType?.name || offer.cropType))];
+    const cropTypes = [
+      ...new Set(offers.map((offer) => offer.cropType?.name || offer.cropType)),
+    ];
     return cropTypes.filter(Boolean);
   }, [combinedOffers]);
 
@@ -1063,167 +1406,281 @@ export default function ModernProducerDashboard({ navigation }) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <LinearGradient
-          colors={[DESIGN_SYSTEM.colors.primary[50], DESIGN_SYSTEM.colors.white]}
-          style={styles.loadingGradient}
-        >
-          <ActivityIndicator size="large" color={DESIGN_SYSTEM.colors.primary[600]} />
+          colors={[
+            DESIGN_SYSTEM.colors.primary[50],
+            DESIGN_SYSTEM.colors.white,
+          ]}
+          style={styles.loadingGradient}>
+          <ActivityIndicator
+            size="large"
+            color={DESIGN_SYSTEM.colors.primary[600]}
+          />
           <Text style={styles.loadingText}>Cargando dashboard...</Text>
         </LinearGradient>
       </SafeAreaView>
     );
   }
 
-  const DashboardContent = () => (
-    <ScrollView
-      style={styles.scrollView}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={state.refreshing}
-          onRefresh={onRefresh}
-          colors={[DESIGN_SYSTEM.colors.primary[600]]}
-          tintColor={DESIGN_SYSTEM.colors.primary[600]}
-        />
-      }
-    >
-      <EnhancedRatingCard 
-        rating={state.dashboardStats.employerRating}
-        totalReviews={state.dashboardStats.totalApplications}
-      />
+  function DashboardContent() {
+    return (
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={state.refreshing}
+            onRefresh={onRefresh}
+            colors={[DESIGN_SYSTEM.colors.primary[600]]}
+            tintColor={DESIGN_SYSTEM.colors.primary[600]}
+          />
+        }>
+        {/* ✅ ACTUALIZAR para usar datos reales */}
+        <EnhancedRatingCard ratingData={state.ratingData} />
 
-      <View style={styles.statsGrid}>
-        {Array.isArray(statsData) && statsData.map((stat, index) => (
-          <EnhancedStatsCard key={index} {...stat} />
-        ))}
-      </View>
-
-      <View style={styles.quickActionsSection}>
-        <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
-        <View style={styles.quickActionsGrid}>
-          {Array.isArray(quickActions) && quickActions.map((action, index) => (
-            <EnhancedQuickActionButton
-              key={index}
-              title={action.title}
-              icon={action.icon}
-              color={action.color}
-              onPress={() => navigation.navigate(action.route)}
-            />
-          ))}
+        <View style={styles.statsGrid}>
+          {Array.isArray(statsData) &&
+            statsData.map((stat, index) => (
+              <EnhancedStatsCard key={index} {...stat} />
+            ))}
         </View>
-      </View>
-    </ScrollView>
-  );
 
-  const OffersContent = () => (
-    <ScrollView
-      style={styles.scrollView}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={state.refreshing}
-          onRefresh={onRefresh}
-          colors={[DESIGN_SYSTEM.colors.primary[600]]}
-          tintColor={DESIGN_SYSTEM.colors.primary[600]}
-        />
-      }
-    >
-      {/* Enhanced Filters */}
-      <View style={styles.enhancedFiltersSection}>
-        <EnhancedSearchBar
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Buscar ofertas por título o cultivo..."
-        />
-        
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipScroll}
-          contentContainerStyle={styles.chipsContainer}
-        >
-          <EnhancedFilterChip
-            title="Todos"
-            isActive={!selectedCropType}
-            onPress={() => setSelectedCropType("")}
-          />
-          {cropTypeFilters.map((cropType) => (
-            <EnhancedFilterChip
-              key={cropType}
-              title={cropType}
-              isActive={selectedCropType === cropType}
-              onPress={() => setSelectedCropType(selectedCropType === cropType ? "" : cropType)}
-            />
-          ))}
-        </ScrollView>
-      </View>
-
-      <View style={styles.offersSection}>
-        <Text style={styles.offersCount}>
-          {Array.isArray(filteredOffers) ? filteredOffers.length : 0} ofertas disponibles
-        </Text>
-        
-        {Array.isArray(filteredOffers) && filteredOffers.map((offer) => (
-          <EnhancedOfferCard
-            key={offer.id}
-            offer={offer}
-            isMyOffer={offer.isMyOffer}
-            onPress={() => navigation.navigate("JobOfferDetail", { jobOfferId: offer.id })}
-          />
-        ))}
-
-        {(!Array.isArray(filteredOffers) || filteredOffers.length === 0) && (
-          <View style={styles.enhancedEmptyState}>
-            <LinearGradient
-              colors={[DESIGN_SYSTEM.colors.gray[50], DESIGN_SYSTEM.colors.white]}
-              style={styles.emptyStateGradient}
-            >
-              <View style={styles.emptyStateIconContainer}>
-                <Ionicons name="search-outline" size={48} color={DESIGN_SYSTEM.colors.gray[400]} />
-              </View>
-              <Text style={styles.emptyStateTitle}>No se encontraron ofertas</Text>
-              <Text style={styles.emptyStateSubtitle}>
-                Intenta cambiar los filtros de búsqueda o crea una nueva oferta
-              </Text>
-              <TouchableOpacity
-                style={styles.emptyStateButton}
-                onPress={() => navigation.navigate("CreateJobOffer")}
-              >
-                <LinearGradient
-                  colors={[DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600]]}
-                  style={styles.emptyStateButtonGradient}
-                >
-                  <Ionicons name="add" size={20} color={DESIGN_SYSTEM.colors.white} />
-                  <Text style={styles.emptyStateButtonText}>Crear Nueva Oferta</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </LinearGradient>
+        <View style={styles.quickActionsSection}>
+          <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
+          <View style={styles.quickActionsGrid}>
+            {Array.isArray(quickActions) &&
+              quickActions.map((action, index) => (
+                <EnhancedQuickActionButton
+                  key={index}
+                  title={action.title}
+                  icon={action.icon}
+                  color={action.color}
+                  onPress={() => handleQuickActionPress(action)}
+                />
+              ))}
           </View>
-        )}
-      </View>
-    </ScrollView>
-  );
+        </View>
+      </ScrollView>
+    );
+  }
+
+  function OffersContent() {
+    return (
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={state.refreshing}
+            onRefresh={onRefresh}
+            colors={[DESIGN_SYSTEM.colors.primary[600]]}
+            tintColor={DESIGN_SYSTEM.colors.primary[600]}
+          />
+        }>
+        <View style={styles.enhancedFiltersSection}>
+          <EnhancedSearchBar
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Buscar ofertas por título o cultivo..."
+          />
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipScroll}
+            contentContainerStyle={styles.chipsContainer}>
+            <EnhancedFilterChip
+              title="Todos"
+              isActive={!selectedCropType}
+              onPress={() => setSelectedCropType("")}
+            />
+            {cropTypeFilters.map((cropType) => (
+              <EnhancedFilterChip
+                key={cropType}
+                title={cropType}
+                isActive={selectedCropType === cropType}
+                onPress={() =>
+                  setSelectedCropType(
+                    selectedCropType === cropType ? "" : cropType
+                  )
+                }
+              />
+            ))}
+          </ScrollView>
+        </View>
+
+        <View style={styles.offersSection}>
+          <Text style={styles.offersCount}>
+            {Array.isArray(filteredOffers) ? filteredOffers.length : 0} ofertas
+            disponibles
+          </Text>
+
+          {Array.isArray(filteredOffers) &&
+            filteredOffers.map((offer) => (
+              <EnhancedOfferCard
+                key={offer.id}
+                offer={offer}
+                isMyOffer={offer.isMyOffer}
+                onPress={() =>
+                  navigation.navigate("JobOfferDetail", { jobOfferId: offer.id })
+                }
+              />
+            ))}
+
+          {(!Array.isArray(filteredOffers) || filteredOffers.length === 0) && (
+            <View style={styles.enhancedEmptyState}>
+              <LinearGradient
+                colors={[
+                  DESIGN_SYSTEM.colors.gray[50],
+                  DESIGN_SYSTEM.colors.white,
+                ]}
+                style={styles.emptyStateGradient}>
+                <View style={styles.emptyStateIconContainer}>
+                  <Ionicons
+                    name="search-outline"
+                    size={48}
+                    color={DESIGN_SYSTEM.colors.gray[400]}
+                  />
+                </View>
+                <Text style={styles.emptyStateTitle}>
+                  No se encontraron ofertas
+                </Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  Intenta cambiar los filtros de búsqueda o crea una nueva oferta
+                </Text>
+                <TouchableOpacity
+                  style={styles.emptyStateButton}
+                  onPress={() => navigation.navigate("CreateJobOffer")}>
+                  <LinearGradient
+                    colors={[
+                      DESIGN_SYSTEM.colors.primary[500],
+                      DESIGN_SYSTEM.colors.primary[600],
+                    ]}
+                    style={styles.emptyStateButtonGradient}>
+                    <Ionicons
+                      name="add"
+                      size={20}
+                      color={DESIGN_SYSTEM.colors.white}
+                    />
+                    <Text style={styles.emptyStateButtonText}>
+                      Crear Nueva Oferta
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScreenLayout navigation={navigation}>
       <SafeAreaView style={styles.container}>
-        <ModernHeader 
-          user={state.userData} 
-          onProfilePress={() => navigation.navigate("Profile")} 
+        <ModernHeader
+          user={state.userData}
+          onProfilePress={() => navigation.navigate("Profile")}
         />
-        
+
         <ModernTabs activeTab={activeTab} setActiveTab={setActiveTab} />
-        
-        {activeTab === TABS.DASHBOARD ? <DashboardContent /> : <OffersContent />}
+
+        {activeTab === TABS.DASHBOARD ? (
+          <DashboardContent />
+        ) : (
+          <OffersContent />
+        )}
       </SafeAreaView>
     </ScreenLayout>
   );
 }
 
-// Enhanced Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: DESIGN_SYSTEM.colors.gray[50],
+  },
+
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: DESIGN_SYSTEM.spacing.lg,
+    gap: DESIGN_SYSTEM.spacing.md,
+  },
+  enhancedStatsCard: {
+    flex: 1,
+    minWidth: (width - DESIGN_SYSTEM.spacing.lg * 3) / 2,
+    borderRadius: DESIGN_SYSTEM.borderRadius.lg,
+    backgroundColor: DESIGN_SYSTEM.colors.white, // Fondo sólido blanco
+    // Sombra más sutil y sin sombra gris debajo
+    shadowColor: DESIGN_SYSTEM.colors.gray[900],
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    // Borde sutil para definición
+    borderWidth: 1,
+    borderColor: DESIGN_SYSTEM.colors.gray[100],
+  },
+  statsCardGradient: {
+    padding: DESIGN_SYSTEM.spacing.lg,
+    borderRadius: DESIGN_SYSTEM.borderRadius.lg,
+    // Removemos cualquier borde o gradiente que cause sombras
+  },
+  statsCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.md,
+    marginBottom: DESIGN_SYSTEM.spacing.md,
+  },
+  statsIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: "hidden",
+  },
+  statsIconGradient: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  statsInfo: {
+    flex: 1,
+  },
+  statsValue: {
+    ...DESIGN_SYSTEM.typography.h3,
+    color: DESIGN_SYSTEM.colors.gray[900],
+    fontWeight: "700",
+    fontSize: 24, // Asegurar tamaño consistente
+  },
+  statsTitle: {
+    ...DESIGN_SYSTEM.typography.bodyMedium,
+    color: DESIGN_SYSTEM.colors.gray[600],
+    marginTop: DESIGN_SYSTEM.spacing.xs,
+    fontSize: 14,
+  },
+  statsSubtitle: {
+    ...DESIGN_SYSTEM.typography.caption,
+    color: DESIGN_SYSTEM.colors.gray[500],
+    marginBottom: DESIGN_SYSTEM.spacing.sm,
+    fontSize: 12,
+  },
+  statsTrend: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: DESIGN_SYSTEM.spacing.sm,
+  },
+  trendIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  statsTrendText: {
+    ...DESIGN_SYSTEM.typography.caption,
+    fontWeight: "600",
+    fontSize: 11,
   },
   loadingContainer: {
     flex: 1,
@@ -1327,10 +1784,6 @@ const styles = StyleSheet.create({
     backgroundColor: DESIGN_SYSTEM.colors.primary[600],
     borderRadius: DESIGN_SYSTEM.borderRadius.full,
   },
-  tabText: {
-    ...DESIGN_SYSTEM.typography.bodyMedium,
-    color: DESIGN_SYSTEM.colors.gray[600],
-  },
   tabTextActive: {
     color: DESIGN_SYSTEM.colors.primary[600],
     fontWeight: "600",
@@ -1405,80 +1858,6 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     textAlign: "center",
   },
-
-  // Enhanced Stats
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    paddingHorizontal: DESIGN_SYSTEM.spacing.lg,
-    gap: DESIGN_SYSTEM.spacing.md,
-  },
-  enhancedStatsCard: {
-    flex: 1,
-    minWidth: (width - DESIGN_SYSTEM.spacing.lg * 3) / 2,
-    borderRadius: DESIGN_SYSTEM.borderRadius.lg,
-    overflow: "hidden",
-    ...DESIGN_SYSTEM.shadows.md,
-  },
-  statsCardGradient: {
-    padding: DESIGN_SYSTEM.spacing.lg,
-    borderWidth: 1,
-    borderColor: DESIGN_SYSTEM.colors.gray[100],
-  },
-  statsCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: DESIGN_SYSTEM.spacing.md,
-    marginBottom: DESIGN_SYSTEM.spacing.md,
-  },
-  statsIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    overflow: "hidden",
-  },
-  statsIconGradient: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  statsInfo: {
-    flex: 1,
-  },
-  statsValue: {
-    ...DESIGN_SYSTEM.typography.h3,
-    color: DESIGN_SYSTEM.colors.gray[900],
-    fontWeight: "700",
-  },
-  statsTitle: {
-    ...DESIGN_SYSTEM.typography.bodyMedium,
-    color: DESIGN_SYSTEM.colors.gray[600],
-    marginTop: DESIGN_SYSTEM.spacing.xs,
-  },
-  statsSubtitle: {
-    ...DESIGN_SYSTEM.typography.caption,
-    color: DESIGN_SYSTEM.colors.gray[500],
-    marginBottom: DESIGN_SYSTEM.spacing.sm,
-  },
-  statsTrend: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: DESIGN_SYSTEM.spacing.sm,
-  },
-  trendIndicator: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  statsTrendText: {
-    ...DESIGN_SYSTEM.typography.caption,
-    fontWeight: "600",
-  },
-
-  // Enhanced Quick Actions
   quickActionsSection: {
     paddingHorizontal: DESIGN_SYSTEM.spacing.lg,
     paddingVertical: DESIGN_SYSTEM.spacing.lg,

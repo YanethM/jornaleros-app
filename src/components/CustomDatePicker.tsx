@@ -6,7 +6,6 @@ import {
   Modal,
   StyleSheet,
   ScrollView,
-  Platform,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 
@@ -128,7 +127,6 @@ const CustomDatePicker = ({
                       ]}
                       onPress={() => {
                         setTempMonth(index);
-                        // Ajustar el día si el nuevo mes tiene menos días
                         const daysInNewMonth = getDaysInMonth(tempYear, index);
                         if (tempDay > daysInNewMonth) {
                           setTempDay(daysInNewMonth);
@@ -187,7 +185,6 @@ const CustomDatePicker = ({
                       ]}
                       onPress={() => {
                         setTempYear(year);
-                        // Ajustar el día si cambia febrero en año bisiesto/no-bisiesto
                         const daysInNewMonth = getDaysInMonth(year, tempMonth);
                         if (tempDay > daysInNewMonth) {
                           setTempDay(daysInNewMonth);

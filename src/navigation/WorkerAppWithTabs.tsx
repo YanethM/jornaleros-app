@@ -1,9 +1,11 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import WorkerJobsScreen from "../screens/worker/WorkerJobScreen";
 import WorkerHomeScreen from "../screens/worker/WorkerHomeScreen";
+import WorkerJobsScreen from "../screens/worker/WorkerJobScreen";
+import MyJobsScreen from "../screens/worker/MyJobs";
 import WorkerApplicationsScreen from "../screens/worker/WorkerApplicationScreen";
+import WorkerMessagesScreen from "../screens/worker/WorkerMessage";
 import WorkerProfileScreen from "../screens/worker/WorkerProfileScreen";
 
 const Tab = createBottomTabNavigator();
@@ -27,19 +29,25 @@ export default function WorkerAppWithTabs() {
     <Tab.Navigator
       id="WorkerAppTabs"
       screenOptions={({ route }) => ({
+        // ✅ SOLUCIÓN: Ocultar header del tab navigator
         headerShown: false,
+        
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap;
-
           switch (route.name) {
             case "WorkerHome":
               iconName = focused ? "home" : "home-outline";
               break;
             case "WorkerJobs":
-              iconName = focused ? "briefcase" : "briefcase-outline";
+              // ✅ Usar iconos actualizados como mencionaste antes
+              iconName = focused ? "map" : "map-outline";
               break;
             case "WorkerApplications":
-              iconName = focused ? "document-text" : "document-text-outline";
+              // ✅ Usar iconos actualizados como mencionaste antes
+              iconName = focused ? "search" : "search-outline";
+              break;
+            case "WorkerMessages":
+              iconName = focused ? "chatbubble" : "chatbubble-outline";
               break;
             case "WorkerProfile":
               iconName = focused ? "person" : "person-outline";
@@ -47,7 +55,6 @@ export default function WorkerAppWithTabs() {
             default:
               iconName = "home-outline";
           }
-
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: COLORS.primary,
@@ -59,44 +66,54 @@ export default function WorkerAppWithTabs() {
           paddingBottom: 8,
           paddingTop: 8,
           height: 80,
-          elevation: 8, // Android shadow
-          shadowColor: "#000", // iOS shadow
+          elevation: 8,
+          shadowColor: "#000",
           shadowOffset: {
             width: 0,
             height: -2,
           },
+          shadowOpacity: 0.1,
+          shadowRadius: 3,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 10,
           fontWeight: "500",
         },
       })}>
+      
       <Tab.Screen
         name="WorkerHome"
         component={WorkerHomeScreen}
-        options={{
-          tabBarLabel: "Inicio",
+        options={{ 
+          tabBarLabel: "Inicio"
         }}
       />
       <Tab.Screen
         name="WorkerJobs"
         component={WorkerJobsScreen}
-        options={{
-          tabBarLabel: "Trabajos",
+        options={{ 
+          tabBarLabel: "Trabajos"
         }}
       />
       <Tab.Screen
         name="WorkerApplications"
         component={WorkerApplicationsScreen}
-        options={{
-          tabBarLabel: "Postulaciones",
+        options={{ 
+          tabBarLabel: "Postulaciones"
+        }}
+      />
+      <Tab.Screen
+        name="WorkerMessages"
+        component={WorkerMessagesScreen}
+        options={{ 
+          tabBarLabel: "Mensajes"
         }}
       />
       <Tab.Screen
         name="WorkerProfile"
         component={WorkerProfileScreen}
-        options={{
-          tabBarLabel: "Perfil",
+        options={{ 
+          tabBarLabel: "Perfil"
         }}
       />
     </Tab.Navigator>

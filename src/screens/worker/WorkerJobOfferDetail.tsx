@@ -1342,7 +1342,19 @@ const WorkerJobOfferDetail = () => {
           </View>
         )}
       </View>
-      <CustomTabBarWorker navigation={navigation} currentRoute="WorkerJobOfferDetail" />
+      <CustomTabBarWorker 
+  navigation={navigation} 
+  currentRoute="WorkerJobs" // Cambiar a la ruta correcta del tab
+  state={{
+    index: 1, // Índice para WorkerJobs (0=Dashboard, 1=Jobs, 2=Applications, 3=Profile)
+    routes: [
+      { name: 'WorkerDashboard' },
+      { name: 'WorkerJobs' },
+      { name: 'WorkerApplications' },
+      { name: 'WorkerProfile' }
+    ]
+  }}
+/>
     </ScreenLayoutWorker>
   );
 };

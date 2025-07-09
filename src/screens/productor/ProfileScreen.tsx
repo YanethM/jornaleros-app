@@ -17,6 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import ScreenLayout from "../../components/ScreenLayout";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { LinearGradient } from "expo-linear-gradient";
+import { logout } from "../../services/authService";
 
 const COLORS = {
   primary: "#274F66",
@@ -120,7 +121,7 @@ const ProfileScreen = ({ navigation }) => {
       "¿Estás seguro que deseas cerrar sesión?",
       [
         { text: "Cancelar", style: "cancel" },
-        { text: "Cerrar Sesión", onPress: signOut, style: "destructive" },
+        { text: "Cerrar Sesión", onPress: logout, style: "destructive" }
       ]
     );
   };

@@ -18,6 +18,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useAuth } from "../context/AuthContext";
 import { LinearGradient } from 'expo-linear-gradient'; // Si usas Expo, o react-native-linear-gradient
+import { logout } from "../services/authService";
 
 // ✅ Función helper para obtener altura del status bar
 const getStatusBarHeight = () => {
@@ -154,13 +155,28 @@ const CustomHeader = ({ navigation }) => {
     }
   };
 
-  // ✅ Menú items con íconos modernos
   const menuItems = [
-    { title: "Panel Principal", icon: "dashboard", route: "Home", isTabScreen: true, gradient: [COLORS.info, "#60A5FA"] },
-    { title: "Terrenos", icon: "landscape", route: "Terrenos", isTabScreen: false, gradient: [COLORS.success, "#34D399"] },
-    { title: "Trabajadores", icon: "people", route: "WorkerList", isTabScreen: false, gradient: [COLORS.secondary, COLORS.secondaryLight] },
-    { title: "Ofertas de Trabajo", icon: "work", route: "JobOffers", isTabScreen: false, gradient: [COLORS.warning, "#FBBF24"] },
-    { title: "Mensajes", icon: "message", route: "Mensajes", isTabScreen: false, gradient: [COLORS.primary, COLORS.primaryLight] },
+    { 
+      title: "Ofertas de Trabajo", 
+      icon: "work", 
+      route: "JobOffers", 
+      isTabScreen: false, 
+      gradient: [COLORS.primary, "#FBBF24"] 
+    },
+    {
+      title: "Postulaciones",
+      icon: "how-to-reg", // Icono de registro/aplicación
+      route: "JobOfferWithApplication",
+      isTabScreen: false,
+      gradient: [COLORS.primary, COLORS.secondaryLight]
+    },
+    {
+      title: "Trabajadores",
+      icon: "person-search", // Icono de búsqueda de personas (si está disponible)
+      route: "WorkerList",
+      isTabScreen: false,
+      gradient: [COLORS.primary, COLORS.secondaryLight]
+    },
   ];
 
   // ✅ Opciones del dropdown modernizadas
@@ -175,7 +191,7 @@ const CustomHeader = ({ navigation }) => {
     setIsMenuOpen(false);
     try {
       if (item.isTabScreen) {
-        navigation.navigate("MainApp", { screen: item.route });
+        navigation.navigate("Home", { screen: item.route });
       } else {
         navigation.navigate(item.route);
       }
@@ -215,7 +231,7 @@ const CustomHeader = ({ navigation }) => {
           try {
             await signOut();
           } catch (error) {
-            Alert.alert("Error", "Error al cerrar sesión");
+            console.error("Error cerrando sesión:", error);
           }
         },
         style: "destructive",
@@ -232,13 +248,19 @@ const CustomHeader = ({ navigation }) => {
         {
           text: "Sí, eliminar definitivamente",
           style: "destructive",
-          onPress: () => Alert.alert("Información", "Esta función estará disponible pronto"),
+          onPress: () => {
+            // Navegar al componente CancelAccount
+            try {
+              navigation.navigate("CancelAccount");
+            } catch (error) {
+              Alert.alert("Error", "No se pudo abrir la pantalla de cancelación");
+            }
+          },
         },
       ]
     );
   };
-
-  // ✅ Funciones para obtener datos del usuario (sin cambios)
+  
   const getUserDisplayName = () => {
     if (user?.name) return user.name;
     if (userData?.name) return userData.name;
@@ -480,7 +502,6 @@ const CustomHeader = ({ navigation }) => {
                     <Icon name="logout" size={18} color={COLORS.error} />
                     <Text style={styles.logoutText}>Cerrar Sesión</Text>
                   </TouchableOpacity>
-                  <Text style={styles.appVersion}>v2.1.0</Text>
                 </View>
               </Animated.View>
             </TouchableWithoutFeedback>
@@ -492,7 +513,6 @@ const CustomHeader = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  // 🎨 Header principal
   headerContainer: {
     backgroundColor: COLORS.white,
     ...Platform.select({

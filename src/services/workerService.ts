@@ -266,3 +266,35 @@ export async function getWorkerEmployersSimple(workerId: string) {
     throw error;
   }
 }
+
+export async function getMyApplications() {
+  try {
+    const token = await AsyncStorage.getItem("@user_token");
+    const result = await ApiClient.get(`/worker/me/applications`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    console.log("My applications response:", result.data);
+    return result.data;
+  } catch (error) {
+    console.error("Error fetching my applications:", error);
+    throw error;
+  }
+}
+
+export async function getMyAcceptedApplications() {
+  try {
+    const token = await AsyncStorage.getItem("@user_token");
+    const result = await ApiClient.get(`/worker/me/applications/accepted`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    console.log("My applications response:", result.data);
+    return result.data;
+  } catch (error) {
+    console.error("Error fetching my applications:", error);
+    throw error;
+  }
+}

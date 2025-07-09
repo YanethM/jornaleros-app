@@ -24,10 +24,10 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import ScreenLayout from "../../components/ScreenLayout";
 import CustomTabBar from "../../components/CustomTabBar";
 import ApiClient from "../../utils/api";
+import { getJobOffersByEmployerId } from "../../services/jobOffers";
 
 const PRIMARY_COLOR = "#284F66";
 const SECONDARY_COLOR = "#4A7C94";
-
 const COLORS = {
   primary: "#274F66",
   secondary: "#B6883E",
@@ -114,8 +114,8 @@ const APPLICATION_STATUSES = {
 type RootStackParamList = {
   JobApplications: { jobOfferId: string };
   JobOfferDetail: { jobOfferId: string };
-  WorkerProfileApplication: { 
-    workerId: string; 
+  WorkerProfileApplication: {
+    workerId: string;
     jobOfferId?: string;
     applicationId?: string;
     applicationStatus?: string;
@@ -128,10 +128,17 @@ type JobApplicationsNavigationProp = StackNavigationProp<
   RootStackParamList,
   "JobApplications"
 >;
+
 type JobApplicationsRouteProp = RouteProp<
   RootStackParamList,
   "JobApplications"
 >;
+
+const APPLICATION_STATES = {
+  PENDING: 'Pendiente',
+  ACCEPTED: 'Aceptada',
+  REJECTED: 'Rechazada'
+};
 
 const JobApplications: React.FC = () => {
   const navigation = useNavigation<JobApplicationsNavigationProp>();
@@ -193,7 +200,6 @@ const JobApplications: React.FC = () => {
           `/job-offer/${jobOfferId}`
         );
         console.log("Job offer response:", jobOfferResponse);
-
         if (
           jobOfferResponse &&
           (jobOfferResponse.success || jobOfferResponse.data)
@@ -212,7 +218,6 @@ const JobApplications: React.FC = () => {
       console.log("Applications response:", applicationsResponse);
 
       let applicationsList: Application[] = [];
-
       if (
         applicationsResponse &&
         applicationsResponse.success &&
@@ -249,18 +254,78 @@ const JobApplications: React.FC = () => {
       calculateStats(applicationsList);
     } catch (error) {
       console.error("Error loading applications:", error);
-
       let errorMessage = "No se pudieron cargar las postulaciones";
       if (error instanceof Error) {
         errorMessage += `: ${error.message}`;
       }
-
       Alert.alert("Error", errorMessage);
       setApplications([]);
       calculateStats([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const loadAllApplicationsByEmployer = async (empId: string): Promise<void> => {
+    console.log("Loading ALL applications for employer:", empId);
+  
+    try {
+      // ✅ USAR TU SERVICIO EXISTENTE
+      const jobOffersList = await getJobOffersByEmployerId(empId);
+      
+      if (!Array.isArray(jobOffersList) || jobOffersList.length === 0) {
+        console.log('No job offers found for employer:', empId);
+        setEmployerJobOffers([]);
+        setApplications([]);
+        calculateStats([]);
+        return;
+      }
+  
+      setEmployerJobOffers(jobOffersList);
+  
+      // Paso 2: Para cada oferta, obtener sus aplicaciones
+      const allApplicationsPromises = jobOffersList.map(async (offer) => {
+        try {
+          const applicationsResponse = await ApiClient.get(`/job-offer/${offer.id}/applications`);
+          
+          let offerApplications: Application[] = [];
+          if (applicationsResponse && applicationsResponse.success && Array.isArray(applicationsResponse.data)) {
+            offerApplications = applicationsResponse.data;
+          } else if (Array.isArray(applicationsResponse)) {
+            offerApplications = applicationsResponse;
+          } else if (applicationsResponse && Array.isArray(applicationsResponse.data)) {
+            offerApplications = applicationsResponse.data;
+          } else {
+            offerApplications = [];
+          }
+  
+          // Agregar información de la oferta a cada aplicación
+          return offerApplications.map(app => ({
+            ...app,
+            jobOffer: {
+              id: offer.id,
+              title: offer.title,
+              cropType: offer.cropType
+            }
+          }));
+        } catch (error) {
+          console.error(`Error loading applications for offer ${offer.id}:`, error);
+          return [];
+        }
+      });
+  
+      const allApplicationsArrays = await Promise.all(allApplicationsPromises);
+      const allApplications = allApplicationsArrays.flat();
+      
+      console.log(`Loaded ${allApplications.length} total applications from ${jobOffersList.length} job offers`);
+      
+      setApplications(allApplications);
+      calculateStats(allApplications);
+  
+    } catch (error) {
+      console.error('Error loading all applications by employer:', error);
+      throw error;
     }
   };
 
@@ -272,16 +337,14 @@ const JobApplications: React.FC = () => {
 
     const newStats = {
       total: applicationsList.length,
-      pending: applicationsList.filter(
-        (app) => app.status?.name === "Pendiente"
-      ).length,
-      accepted: applicationsList.filter(
-        (app) => app.status?.name === "Aceptada"
-      ).length,
-      rejected: applicationsList.filter(
-        (app) => app.status?.name === "Rechazada"
-      ).length,
+      pending: applicationsList.filter(app =>
+        app.status?.name?.toLowerCase().includes('pendiente')).length,
+      accepted: applicationsList.filter(app =>
+        app.status?.name?.toLowerCase().includes('aceptada')).length,
+      rejected: applicationsList.filter(app =>
+        app.status?.name?.toLowerCase().includes('rechazada')).length,
     };
+
     setStats(newStats);
   };
 
@@ -296,7 +359,13 @@ const JobApplications: React.FC = () => {
       setFilteredApplications(applications);
     } else {
       setFilteredApplications(
-        applications.filter((app) => app.status?.name === selectedFilter)
+        applications.filter(app => {
+          if (!app.status || !app.status.name) return false;
+          // Normalizar los nombres de estado para comparación
+          const normalizedStatus = app.status.name.trim().toLowerCase();
+          const normalizedFilter = selectedFilter.trim().toLowerCase();
+          return normalizedStatus === normalizedFilter;
+        })
       );
     }
   };
@@ -312,40 +381,81 @@ const JobApplications: React.FC = () => {
   ): Promise<void> => {
     try {
       setProcessingApplication(applicationId);
-
+  
+      console.log("Actualizando aplicación:", applicationId, "a estado:", newStatus);
+  
       const response = await ApiClient.put(
         `/application/${applicationId}/status`,
         {
-          status: newStatus,
+          status: newStatus, // Enviamos el nombre del estado
         }
       );
-
-      if (response.success || response.data) {
-        // Update local state
+  
+      console.log("Respuesta del servidor:", response);
+  
+      // Verificar si la respuesta es exitosa
+      if (response && (response.success || response.data)) {
+        // Actualizar el estado local inmediatamente
         setApplications((prev) =>
           prev.map((app) =>
             app.id === applicationId
-              ? { ...app, status: { id: "", name: newStatus } }
+              ? { 
+                  ...app, 
+                  status: { 
+                    id: response.data?.status?.id || "", 
+                    name: newStatus 
+                  } 
+                }
               : app
           )
         );
-
+  
+        // También actualizar las aplicaciones filtradas
+        setFilteredApplications((prev) =>
+          prev.map((app) =>
+            app.id === applicationId
+              ? { 
+                  ...app, 
+                  status: { 
+                    id: response.data?.status?.id || "", 
+                    name: newStatus 
+                  } 
+                }
+              : app
+          )
+        );
+  
         const statusText =
           APPLICATION_STATUSES[newStatus as keyof typeof APPLICATION_STATUSES]
             ?.label || newStatus;
+  
         Alert.alert(
           "Éxito",
           `La postulación ha sido ${statusText.toLowerCase()}`
         );
-
-        // Reload applications to get updated data
-        loadApplications();
+  
+        // Recargar aplicaciones para asegurar que los datos estén actualizados
+        setTimeout(() => {
+          loadApplications();
+        }, 500);
+  
       } else {
-        throw new Error("Error updating application status");
+        throw new Error(response?.msg || "Error updating application status");
       }
     } catch (error) {
       console.error("Error updating application status:", error);
-      Alert.alert("Error", "No se pudo actualizar el estado de la postulación");
+      
+      let errorMessage = "No se pudo actualizar el estado de la postulación";
+      
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`;
+      } else if (error?.response?.data?.msg) {
+        errorMessage = error.response.data.msg;
+      } else if (error?.msg) {
+        errorMessage = error.msg;
+      }
+  
+      Alert.alert("Error", errorMessage);
     } finally {
       setProcessingApplication(null);
     }
@@ -412,146 +522,70 @@ const JobApplications: React.FC = () => {
   const renderFilterModal = () => (
     <Modal
       visible={showFilterModal}
-      animationType="slide"
+      animationType="fade"
       transparent={true}
-      onRequestClose={() => setShowFilterModal(false)}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.filterModalContainer}>
+      onRequestClose={() => setShowFilterModal(false)}
+      statusBarTranslucent={true}>
+      <TouchableOpacity 
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => setShowFilterModal(false)}>
+        <TouchableOpacity 
+          style={styles.filterModalContainer}
+          activeOpacity={1}
+          onPress={(e) => e.stopPropagation()}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Filtrar por estado</Text>
-            <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+            <TouchableOpacity 
+              onPress={() => setShowFilterModal(false)}
+              style={styles.closeButton}>
               <Icon name="close" size={24} color="#333" />
             </TouchableOpacity>
           </View>
-
-          <View style={styles.filterOptionsContainer}>
-            {filterOptions.map((option) => (
-              <TouchableOpacity
-                key={option.id}
-                style={[
-                  styles.filterOption,
-                  selectedFilter === option.id && styles.filterOptionSelected,
-                ]}
-                onPress={() => {
-                  setSelectedFilter(option.id);
-                  setShowFilterModal(false);
-                }}>
-                <View style={styles.filterOptionContent}>
-                  <Text
-                    style={[
-                      styles.filterOptionLabel,
-                      selectedFilter === option.id &&
-                        styles.filterOptionLabelSelected,
-                    ]}>
-                    {option.label}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.filterOptionCount,
-                      selectedFilter === option.id &&
-                        styles.filterOptionCountSelected,
-                    ]}>
-                    ({option.count})
-                  </Text>
-                </View>
-                {selectedFilter === option.id && (
-                  <Icon name="check" size={20} color={PRIMARY_COLOR} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </View>
+          <ScrollView 
+            style={styles.filterOptionsScrollView}
+            showsVerticalScrollIndicator={false}
+            bounces={false}>
+            <View style={styles.filterOptionsContainer}>
+              {filterOptions.map((option) => (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[
+                    styles.filterOption,
+                    selectedFilter === option.id && styles.filterOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedFilter(option.id);
+                    setShowFilterModal(false);
+                  }}>
+                  <View style={styles.filterOptionContent}>
+                    <Text
+                      style={[
+                        styles.filterOptionLabel,
+                        selectedFilter === option.id &&
+                          styles.filterOptionLabelSelected,
+                      ]}>
+                      {option.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.filterOptionCount,
+                        selectedFilter === option.id &&
+                          styles.filterOptionCountSelected,
+                      ]}>
+                      ({option.count})
+                    </Text>
+                  </View>
+                  {selectedFilter === option.id && (
+                    <Icon name="check" size={20} color={PRIMARY_COLOR} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
-  );
-
-  const renderStatsCard = () => (
-    <View style={styles.statsCard}>
-      <View style={styles.statsHeader}>
-        <View style={styles.statsIconContainer}>
-          <Icon name="analytics" size={24} color={PRIMARY_COLOR} />
-        </View>
-        <Text style={styles.statsTitle}>Resumen de Postulaciones</Text>
-      </View>
-      <View style={styles.statsRow}>
-        <View style={styles.statItem}>
-          <View
-            style={[
-              styles.statIconContainer,
-              { backgroundColor: `${COLORS.info}15` },
-            ]}>
-            <Icon name="people" size={20} color={COLORS.info} />
-          </View>
-          <Text style={[styles.statValue, { color: COLORS.info }]}>
-            {stats.total}
-          </Text>
-          <Text style={styles.statLabel}>Total</Text>
-        </View>
-        <View style={styles.statItem}>
-          <View
-            style={[
-              styles.statIconContainer,
-              { backgroundColor: `${APPLICATION_STATUSES.Pendiente.color}15` },
-            ]}>
-            <Icon
-              name={APPLICATION_STATUSES.Pendiente.icon}
-              size={20}
-              color={APPLICATION_STATUSES.Pendiente.color}
-            />
-          </View>
-          <Text
-            style={[
-              styles.statValue,
-              { color: APPLICATION_STATUSES.Pendiente.color },
-            ]}>
-            {stats.pending}
-          </Text>
-          <Text style={styles.statLabel}>Pendientes</Text>
-        </View>
-        <View style={styles.statItem}>
-          <View
-            style={[
-              styles.statIconContainer,
-              { backgroundColor: `${APPLICATION_STATUSES.Aceptada.color}15` },
-            ]}>
-            <Icon
-              name={APPLICATION_STATUSES.Aceptada.icon}
-              size={20}
-              color={APPLICATION_STATUSES.Aceptada.color}
-            />
-          </View>
-          <Text
-            style={[
-              styles.statValue,
-              { color: APPLICATION_STATUSES.Aceptada.color },
-            ]}>
-            {stats.accepted}
-          </Text>
-          <Text style={styles.statLabel}>Aceptadas</Text>
-        </View>
-        <View style={styles.statItem}>
-          <View
-            style={[
-              styles.statIconContainer,
-              { backgroundColor: `${APPLICATION_STATUSES.Rechazada.color}15` },
-            ]}>
-            <Icon
-              name={APPLICATION_STATUSES.Rechazada.icon}
-              size={20}
-              color={APPLICATION_STATUSES.Rechazada.color}
-            />
-          </View>
-          <Text
-            style={[
-              styles.statValue,
-              { color: APPLICATION_STATUSES.Rechazada.color },
-            ]}>
-            {stats.rejected}
-          </Text>
-          <Text style={styles.statLabel}>Rechazadas</Text>
-        </View>
-      </View>
-    </View>
   );
 
   const renderApplicationItem = ({ item }: { item: Application }) => {
@@ -560,11 +594,13 @@ const JobApplications: React.FC = () => {
       return null;
     }
 
-    const statusConfig = getStatusConfig(item.status?.name || "Pendiente");
+    // Asegurar que siempre haya un estado válido
+    const statusName = item.status?.name || 'Pendiente';
+    const statusConfig = getStatusConfig(statusName);
     const isProcessing = processingApplication === item.id;
 
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.applicationCard}
         onPress={() => handleViewWorkerProfile(item)}
         activeOpacity={0.7}
@@ -587,7 +623,6 @@ const JobApplications: React.FC = () => {
               )}
             </View>
           </View>
-
           <View
             style={[
               styles.statusBadge,
@@ -612,7 +647,6 @@ const JobApplications: React.FC = () => {
                 Postulado el {formatDate(item.createdAt)}
               </Text>
             </View>
-
             {item.worker.experience && (
               <View style={styles.infoRow}>
                 <Icon name="work" size={16} color="#757575" />
@@ -621,7 +655,6 @@ const JobApplications: React.FC = () => {
                 </Text>
               </View>
             )}
-
             {item.worker.location && (
               <View style={styles.infoRow}>
                 <Icon name="location-on" size={16} color="#757575" />
@@ -644,7 +677,6 @@ const JobApplications: React.FC = () => {
             <Text style={styles.viewProfileText}>Ver perfil completo</Text>
             <Icon name="chevron-right" size={20} color={PRIMARY_COLOR} />
           </View>
-
           {item.status?.name === "Pendiente" && (
             <TouchableOpacity
               style={[
@@ -676,7 +708,6 @@ const JobApplications: React.FC = () => {
       <View style={styles.emptyIconContainer}>
         <Icon name="people-outline" size={80} color="#E2E8F0" />
       </View>
-
       <Text style={styles.emptyTitle}>
         {selectedFilter === "all"
           ? "No hay postulaciones aún"
@@ -684,13 +715,11 @@ const JobApplications: React.FC = () => {
               .find((f) => f.id === selectedFilter)
               ?.label.toLowerCase()}`}
       </Text>
-
       <Text style={styles.emptySubtitle}>
         {selectedFilter === "all"
           ? "Cuando alguien se postule a esta oferta, aparecerá aquí"
           : "Intenta cambiar el filtro para ver otras postulaciones"}
       </Text>
-
       {selectedFilter === "all" && stats.total === 0 && (
         <View style={styles.searchWorkersContainer}>
           <Text style={styles.searchWorkersTitle}>
@@ -726,8 +755,14 @@ const JobApplications: React.FC = () => {
     );
   }
 
+  
   return (
-    <ScreenLayout navigation={navigation}>
+    <ScreenLayout 
+      navigation={navigation}
+      showTabBar={true}
+      tabBarComponent={<CustomTabBar />}
+      currentRoute="JobApplications"
+    >
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -763,8 +798,6 @@ const JobApplications: React.FC = () => {
             tintColor={PRIMARY_COLOR}
           />
         }>
-        {renderStatsCard()}
-
         {selectedFilter !== "all" && (
           <View style={styles.filterIndicator}>
             <View style={styles.filterIndicatorContent}>
@@ -794,8 +827,6 @@ const JobApplications: React.FC = () => {
       </ScrollView>
 
       {renderFilterModal()}
-
-      <CustomTabBar navigation={navigation} currentRoute="JobOffers" />
     </ScreenLayout>
   );
 };
@@ -1243,24 +1274,20 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 1000,
   },
   filterModalContainer: {
     backgroundColor: "#fff",
     borderRadius: 20,
     margin: 20,
-    width: "85%",
-    maxHeight: "60%",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.2,
-        shadowRadius: 16,
-      },
-      android: {
-        elevation: 12,
-      },
-    }),
+    width: '90%',
+    maxHeight: '80%',
+    alignSelf: 'center',
+    marginTop: Platform.OS === 'ios' ? 60 : 40, // Ajuste para status bar
+  },
+  filterOptionsScrollView: {
+    maxHeight: '100%',
+    paddingHorizontal: 10,
   },
   modalHeader: {
     flexDirection: "row",
@@ -1275,16 +1302,23 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: PRIMARY_COLOR,
   },
+  closeButton: {
+    padding: 4,
+    borderRadius: 12,
+  },
   filterOptionsContainer: {
     padding: 8,
+    maxHeight: 300,
   },
   filterOption: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderRadius: 12,
-    marginVertical: 4,
+    marginVertical: 3,
+    minHeight: 50,
   },
   filterOptionSelected: {
     backgroundColor: `${PRIMARY_COLOR}10`,

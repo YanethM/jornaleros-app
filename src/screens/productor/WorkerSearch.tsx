@@ -11,6 +11,7 @@ import {
   FlatList,
   RefreshControl,
   Modal,
+  Platform,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import ScreenLayout from "../../components/ScreenLayout";
@@ -242,7 +243,7 @@ const WorkerSearch = ({ navigation, route }) => {
     return Array.from(skillsSet).sort();
   };
 
-  const getLocationText = (worker: Worker) => {
+  const getLocationText = (worker) => {
     const cityName =
       typeof worker.user.city === "string"
         ? worker.user.city
@@ -256,7 +257,7 @@ const WorkerSearch = ({ navigation, route }) => {
     return stateName ? `${cityName}, ${stateName}` : cityName;
   };
 
-  const getWorkerFullName = (worker: Worker) => {
+  const getWorkerFullName = (worker) => {
     return `${worker.user.name || ""} ${worker.user.lastname || ""}`.trim();
   };
 
@@ -410,19 +411,32 @@ const WorkerSearch = ({ navigation, route }) => {
   const renderFiltersModal = () => (
     <Modal
       visible={showFilters}
-      animationType="slide"
       transparent={true}
+      animationType="fade"
       onRequestClose={() => setShowFilters(false)}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.filtersModal}>
+      <TouchableOpacity 
+        style={styles.modalBackdrop}
+        activeOpacity={1}
+        onPress={() => setShowFilters(false)}>
+        <TouchableOpacity 
+          style={styles.filtersModalContainer}
+          activeOpacity={1}
+          onPress={(e) => e.stopPropagation()}>
+          
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Filtros de Búsqueda</Text>
-            <TouchableOpacity onPress={() => setShowFilters(false)}>
-              <Icon name="close" size={24} color={COLORS.text} />
+            <TouchableOpacity 
+              onPress={() => setShowFilters(false)}
+              style={styles.modalCloseButton}>
+              <Icon name="close" size={20} color={COLORS.text} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.filtersContent}>
+          <ScrollView 
+            style={styles.filtersScrollView}
+            showsVerticalScrollIndicator={false}
+            bounces={false}>
+            
             {/* Filtro por disponibilidad */}
             <View style={styles.filterSection}>
               <Text style={styles.filterTitle}>Disponibilidad</Text>
@@ -440,6 +454,14 @@ const WorkerSearch = ({ navigation, route }) => {
                         styles.filterOptionSelected,
                     ]}
                     onPress={() => setAvailabilityFilter(option.key)}>
+                    <View style={[
+                      styles.filterRadio,
+                      availabilityFilter === option.key && styles.filterRadioSelected
+                    ]}>
+                      {availabilityFilter === option.key && (
+                        <View style={styles.filterRadioDot} />
+                      )}
+                    </View>
                     <Text
                       style={[
                         styles.filterOptionText,
@@ -504,8 +526,8 @@ const WorkerSearch = ({ navigation, route }) => {
               <Text style={styles.applyFiltersText}>Aplicar</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 
@@ -643,7 +665,6 @@ const WorkerSearch = ({ navigation, route }) => {
             </Text>
           </View>
         </View>
-        <CustomTabBar navigation={navigation} currentRoute="WorkerSearch" />
       </ScreenLayout>
     );
   }
@@ -732,7 +753,6 @@ const WorkerSearch = ({ navigation, route }) => {
       {/* Modal de filtros */}
       {renderFiltersModal()}
 
-      <CustomTabBar navigation={navigation} currentRoute="WorkerSearch" />
     </ScreenLayout>
   );
 };
@@ -1180,22 +1200,42 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   // Modal styles
-  modalOverlay: {
+  modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
-  filtersModal: {
+  filtersModalContainer: {
     backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "80%",
+    borderRadius: 20,
+    width: "100%",
+    maxWidth: 400,
+    maxHeight: "85%",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 15,
+      },
+    }),
+  },
+  filtersScrollView: {
+    maxHeight: 400,
+    paddingHorizontal: 20,
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -1204,47 +1244,62 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: PRIMARY_COLOR,
   },
-  filtersContent: {
-    flex: 1,
-    padding: 20,
+  modalCloseButton: {
+    padding: 4,
+    borderRadius: 12,
+    backgroundColor: "#F8F9FA",
   },
   filterSection: {
-    marginBottom: 30,
+    marginBottom: 25,
+    marginTop: 15,
   },
   filterTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: COLORS.text,
-    marginBottom: 15,
+    marginBottom: 12,
   },
   filterOptions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    gap: 8,
   },
   filterOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginRight: 10,
-    marginBottom: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
-  filterOptionSelected: {
-    backgroundColor: PRIMARY_COLOR,
+  filterRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    marginRight: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterRadioSelected: {
     borderColor: PRIMARY_COLOR,
   },
+  filterRadioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: PRIMARY_COLOR,
+  },
   filterOptionText: {
-    fontSize: 14,
+    fontSize: 15,
     color: COLORS.textSecondary,
+    fontWeight: "500",
   },
   filterOptionTextSelected: {
-    color: "#fff",
+    color: PRIMARY_COLOR,
     fontWeight: "600",
   },
   skillsFilterContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
+    gap: 8,
   },
   skillFilterChip: {
     paddingHorizontal: 14,
@@ -1252,8 +1307,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginRight: 8,
-    marginBottom: 8,
+    backgroundColor: "#fff",
   },
   skillFilterChipSelected: {
     backgroundColor: COLORS.info,
@@ -1262,6 +1316,7 @@ const styles = StyleSheet.create({
   skillFilterText: {
     fontSize: 13,
     color: COLORS.textSecondary,
+    fontWeight: "500",
   },
   skillFilterTextSelected: {
     color: "#fff",
@@ -1272,15 +1327,16 @@ const styles = StyleSheet.create({
     padding: 20,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
+    gap: 12,
   },
   clearFiltersButton: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.textSecondary,
     alignItems: "center",
-    marginRight: 10,
+    backgroundColor: "#fff",
   },
   clearFiltersText: {
     fontSize: 16,
@@ -1290,10 +1346,9 @@ const styles = StyleSheet.create({
   applyFiltersButton: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: PRIMARY_COLOR,
     alignItems: "center",
-    marginLeft: 10,
   },
   applyFiltersText: {
     fontSize: 16,

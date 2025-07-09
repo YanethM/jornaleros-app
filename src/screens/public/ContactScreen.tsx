@@ -26,9 +26,6 @@ const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
     Linking.openURL('https://instagram.com/tu-perfil');
   };
 
-  const handleLinkedIn = () => {
-    Linking.openURL('https://linkedin.com/company/tu-empresa');
-  };
 
   return (
     <View style={styles.container}>

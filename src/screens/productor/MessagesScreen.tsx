@@ -221,9 +221,9 @@ const MessagesScreen = ({ navigation }) => {
       try {
         dispatch({ type: "SET_LOADING_MESSAGES", payload: true });
         dispatch({ type: "SET_ERROR", payload: null });
-        
+
         console.log(`📱 Loading messages between ${user?.id} and ${userId}`);
-        
+
         const result = await getMessagesBetweenUsers(user.id, userId);
 
         if (result.success && result.data) {
@@ -233,7 +233,11 @@ const MessagesScreen = ({ navigation }) => {
           try {
             const markReadResult = await markMessagesAsRead(userId, user.id);
             if (markReadResult.success) {
-              console.log(`✅ Marked ${markReadResult.data?.markedCount || 0} messages as read`);
+              console.log(
+                `✅ Marked ${
+                  markReadResult.data?.markedCount || 0
+                } messages as read`
+              );
               dispatch({ type: "MARK_MESSAGES_READ", payload: userId });
             }
           } catch (markReadError) {
@@ -554,40 +558,41 @@ const MessagesScreen = ({ navigation }) => {
         <Modal
           visible={showMessagesModal}
           animationType="slide"
-          onRequestClose={() => setShowMessagesModal(false)}>
-          <View style={styles.modalContainer}>
-            {/* Header del modal */}
-            <View style={styles.modalHeader}>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setShowMessagesModal(false)}>
-                <Icon name="arrow-back" size={24} color={COLORS.text} />
-              </TouchableOpacity>
+          onRequestClose={() => setShowMessagesModal(false)}
+          transparent={false}>
+          {/* Área de mensajes */}
+          <KeyboardAvoidingView
+            style={styles.keyboardContainer}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}>
+            <View style={styles.modalContainer}>
+              {/* Header del modal */}
+              <View style={styles.modalHeader}>
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
+                  onPress={() => setShowMessagesModal(false)}>
+                  <Icon name="arrow-back" size={24} color={COLORS.text} />
+                </TouchableOpacity>
 
-              <View style={styles.modalHeaderInfo}>
-                <Text style={styles.modalTitle}>
-                  {state.selectedConversation?.otherUser.name}{" "}
-                  {state.selectedConversation?.otherUser.lastname}
-                </Text>
-                <Text style={styles.modalSubtitle}>
-                  {state.selectedConversation?.otherUser.email}
-                </Text>
-                {state.messages.length > 0 && (
-                  <Text style={styles.messageCount}>
-                    {state.messages.length} mensaje
-                    {state.messages.length !== 1 ? "s" : ""}
+                <View style={styles.modalHeaderInfo}>
+                  <Text style={styles.modalTitle}>
+                    {state.selectedConversation?.otherUser.name}{" "}
+                    {state.selectedConversation?.otherUser.lastname}
                   </Text>
-                )}
+                  <Text style={styles.modalSubtitle}>
+                    {state.selectedConversation?.otherUser.email}
+                  </Text>
+                  {state.messages.length > 0 && (
+                    <Text style={styles.messageCount}>
+                      {state.messages.length} mensaje
+                      {state.messages.length !== 1 ? "s" : ""}
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.modalCloseButton} />
               </View>
 
-              <View style={styles.modalCloseButton} />
-            </View>
-
-            {/* Área de mensajes */}
-            <KeyboardAvoidingView
-              style={styles.keyboardContainer}
-              behavior={Platform.OS === "ios" ? "padding" : "height"}
-              keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}>
               <View style={styles.messagesWrapper}>
                 {state.loadingMessages ? (
                   <View style={styles.loadingContainer}>
@@ -658,8 +663,8 @@ const MessagesScreen = ({ navigation }) => {
                   />
                 </TouchableOpacity>
               </View>
-            </KeyboardAvoidingView>
-          </View>
+            </View>
+          </KeyboardAvoidingView>
         </Modal>
       </View>
     </ScreenLayout>

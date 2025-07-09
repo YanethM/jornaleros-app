@@ -1,5 +1,48 @@
 import ApiClient from "../utils/api";
 
+
+interface GetJobOffersWithApplicationsParams {
+  page?: number;
+  limit?: number;
+  status?: 'Activo' | 'Inactivo' | 'En_curso' | 'Finalizado';
+  sortBy?: 'createdAt' | 'title' | 'salary' | 'startDate' | 'endDate';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface JobOfferFilters {
+  cropType?: string;
+  location?: string;
+  minSalary?: number;
+  maxSalary?: number;
+  includesLodging?: boolean;
+  includesFood?: boolean;
+  startDate?: string;
+  endDate?: string;
+  phase?: string;
+  duration?: string;
+}
+
+export interface JobOfferCreateData {
+  title: string;
+  description: string;
+  salary: number;
+  city: string;
+  state: string;
+  country: string;
+  village?: string;
+  farmId: string;
+  cropTypeId: string;
+  phaseId: string;
+  startDate: string;
+  endDate: string;
+  duration: string;
+  paymentType: string;
+  paymentMode: string;
+  includesFood: boolean;
+  includesLodging: boolean;
+  workersNeeded: number;
+}
+
 export async function getJobOffersByEmployerId(employerId: string) {
   try {
     const result = await ApiClient.get(
@@ -104,7 +147,7 @@ export async function getAvailableJobOffersNoAuth() {
     console.log("Available job offers response:", result.data);
     return result.data.jobOffers || [];
   } catch (error) {
-    console.error("Error fetching available job offers:", error);
+    console.error("Error fetching public available job offers:", error);
     throw error;
   }
 }
@@ -116,6 +159,59 @@ export async function getJobOfferByIdNoAuth(jobOfferId: string) {
     return result.data;
   } catch (error) {
     console.error("Error fetching job offer by ID:", error);
+    throw error;
+  }
+}
+
+export async function getJobOffersWithApplications(
+  params?: GetJobOffersWithApplicationsParams
+) {
+  try {
+    // Construir query string con parámetros
+    const queryParams = new URLSearchParams();
+    
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+    if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+
+    const queryString = queryParams.toString();
+    const url = `/job-offer/with-applications${queryString ? `?${queryString}` : ''}`;
+    
+    const result = await ApiClient.get(url);
+    console.log("Job offers with applications response:", result.data);
+    return result.data;
+  } catch (error) {
+    console.error("Error fetching job offers with applications:", error);
+    throw error;
+  }
+}
+
+export async function getJobOffersApplicationsStats() {
+  try {
+    const result = await ApiClient.get('/job-offer/applications-stats');
+    console.log("Job offers applications stats response:", result.data);
+    return result.data;
+  } catch (error) {
+    console.error("Error fetching job offers applications stats:", error);
+    throw error;
+  }
+}
+
+export async function getAvailableJobOffersForWorker(filters = {}) {
+  try {
+    const result = await ApiClient.get(`/job-offer/available-for-worker`, {
+      params: filters
+    });
+    
+    console.log("Available job offers for worker response:", result.data);
+    
+    // 🔥 CORRECCIÓN: Devolver la estructura completa, no solo jobOffers
+    return result.data;
+    
+  } catch (error) {
+    console.error("Error fetching available-for-worker job offers for worker:", error);
     throw error;
   }
 }

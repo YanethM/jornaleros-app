@@ -1,4 +1,4 @@
-package com.yanethm.PasoColombiaApp
+package com.yanethm.jornaleando
 
 import android.os.Build
 import android.os.Bundle

@@ -13,8 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../../context/AuthContext";
-import { getWorkerApplications } from "../../services/workerService";
-import { getUserData } from "../../services/userService";
+import { getMyAcceptedApplications } from "../../services/workerService";
 import ScreenLayoutWorker from "../../components/ScreenLayoutWorker";
 import CustomTabBarWorker from "../../components/CustomTabBarWorker";
 
@@ -45,25 +44,31 @@ const MyJobsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
-  const [userData, setUserData] = useState(null);
   const [cropTypeFilters, setCropTypeFilters] = useState([]);
+  const [backendStats, setBackendStats] = useState(null);
 
-  // 🔥 NUEVO - Función para obtener nombre amigable del estado
+  // 🔥 CORREGIDO - Estados basados en la respuesta real del backend
   const getJobStatusDisplayName = (status) => {
     const statusMap = {
       Aceptado: "En Progreso",
+      Aceptada: "En Progreso", // 🔥 NUEVO - Estado del backend
       Completado: "Completado",
+      Finalizado: "Completado",
     };
     return statusMap[status] || status || "Desconocido";
   };
 
-  // 🔥 MEJORADO - Estilos de estado para trabajos
+  // 🔥 CORREGIDO - Estilos basados en estados reales
   const getJobStatusStyle = (status) => {
     switch (status) {
       case "Completado":
+      case "Finalizado":
         return { backgroundColor: COLORS.success };
       case "Aceptado":
+      case "Aceptada": // 🔥 NUEVO
         return { backgroundColor: COLORS.info };
+      case "En_curso":
+        return { backgroundColor: COLORS.warning };
       default:
         return { backgroundColor: COLORS.textLight };
     }
@@ -72,107 +77,98 @@ const MyJobsScreen = ({ navigation }) => {
   const getJobStatusIcon = (status) => {
     switch (status) {
       case "Completado":
+      case "Finalizado":
         return "checkmark-circle";
       case "Aceptado":
+      case "Aceptada": // 🔥 NUEVO
         return "play-circle";
+      case "En_curso":
+        return "refresh-circle";
       default:
         return "help-circle";
     }
   };
 
-  // Función segura para obtener ID del trabajador
-  const getWorkerId = async () => {
-    try {
-      let workerData = userData;
-      if (!workerData) {
-        workerData = await getUserData();
-        setUserData(workerData);
-      }
-
-      if (!workerData?.workerProfile?.id) {
-        throw new Error("El usuario no tiene perfil de trabajador");
-      }
-
-      return workerData.workerProfile.id;
-    } catch (error) {
-      console.error("Error obteniendo ID del trabajador:", error);
-      throw error;
-    }
-  };
-
-  // 🔥 CORREGIDO - Cargar solo trabajos aprobados
+  // 🔥 CORREGIDO - Cargar trabajos aceptados sin workerId
   const loadAcceptedJobs = async () => {
     try {
-      const workerId = await getWorkerId();
-      const response = await getWorkerApplications(workerId);
-      
-      let applicationsData = [];
-      if (Array.isArray(response)) {
-        applicationsData = response;
-      } else if (response?.applications && Array.isArray(response.applications)) {
-        applicationsData = response.applications;
-      } else if (response?.data && Array.isArray(response.data)) {
-        applicationsData = response.data;
-      }
+      console.log("🔄 Loading accepted jobs...");
 
-      console.log("📋 All applications loaded:", applicationsData.length);
+      // 🔥 CORREGIDO - No pasar workerId (la API usa el token)
+      const response = await getMyAcceptedApplications();
+
+      console.log("📋 API Response:", response);
+
+      // 🔥 CORREGIDO - Usar la estructura real del backend
+      const applicationsData = response?.applications || [];
+      const statsData = {
+        total: response?.total || 0,
+        statusCounts: response?.statusCounts || {},
+        acceptedStatuses: response?.acceptedStatuses || [],
+      };
+
+      console.log("📊 Backend Stats:", statsData);
+      console.log("📋 Applications loaded:", applicationsData.length);
+
       setAllApplications(applicationsData);
+      setBackendStats(statsData);
 
-      // 🔥 FILTRAR solo trabajos aprobados (Aceptado o Completado)
-      const approvedJobs = applicationsData.filter(app => 
-        ['Aceptado', 'Completado'].includes(app.status?.name)
-      );
-
-      console.log("✅ Approved jobs found:", approvedJobs.length);
-
-      // Ordenar por fecha más reciente
-      const sortedJobs = approvedJobs.sort((a, b) => {
+      // 🔥 CORREGIDO - Los trabajos ya vienen filtrados del backend (solo aceptados)
+      const sortedJobs = applicationsData.sort((a, b) => {
         const dateA = new Date(a.createdAt || 0).getTime();
         const dateB = new Date(b.createdAt || 0).getTime();
         return dateB - dateA;
       });
 
       setAcceptedJobs(sortedJobs);
-      
-      // 🔥 GENERAR filtros de tipos de cultivo dinámicamente
+
+      // Generar filtros de tipos de cultivo dinámicamente
       generateCropTypeFilters(sortedJobs);
-      
+
       // Aplicar filtro actual
       filterJobsByCropType(sortedJobs, activeFilter);
     } catch (error) {
-      console.error("Error cargando trabajos:", error);
+      console.error("❌ Error cargando trabajos:", error);
       Alert.alert("Error", "No se pudieron cargar tus trabajos");
       setAcceptedJobs([]);
       setFilteredJobs([]);
+      setBackendStats(null);
     }
   };
 
-  // 🔥 NUEVO - Generar filtros de tipos de cultivo dinámicamente
+  // 🔥 CORREGIDO - Filtros basados en estados reales del backend
   const generateCropTypeFilters = (jobs) => {
     const cropTypes = new Map();
-    
-    jobs.forEach(job => {
+
+    jobs.forEach((job) => {
       const cropType = job.jobOffer?.cropType;
       if (cropType) {
         cropTypes.set(cropType.id, {
           id: cropType.id,
           name: cropType.name,
-          icon: "leaf"
+          icon: "leaf",
         });
       }
     });
 
+    // 🔥 CORREGIDO - Estados basados en la respuesta real
     const filters = [
-      { id: "all", name: "Todos los Cultivos", icon: "apps" },
-      { id: "in_progress", name: "En Progreso", icon: "play-circle" },
-      { id: "completed", name: "Completados", icon: "checkmark-circle" },
-      ...Array.from(cropTypes.values())
+      { id: "all", name: "Todos los Trabajos", icon: "apps" },
+      { id: "aceptado", name: "En Progreso (Aceptado)", icon: "play-circle" },
+      { id: "aceptada", name: "En Progreso (Aceptada)", icon: "play-circle" },
+      // Solo incluir "completed" si hay trabajos completados
+      ...(jobs.some((job) =>
+        ["Completado", "Finalizado"].includes(job.status?.name)
+      )
+        ? [{ id: "completed", name: "Completados", icon: "checkmark-circle" }]
+        : []),
+      ...Array.from(cropTypes.values()),
     ];
 
     setCropTypeFilters(filters);
   };
 
-  // 🔥 NUEVO - Filtrar trabajos por tipo de cultivo
+  // 🔥 CORREGIDO - Filtrar por estados reales
   const filterJobsByCropType = (jobs, filterId) => {
     let filtered = [];
 
@@ -180,15 +176,22 @@ const MyJobsScreen = ({ navigation }) => {
       case "all":
         filtered = jobs;
         break;
-      case "in_progress":
-        filtered = jobs.filter(job => job.status?.name === "Aceptado");
+      case "aceptado":
+        filtered = jobs.filter((job) => job.status?.name === "Aceptado");
+        break;
+      case "aceptada":
+        filtered = jobs.filter((job) => job.status?.name === "Aceptada");
         break;
       case "completed":
-        filtered = jobs.filter(job => job.status?.name === "Completado");
+        filtered = jobs.filter((job) =>
+          ["Completado", "Finalizado"].includes(job.status?.name)
+        );
         break;
       default:
         // Filtrar por tipo de cultivo específico
-        filtered = jobs.filter(job => job.jobOffer?.cropType?.id === filterId);
+        filtered = jobs.filter(
+          (job) => job.jobOffer?.cropType?.id === filterId
+        );
         break;
     }
 
@@ -246,22 +249,35 @@ const MyJobsScreen = ({ navigation }) => {
     }
   }, [user]);
 
-  // 🔥 CORREGIDO - Calcular estadísticas para trabajos aprobados
+  // 🔥 CORREGIDO - Estadísticas basadas en datos reales del backend
   const getJobStats = () => {
-    const total = acceptedJobs.length;
-    const inProgress = acceptedJobs.filter(job => job.status?.name === "Aceptado").length;
-    const completed = acceptedJobs.filter(job => job.status?.name === "Completado").length;
-    
-    // Calcular total ganado (solo trabajos completados)
+    if (!backendStats) {
+      return {
+        total: 0,
+        aceptado: 0,
+        aceptada: 0,
+        completed: 0,
+        totalEarnings: 0,
+      };
+    }
+
+    const total = backendStats.total;
+    const aceptado = backendStats.statusCounts["Aceptado"] || 0;
+    const aceptada = backendStats.statusCounts["Aceptada"] || 0;
+    const completed =
+      (backendStats.statusCounts["Completado"] || 0) +
+      (backendStats.statusCounts["Finalizado"] || 0);
+
+    // 🔥 CORREGIDO - Calcular ganancias solo de trabajos completados
     const totalEarnings = acceptedJobs
-      .filter(job => job.status?.name === "Completado")
+      .filter((job) => ["Completado", "Finalizado"].includes(job.status?.name))
       .reduce((sum, job) => {
         const salary = job.jobOffer?.salary || 0;
-        const duration = job.jobOffer?.duration || 1;
-        return sum + (salary * duration);
+        const duration = parseInt(job.jobOffer?.duration) || 1;
+        return sum + salary * duration;
       }, 0);
 
-    return { total, inProgress, completed, totalEarnings };
+    return { total, aceptado, aceptada, completed, totalEarnings };
   };
 
   const stats = getJobStats();
@@ -281,18 +297,7 @@ const MyJobsScreen = ({ navigation }) => {
   return (
     <ScreenLayoutWorker navigation={navigation}>
       <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Mis Trabajos</Text>
-          <View style={styles.headerRight} />
-        </View>
-
-        {/* 🔥 MEJORADO - Estadísticas para trabajos */}
+        {/* 🔥 CORREGIDO - Estadísticas basadas en datos reales */}
         <View style={styles.statsContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.statsRow}>
@@ -306,45 +311,68 @@ const MyJobsScreen = ({ navigation }) => {
                 </LinearGradient>
               </View>
 
+              {/* 🔥 NUEVO - Estadística para "Aceptado" */}
               <View style={styles.statCard}>
                 <LinearGradient
                   colors={[COLORS.info, "#60A5FA"]}
                   style={styles.statGradient}>
                   <Ionicons name="play-circle" size={24} color="#FFFFFF" />
-                  <Text style={styles.statNumber}>{stats.inProgress}</Text>
-                  <Text style={styles.statLabel}>En Progreso</Text>
+                  <Text style={styles.statNumber}>{stats.aceptado}</Text>
+                  <Text style={styles.statLabel}>Aceptado</Text>
                 </LinearGradient>
               </View>
 
+              {/* 🔥 NUEVO - Estadística para "Aceptada" */}
               <View style={styles.statCard}>
                 <LinearGradient
-                  colors={[COLORS.success, "#34D399"]}
+                  colors={[COLORS.info, "#60A5FA"]}
                   style={styles.statGradient}>
-                  <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
-                  <Text style={styles.statNumber}>{stats.completed}</Text>
-                  <Text style={styles.statLabel}>Completados</Text>
+                  <Ionicons name="play-circle" size={24} color="#FFFFFF" />
+                  <Text style={styles.statNumber}>{stats.aceptada}</Text>
+                  <Text style={styles.statLabel}>Aceptada</Text>
                 </LinearGradient>
               </View>
 
-              <View style={styles.statCard}>
-                <LinearGradient
-                  colors={[COLORS.secondary, "#FBBF24"]}
-                  style={styles.statGradient}>
-                  <Ionicons name="cash" size={24} color="#FFFFFF" />
-                  <Text style={styles.statNumber}>
-                    ${new Intl.NumberFormat("es-CO", {
-                      notation: "compact",
-                      maximumFractionDigits: 1
-                    }).format(stats.totalEarnings)}
-                  </Text>
-                  <Text style={styles.statLabel}>Ganado Total</Text>
-                </LinearGradient>
-              </View>
+              {/* Solo mostrar completados si existen */}
+              {stats.completed > 0 && (
+                <View style={styles.statCard}>
+                  <LinearGradient
+                    colors={[COLORS.success, "#34D399"]}
+                    style={styles.statGradient}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={24}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.statNumber}>{stats.completed}</Text>
+                    <Text style={styles.statLabel}>Completados</Text>
+                  </LinearGradient>
+                </View>
+              )}
+
+              {/* Solo mostrar ganancias si hay trabajos completados */}
+              {stats.totalEarnings > 0 && (
+                <View style={styles.statCard}>
+                  <LinearGradient
+                    colors={[COLORS.secondary, "#FBBF24"]}
+                    style={styles.statGradient}>
+                    <Ionicons name="cash" size={24} color="#FFFFFF" />
+                    <Text style={styles.statNumber}>
+                      $
+                      {new Intl.NumberFormat("es-CO", {
+                        notation: "compact",
+                        maximumFractionDigits: 1,
+                      }).format(stats.totalEarnings)}
+                    </Text>
+                    <Text style={styles.statLabel}>Ganado Total</Text>
+                  </LinearGradient>
+                </View>
+              )}
             </View>
           </ScrollView>
         </View>
 
-        {/* 🔥 NUEVO - Filtros por tipo de cultivo */}
+        {/* Filtros por tipo de cultivo y estado */}
         <View style={styles.filtersContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.filtersRow}>
@@ -379,7 +407,7 @@ const MyJobsScreen = ({ navigation }) => {
           </ScrollView>
         </View>
 
-        {/* 🔥 MEJORADO - Lista de trabajos aprobados */}
+        {/* Lista de trabajos */}
         <ScrollView
           style={styles.content}
           refreshControl={
@@ -397,13 +425,12 @@ const MyJobsScreen = ({ navigation }) => {
                   key={job.id}
                   style={styles.jobCard}
                   onPress={() => navigateToJobDetail(job)}>
-                  
                   {/* Indicador de estado lateral */}
-                  <View 
+                  <View
                     style={[
-                      styles.statusIndicator, 
-                      getJobStatusStyle(job.status?.name)
-                    ]} 
+                      styles.statusIndicator,
+                      getJobStatusStyle(job.status?.name),
+                    ]}
                   />
 
                   <View style={styles.jobCardContent}>
@@ -413,10 +440,12 @@ const MyJobsScreen = ({ navigation }) => {
                           {job.jobOffer?.title || "Trabajo sin título"}
                         </Text>
                         <Text style={styles.employerName}>
-                          {job.jobOffer?.employer?.user?.name || "Empleador"}
+                          {job.jobOffer?.employer?.user?.name}{" "}
+                          {job.jobOffer?.employer?.user?.lastname || ""}
                         </Text>
+                        {/* 🔥 CORREGIDO - Fase del cultivo en lugar de finca */}
                         <Text style={styles.farmName}>
-                          {job.jobOffer?.farm?.name || "Finca"}
+                          {job.jobOffer?.phase?.name || "Fase no especificada"}
                         </Text>
                       </View>
 
@@ -437,6 +466,7 @@ const MyJobsScreen = ({ navigation }) => {
                     </View>
 
                     <View style={styles.jobDetails}>
+                      {/* 🔥 CORREGIDO - Estructura de ubicación */}
                       <View style={styles.detailRow}>
                         <Ionicons
                           name="location"
@@ -444,8 +474,10 @@ const MyJobsScreen = ({ navigation }) => {
                           color={COLORS.textLight}
                         />
                         <Text style={styles.detailText}>
-                          {job.jobOffer?.displayLocation?.city || job.jobOffer?.city || "Ciudad"},{" "}
-                          {job.jobOffer?.displayLocation?.department || job.jobOffer?.state || "Estado"}
+                          {job.jobOffer?.location?.city || "Ciudad"},{" "}
+                          {job.jobOffer?.location?.state || "Estado"}
+                          {job.jobOffer?.location?.village &&
+                            `, ${job.jobOffer.location.village}`}
                         </Text>
                       </View>
 
@@ -487,68 +519,84 @@ const MyJobsScreen = ({ navigation }) => {
                       </View>
                     </View>
 
-                    {/* 🔥 NUEVO - Información de ganancias para trabajos completados */}
-                    {job.status?.name === "Completado" && (
+                    {/* 🔥 CORREGIDO - Solo mostrar ganancias para trabajos completados */}
+                    {["Completado", "Finalizado"].includes(
+                      job.status?.name
+                    ) && (
                       <View style={styles.earningsContainer}>
                         <View style={styles.earningsBox}>
-                          <Ionicons name="cash" size={18} color={COLORS.success} />
-                          <Text style={styles.earningsLabel}>Total Ganado:</Text>
+                          <Ionicons
+                            name="cash"
+                            size={18}
+                            color={COLORS.success}
+                          />
+                          <Text style={styles.earningsLabel}>
+                            Total Ganado:
+                          </Text>
                           <Text style={styles.earningsAmount}>
                             $
                             {new Intl.NumberFormat("es-CO").format(
-                              (job.jobOffer?.salary || 0) * (job.jobOffer?.duration || 1)
+                              (job.jobOffer?.salary || 0) *
+                                (parseInt(job.jobOffer?.duration) || 1)
                             )}
                           </Text>
                         </View>
                       </View>
                     )}
 
-                    {/* Beneficios */}
-                    <View style={styles.benefitsContainer}>
-                      <View style={styles.benefitItem}>
-                        <Ionicons
-                          name="restaurant"
-                          size={14}
-                          color={
-                            job.jobOffer?.includesFood
-                              ? COLORS.success
-                              : COLORS.textLight
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.benefitText,
-                            !job.jobOffer?.includesFood &&
-                              styles.benefitTextDisabled,
-                          ]}>
-                          {job.jobOffer?.includesFood
-                            ? "Incluye comida"
-                            : "Sin comida"}
-                        </Text>
-                      </View>
+                    {/* 🔥 CONDICIONAL - Solo mostrar beneficios si existen */}
+                    {(job.jobOffer?.includesFood !== undefined ||
+                      job.jobOffer?.includesLodging !== undefined) && (
+                      <View style={styles.benefitsContainer}>
+                        {job.jobOffer?.includesFood !== undefined && (
+                          <View style={styles.benefitItem}>
+                            <Ionicons
+                              name="restaurant"
+                              size={14}
+                              color={
+                                job.jobOffer?.includesFood
+                                  ? COLORS.success
+                                  : COLORS.textLight
+                              }
+                            />
+                            <Text
+                              style={[
+                                styles.benefitText,
+                                !job.jobOffer?.includesFood &&
+                                  styles.benefitTextDisabled,
+                              ]}>
+                              {job.jobOffer?.includesFood
+                                ? "Incluye comida"
+                                : "Sin comida"}
+                            </Text>
+                          </View>
+                        )}
 
-                      <View style={styles.benefitItem}>
-                        <Ionicons
-                          name="bed"
-                          size={14}
-                          color={
-                            job.jobOffer?.includesLodging
-                              ? COLORS.success
-                              : COLORS.textLight
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.benefitText,
-                            !job.jobOffer?.includesLodging &&
-                              styles.benefitTextDisabled,
-                          ]}>
-                          {job.jobOffer?.includesLodging
-                            ? "Incluye alojamiento"
-                            : "Sin alojamiento"}
-                        </Text>
+                        {job.jobOffer?.includesLodging !== undefined && (
+                          <View style={styles.benefitItem}>
+                            <Ionicons
+                              name="bed"
+                              size={14}
+                              color={
+                                job.jobOffer?.includesLodging
+                                  ? COLORS.success
+                                  : COLORS.textLight
+                              }
+                            />
+                            <Text
+                              style={[
+                                styles.benefitText,
+                                !job.jobOffer?.includesLodging &&
+                                  styles.benefitTextDisabled,
+                              ]}>
+                              {job.jobOffer?.includesLodging
+                                ? "Incluye alojamiento"
+                                : "Sin alojamiento"}
+                            </Text>
+                          </View>
+                        )}
                       </View>
-                    </View>
+                    )}
 
                     <View style={styles.jobFooter}>
                       <View style={styles.dateContainer}>
@@ -558,15 +606,17 @@ const MyJobsScreen = ({ navigation }) => {
                           color={COLORS.textLight}
                         />
                         <Text style={styles.dateText}>
-                          Iniciado el{" "}
-                          {job.createdAt ? new Date(job.createdAt).toLocaleDateString(
-                            "es-ES",
-                            {
-                              day: "2-digit",
-                              month: "2-digit",
-                              year: "numeric",
-                            }
-                          ) : "Fecha no disponible"}
+                          Aceptado el{" "}
+                          {job.updatedAt
+                            ? new Date(job.updatedAt).toLocaleDateString(
+                                "es-ES",
+                                {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                }
+                              )
+                            : "Fecha no disponible"}
                         </Text>
                       </View>
 
@@ -579,6 +629,52 @@ const MyJobsScreen = ({ navigation }) => {
                         />
                       </TouchableOpacity>
                     </View>
+
+                    {/* 🔥 NUEVO - Información de contacto para trabajos aceptados */}
+                    {["Aceptado", "Aceptada"].includes(job.status?.name) && (
+                      <View style={styles.contactContainer}>
+                        <Text style={styles.contactTitle}>
+                          Contacto del empleador:
+                        </Text>
+                        <View style={styles.contactInfo}>
+                          <View style={styles.contactRow}>
+                            <Ionicons
+                              name="person"
+                              size={16}
+                              color={COLORS.primary}
+                            />
+                            <Text style={styles.contactText}>
+                              {job.jobOffer?.employer?.user?.name}{" "}
+                              {job.jobOffer?.employer?.user?.lastname}
+                            </Text>
+                          </View>
+                          {job.jobOffer?.employer?.user?.phone && (
+                            <View style={styles.contactRow}>
+                              <Ionicons
+                                name="call"
+                                size={16}
+                                color={COLORS.primary}
+                              />
+                              <Text style={styles.contactText}>
+                                {job.jobOffer?.employer?.user?.phone}
+                              </Text>
+                            </View>
+                          )}
+                          {job.jobOffer?.employer?.user?.email && (
+                            <View style={styles.contactRow}>
+                              <Ionicons
+                                name="mail"
+                                size={16}
+                                color={COLORS.primary}
+                              />
+                              <Text style={styles.contactText}>
+                                {job.jobOffer?.employer?.user?.email}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    )}
                   </View>
                 </TouchableOpacity>
               ))}
@@ -594,14 +690,14 @@ const MyJobsScreen = ({ navigation }) => {
               </View>
               <Text style={styles.emptyTitle}>
                 {activeFilter === "all"
-                  ? "No tienes trabajos aprobados aún"
+                  ? "No tienes trabajos aceptados aún"
                   : `No tienes trabajos de ${cropTypeFilters
                       .find((f) => f.id === activeFilter)
                       ?.name.toLowerCase()}`}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {activeFilter === "all"
-                  ? "Cuando te aprueben para un trabajo, aparecerá aquí"
+                  ? "Cuando te acepten para un trabajo, aparecerá aquí"
                   : "Prueba cambiando el filtro o postúlate a más trabajos"}
               </Text>
               <TouchableOpacity
@@ -614,8 +710,11 @@ const MyJobsScreen = ({ navigation }) => {
           )}
         </ScrollView>
       </View>
-      <CustomTabBarWorker navigation={navigation} currentRoute="MyJobs" />
 
+      <CustomTabBarWorker
+        state={{ index: 1, routes: [] }}
+        navigation={navigation}
+      />
     </ScreenLayoutWorker>
   );
 };
@@ -636,27 +735,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 12,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: COLORS.text,
-  },
-  headerRight: {
-    width: 40,
-  },
+
   statsContainer: {
     backgroundColor: COLORS.surface,
     paddingVertical: 16,
@@ -887,6 +966,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.primary,
     fontWeight: "600",
+  },
+  // 🔥 NUEVO - Estilos para información de contacto
+  contactContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  contactTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  contactInfo: {
+    gap: 6,
+  },
+  contactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  contactText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: "500",
   },
   emptyContainer: {
     alignItems: "center",

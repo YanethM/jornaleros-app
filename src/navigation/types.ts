@@ -7,7 +7,8 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Login: undefined;
   Signup: undefined;
-  PasswordReset: undefined; 
+  CancelAccount: undefined;
+  PasswordReset: undefined;
   VerifyEmail: { email: string; fromRegistration?: boolean };
   Tutorial: undefined;
   TutorialApp: undefined;
@@ -24,6 +25,8 @@ export type RootStackParamList = {
   EmployerStack: undefined;
   WorkerStack: undefined;
   WorkerJobOfferDetailNoAuth: { jobId: string; fromPublic?: boolean };
+  JobOffersWithApplications: undefined;
+  ApplicationsStats: undefined;
 };
 
 export type AuthStackParamList = {
@@ -32,7 +35,6 @@ export type AuthStackParamList = {
   PasswordReset: undefined;
   VerifyEmail: { email: string; fromRegistration?: boolean };
 };
-
 
 // TAB NAVIGATOR DEL EMPLEADOR
 export type EmployerTabParamList = {
@@ -70,10 +72,10 @@ export type EmployerStackParamList = {
 
 // TAB NAVIGATOR DEL TRABAJADOR
 export type WorkerTabParamList = {
-  WorkerHome: undefined;
-  WorkerJobs: undefined;
-  MyApplications: undefined;
-  WorkerProfile: undefined;
+  Inicio: undefined; // was "WorkerHome"
+  Trabajos: undefined; // was "WorkerJobs"
+  Aplicaciones: undefined; // was "WorkerApplications"
+  Perfil: undefined;
 };
 
 // STACK NAVIGATOR DEL TRABAJADOR (pantallas específicas)
@@ -86,6 +88,25 @@ export type WorkerStackParamList = {
   WorkerMessage: { messageId: string };
   RateProducer: { producerId: string };
   CancelApplications: undefined;
+};
+
+export type AdminTabParamList = {
+  AdminHome: undefined;
+  AdminCropTypes: undefined;
+  UsersApp: undefined;
+  QualificationQuestions: undefined;
+};
+
+// NUEVO: STACK NAVIGATOR DEL ADMINISTRADOR (pantallas específicas)
+export type AdminStackParamList = {
+  AdminTabs: undefined;
+  CreateCropTypeScreen: undefined;
+  Reports: undefined;
+  ReportDetail: { 
+    reportId: string; 
+    reportTitle: string; 
+    reportData: any; 
+  };
 };
 
 // =============================================================================
@@ -144,7 +165,8 @@ export type PublicHomeNavigationProp = NativeStackNavigationProp<
   "PublicHome"
 >;
 
-export type AuthStackNavigationProp = NativeStackNavigationProp<AuthStackParamList>;
+export type AuthStackNavigationProp =
+  NativeStackNavigationProp<AuthStackParamList>;
 
 export type AuthLoginNavigationProp = NativeStackNavigationProp<
   AuthStackParamList,
@@ -237,6 +259,19 @@ export type PublicHomePreviewNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
+export type JobOffersWithApplicationsNavigationProp = CompositeNavigationProp<
+  NativeStackNavigationProp<
+    EmployerStackParamList,
+    "JobOffersWithApplications"
+  >,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+export type ApplicationsStatsNavigationProp = CompositeNavigationProp<
+  NativeStackNavigationProp<EmployerStackParamList, "ApplicationsStats">,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
 // =============================================================================
 // NAVIGATION PROPS - Worker Stack
 // =============================================================================
@@ -252,27 +287,22 @@ export type WorkerCompositeNavigationProp = CompositeNavigationProp<
 
 // Pantallas específicas del trabajador
 export type WorkerHomeNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<WorkerTabParamList, "WorkerHome">,
+  BottomTabNavigationProp<WorkerTabParamList, "Inicio">,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
 export type WorkerJobsNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<WorkerTabParamList, "WorkerJobs">,
+  BottomTabNavigationProp<WorkerTabParamList, "Trabajos">,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
 export type WorkerProfileNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<WorkerTabParamList, "WorkerProfile">,
-  NativeStackNavigationProp<RootStackParamList>
->;
-
-export type WorkerNotificationsNavigationProp = CompositeNavigationProp<
-  NativeStackNavigationProp<WorkerStackParamList, "WorkerNotifications">,
+  BottomTabNavigationProp<WorkerTabParamList, "Perfil">,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
 export type WorkerApplicationsNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<WorkerTabParamList, "MyApplications">,
+  BottomTabNavigationProp<WorkerTabParamList, "Aplicaciones">,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
@@ -310,6 +340,7 @@ export type WorkerProfileByEmployerNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<EmployerStackParamList, "WorkerProfileByEmployer">,
   NativeStackNavigationProp<RootStackParamList>
 >;
+
 // =============================================================================
 // TAB NAVIGATION PROPS
 // =============================================================================
@@ -342,7 +373,7 @@ export type WorkerJobsTabNavigationProp = CompositeNavigationProp<
 >;
 
 export type WorkerApplicationsTabNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<WorkerTabParamList, "MyApplications">,
+  BottomTabNavigationProp<WorkerTabParamList, "WorkerApplications">,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
@@ -396,6 +427,59 @@ export type WorkerProfileApplicationRouteProp = RouteProp<
   EmployerStackParamList,
   "WorkerProfileApplication"
 >;
+
+export type WorkerJobOfferDetailRouteProp = RouteProp<
+  WorkerStackParamList,
+  "WorkerJobOfferDetail"
+>;
+
+// =============================================================================
+// NUEVO: NAVIGATION PROPS - Admin Stack
+// =============================================================================
+
+export type AdminStackNavigationProp =
+  NativeStackNavigationProp<AdminStackParamList>;
+
+// Navegación compuesta para pantallas del administrador
+export type AdminCompositeNavigationProp = CompositeNavigationProp<
+  NativeStackNavigationProp<AdminStackParamList>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+// Pantallas específicas del administrador
+export type AdminHomeNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<AdminTabParamList, "AdminHome">,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+export type AdminCropTypesNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<AdminTabParamList, "AdminCropTypes">,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+export type UsersAppNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<AdminTabParamList, "UsersApp">,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+export type QualificationQuestionsNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<AdminTabParamList, "QualificationQuestions">,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+export type CreateCropTypeRouteProp = RouteProp<
+  AdminStackParamList,
+  "CreateCropType"
+>;
+export type ReportsRouteProp = RouteProp<
+  AdminStackParamList,
+  "Reports"
+>;
+export type ReportDetailRouteProp = RouteProp<
+  AdminStackParamList,
+  "ReportDetail"
+>;
+
 // =============================================================================
 // UTILITY TYPES - Para parámetros comunes
 // =============================================================================

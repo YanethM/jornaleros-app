@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "PasoColombiaApp",
-    "slug": "PasoColombiaApp",
-    "version": "1.0.0",
+    "name": "Jornaleando",
+    "slug": "jornaleando",
+    "owner": "ariadna-cdi",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,25 +15,36 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yanethm.PasoColombiaApp",
+      "bundleIdentifier": "com.yanethm.jornaleando",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSExceptionDomains": {
+            "dev-pasoco-back.ariadna.co": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSExceptionMinimumTLSVersion": "TLSv1.0"
+            }
+          }
+        }
       }
     },
     "android": {
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.yanethm.PasoColombiaApp"
+      "package": "com.yanethm.jornaleando",
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "2d722280-8a2c-4b29-9c21-136f57c4346d"
+        "projectId": "6aecc38d-34a9-40b1-aa83-6ecdfa9b997d"
       }
     }
   }

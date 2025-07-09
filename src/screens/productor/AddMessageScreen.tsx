@@ -154,7 +154,6 @@ const ContactWorkerScreen = ({ navigation, route }) => {
         handleAutoClose();
       }, 3000);
       setAutoCloseTimer(timer);
-
     } catch (error) {
       console.error("❌ Error enviando mensaje:", error);
 
@@ -281,7 +280,7 @@ const ContactWorkerScreen = ({ navigation, route }) => {
       <Text style={styles.formSubtitle}>
         Redacta un mensaje profesional para contactar al trabajador
       </Text>
-      
+
       <View style={styles.inputWrapper}>
         <TextInput
           style={styles.messageTextArea}
@@ -393,8 +392,8 @@ const ContactWorkerScreen = ({ navigation, route }) => {
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}>
-        
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0} // Ajusta este valor
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -406,7 +405,9 @@ const ContactWorkerScreen = ({ navigation, route }) => {
 
           <View style={styles.headerTitle}>
             <Text style={styles.headerTitleText}>Contactar Trabajador</Text>
-            <Text style={styles.headerSubtitle}>Envío de mensaje profesional</Text>
+            <Text style={styles.headerSubtitle}>
+              Envío de mensaje profesional
+            </Text>
           </View>
 
           <View style={styles.headerSpacer} />
@@ -478,6 +479,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+    paddingBottom: 100, // Espacio para el botón de enviar
   },
   workerCard: {
     backgroundColor: COLORS.surface,
@@ -630,6 +632,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
+    marginBottom: 70,
   },
   sendButtonDisabled: {
     backgroundColor: COLORS.textLight,

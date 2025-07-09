@@ -11,7 +11,7 @@ const AppWithTabs = () => {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="TabScreens" component={TabNavigator} />
       <Stack.Screen name="WorkerList" component={WorkerListScreen} />
-      <Stack.Screen name="JobOffers" component={JobOffersScreen} />
+      <Stack.Screen name="JobOffer" component={JobOffersScreen} />
     </Stack.Navigator>
   );
 };

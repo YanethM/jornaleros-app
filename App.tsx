@@ -4,61 +4,204 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
+import {
+  RootStackParamList,
+  EmployerStackParamList,
+  WorkerStackParamList,
+  AdminStackParamList,
+} from "./src/navigation/types";
 
 import SplashScreen from "./src/screens/public/SplashScreen";
 import OnboardingScreen from "./src/screens/public/OnboardingScreen";
-import PublicHome from "./src/screens/public/PublicHome"; // 🎯 NUEVA PANTALLA
-import AboutScreen from "./src/screens/public/AboutScreen";
-import ContactScreen from "./src/screens/public/ContactScreen";
-import TutorialScreen from "./src/screens/public/TutorialScreen";
-import TutorialApp from "./src/screens/productor/TutorialApp";
-import Terms from "./src/screens/public/TermsScreen";
+import PublicHome from "./src/screens/public/PublicHome";
 
-// Pantallas del Empleador/Productor
+// Tab Navigators
+import TabNavigator from "./src/navigation/TabNavigator";
+import WorkerTabNavigator from "./src/navigation/WorkerAppWithTabs";
+import AdminTabNavigator from "./src/navigation/AdminAppWithTabs"; // ← AGREGADO
+
+// Employer screens
 import AddTerrainScreen from "./src/screens/productor/AddTerrainScreen";
+import EditTerrain from "./src/screens/productor/EditTerrain";
 import TerrainDetail from "./src/screens/productor/TerrainDetail";
-import AddMessageScreen from "./src/screens/productor/AddMessageScreen";
-import TerrainScreen from "./src/screens/productor/TerrainScreen";
-import HomeScreen from "./src/screens/productor/AppWithTabs/TabNavigator/HomeScreen";
-import NotificationsScreen from "./src/screens/productor/MessagesScreen";
-import WorkerListScreen from "./src/screens/productor/WorkerListScreen";
 import CreateJobOfferScreen from "./src/screens/productor/CreateJobOffer";
 import JobOffersScreen from "./src/screens/productor/JobOffersScreen";
 import JobOfferDetail from "./src/screens/productor/JobOfferDetail";
-import EditJobOffer from "./src/screens/productor/EditJobOffer";
+import EditJobOfferScreen from "./src/screens/productor/EditJobOffer";
+import WorkerListScreen from "./src/screens/productor/WorkerListScreen";
+import NewMessageScreen from "./src/screens/productor/NewMessageScreen";
+import PublicHomePreview from "./src/screens/productor/PublicHomePreview";
+import WorkerProfileByEmployer from "./src/screens/productor/WorkerProfileByEmployer";
+import WorkerProfileApplication from "./src/screens/productor/WorkerProfileApplication";
+import JobOfferWithApplication from "./src/screens/productor/JobOfferWithApplication";
+import AddMessageScreen from "./src/screens/productor/AddMessageScreen";
+import RateWorker from "./src/screens/productor/RateWorker";
 import JobApplications from "./src/screens/productor/JobApplications";
+import HomeScreen from "./src/screens/productor/AppWithTabs/TabNavigator/HomeScreen";
+import TutorialApp from "./src/screens/productor/TutorialApp";
 
-// 🎯 PANTALLAS DEL TRABAJADOR
-import WorkerProfileScreen from "./src/screens/worker/WorkerProfileScreen";
-import MyJobsScreen from "./src/screens/worker/MyJobs";
-
-// Navegación
-import WorkerAppWithTabs from "./src/navigation/WorkerAppWithTabs";
-import TabNavigator from "./src/navigation/TabNavigator";
-import EditTerrain from "./src/screens/productor/EditTerrain";
-
-import { RootStackParamList } from "./src/navigation/types";
-import LoginScreen from "./src/screens/auth/Login";
-import RegisterScreen from "./src/screens/auth/Register";
-import WorkerSearch from "./src/screens/productor/WorkerSearch";
+// Worker screens
 import WorkerJobOfferDetail from "./src/screens/worker/WorkerJobOfferDetail";
 import WorkerMessage from "./src/screens/worker/WorkerMessage";
 import RateProducer from "./src/screens/worker/RateProducer";
-import MessagesScreen from "./src/screens/productor/MessagesScreen";
-import NewMessageScreen from "./src/screens/productor/NewMessageScreen";
 import WorkerJobsScreen from "./src/screens/worker/WorkerJobScreen";
-import CancelApplication from "./src/screens/worker/CancelApplication";
-import WorkerApplicationsScreen from "./src/screens/worker/WorkerApplicationScreen";
-import WorkerProfileByEmployer from "./src/screens/productor/WorkerProfileByEmployer";
-import WorkerProfileApplication from "./src/screens/productor/WorkerProfileApplication";
 import WorkerApplicationDetail from "./src/screens/worker/WorkerApplicationDetail";
-import WorkerJobOfferDetailNoAuth from "./src/screens/public/WorkerJobOfferDetailNoAuth";
+import MyJobsScreen from "./src/screens/worker/MyJobs";
+
+// Admin Screens
+import AdminHomeScreen from "./src/screens/admin/AdminHomeScreen";
+import AdminCropTypesScreen from "./src/screens/admin/AdminCropTypesScreen";
+import UsersAppScreen from "./src/screens/admin/UsersAppScreen";
+
+// Public screens
+import AboutScreen from "./src/screens/public/AboutScreen";
+import ContactScreen from "./src/screens/public/ContactScreen";
+import Terms from "./src/screens/public/TermsScreen";
+import CancelAccount from "./src/screens/public/CancelAccount";
+import TutorialScreen from "./src/screens/public/TutorialScreen";
+import RegisterScreen from "./src/screens/auth/Register";
+import LoginScreen from "./src/screens/auth/Login";
 import PasswordResetScreen from "./src/screens/auth/PasswordResetScreen";
 import VerifyEmailScreen from "./src/screens/auth/VerifyEmailScreen";
-import PublicHomePreview from "./src/screens/productor/PublicHomePreview";
-import EditProfileEmployer from "./src/screens/productor/EditProfileEmployer";
+import WorkerJobOfferDetailNoAuth from "./src/screens/public/WorkerJobOfferDetailNoAuth";
+import CancelApplication from "./src/screens/worker/CancelApplication";
+import EmployerRating from "./src/screens/worker/EmployerRating";
+import CreateCropTypeScreen from "./src/screens/admin/CreateCropTypeScreen";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import UserDetail from "./src/screens/admin/UserDetail";
+import CropTypePhaseScreen from "./src/screens/admin/CropTypePhaseScreen";
+import AdminFarmsManagement from "./src/screens/admin/AdminFarmsManagement";
+import ReportsScreen from "./src/screens/admin/ReportsScreen";
+import ReportDetailScreen from "./src/screens/admin/ReportDetail";
+import AdminDeletionRequests from "./src/screens/admin/AdminDeletionRequests";
+import { AdminUserRating } from "./src/screens/admin/AdminUserRating";
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
+// ✅ DECLARAR TODOS LOS STACK NAVIGATORS
+const RootStack = createNativeStackNavigator<RootStackParamList>();
+const EmployerStack = createNativeStackNavigator<EmployerStackParamList>();
+const WorkerStack = createNativeStackNavigator<WorkerStackParamList>();
+const AdminStack = createNativeStackNavigator<AdminStackParamList>(); // ← AGREGADO
+
+// Employer Stack Navigator with Tab Navigator as the main screen
+function EmployerAppWithTabs() {
+  return (
+    <EmployerStack.Navigator screenOptions={{ headerShown: false }}>
+      <EmployerStack.Screen name="EmployerTabs" component={TabNavigator} />
+      <EmployerStack.Screen name="AddTerrain" component={AddTerrainScreen} />
+      <EmployerStack.Screen name="EditTerrain" component={EditTerrain} />
+      <EmployerStack.Screen name="TerrainDetail" component={TerrainDetail} />
+      <EmployerStack.Screen name="AddMessage" component={AddMessageScreen} />
+      <EmployerStack.Screen
+        name="CreateJobOffer"
+        component={CreateJobOfferScreen}
+      />
+      <EmployerStack.Screen name="JobOffers" component={JobOffersScreen} />
+      <EmployerStack.Screen name="JobOfferDetail" component={JobOfferDetail} />
+      <EmployerStack.Screen
+        name="EditJobOffer"
+        component={EditJobOfferScreen}
+      />
+      <EmployerStack.Screen name="WorkerList" component={WorkerListScreen} />
+      <EmployerStack.Screen name="NewMessage" component={NewMessageScreen} />
+      <EmployerStack.Screen
+        name="PublicHomePreview"
+        component={PublicHomePreview}
+      />
+      <EmployerStack.Screen
+        name="WorkerProfileByEmployer"
+        component={WorkerProfileByEmployer}
+      />
+      <EmployerStack.Screen
+        name="WorkerProfileApplication"
+        component={WorkerProfileApplication}
+      />
+      <EmployerStack.Screen
+        name="JobOfferWithApplication"
+        component={JobOfferWithApplication}
+      />
+      <EmployerStack.Screen
+        name="JobApplications"
+        component={JobApplications}
+      />
+      <EmployerStack.Screen name="RateWorker" component={RateWorker} />
+    </EmployerStack.Navigator>
+  );
+}
+
+// Worker Stack Navigator with Tab Navigator as the main screen
+function WorkerAppWithTabs() {
+  return (
+    <WorkerStack.Navigator screenOptions={{ headerShown: false }}>
+      <WorkerStack.Screen name="WorkerTabs" component={WorkerTabNavigator} />
+      <WorkerStack.Screen name="Skills" component={RateProducer} />
+      <WorkerStack.Screen
+        name="MyJobs"
+        component={MyJobsScreen}
+        options={{ headerShown: false }}
+      />
+      <WorkerStack.Screen
+        name="WorkerJobOfferDetail"
+        component={WorkerJobOfferDetail}
+        options={{ headerShown: false }}
+      />
+      <WorkerStack.Screen
+        name="WorkerNotifications"
+        component={CancelApplication}
+        options={{ headerShown: false }}
+      />
+      <WorkerStack.Screen
+        name="WorkerMessage"
+        component={WorkerMessage}
+        options={{ headerShown: false }}
+      />
+      <WorkerStack.Screen
+        name="RateProducer"
+        component={RateProducer}
+        options={{ headerShown: false }}
+      />
+      <WorkerStack.Screen
+        name="CancelApplications"
+        component={CancelApplication}
+        options={{ headerShown: false }}
+      />
+      <WorkerStack.Screen
+        name="EmployerRating"
+        component={EmployerRating}
+        options={{ headerShown: false }}
+      />
+    </WorkerStack.Navigator>
+  );
+}
+
+// ✅ ADMIN STACK NAVIGATOR CORREGIDO
+function AdminAppWithTabs() {
+  return (
+    <AdminStack.Navigator screenOptions={{ headerShown: false }}>
+      <AdminStack.Screen name="AdminTabs" component={AdminTabNavigator} />
+      <AdminStack.Screen
+        name="CreateCropType"
+        component={CreateCropTypeScreen}
+      />
+      <AdminStack.Screen
+        name="FarmsManagement"
+        component={AdminFarmsManagement}
+      />
+      <AdminStack.Screen
+        name="AdminCropTypes"
+        component={AdminCropTypesScreen}
+      />
+      <AdminStack.Screen name="CropTypePhase" component={CropTypePhaseScreen} />
+      <AdminStack.Screen name="UserDetail" component={UserDetail} />
+      <AdminStack.Screen name="Reports" component={ReportsScreen} />
+      <AdminStack.Screen name="ReportDetail" component={ReportDetailScreen} />
+      <AdminStack.Screen
+        name="AdminDeletionRequests"
+        component={AdminDeletionRequests}
+      />
+      <AdminStack.Screen name="AdminUserRating" component={AdminUserRating} />
+    </AdminStack.Navigator>
+  );
+}
 
 function RootNavigator() {
   const { user, isLoading, hasWorkerProfile, hasEmployerProfile } = useAuth();
@@ -73,9 +216,21 @@ function RootNavigator() {
   const checkOnboardingStatus = async () => {
     try {
       const seen = await AsyncStorage.getItem("@has_seen_onboarding");
-      setHasSeenOnboarding(!!seen);
+      console.log("🔍 Checking onboarding status:", {
+        seen,
+        type: typeof seen,
+      });
+
+      const hasCompleted = seen === "true";
+      setHasSeenOnboarding(hasCompleted);
+
+      console.log("✅ Onboarding status set to:", hasCompleted);
+      console.log(
+        "📍 Will navigate to:",
+        hasCompleted ? "PublicHome" : "Onboarding"
+      );
     } catch (error) {
-      console.error("Error checking onboarding status:", error);
+      console.error("❌ Error checking onboarding status:", error);
       setHasSeenOnboarding(false);
     }
   };
@@ -83,27 +238,29 @@ function RootNavigator() {
   const getUserRole = () => {
     if (!user) return null;
 
-    // Debug: agregar logs para ver qué está pasando
-    console.log("🔍 Debug getUserRole:", {
-      user: user?.id,
-      userRole: user?.role,
-      hasWorkerProfile,
-      hasEmployerProfile,
-    });
-
+    // Verificar si es administrador primero
     if (typeof user.role === "string") {
-      return user.role.toLowerCase();
+      const roleName = user.role.toLowerCase();
+      if (roleName === "administrador" || roleName === "admin") {
+        return "administrador";
+      }
+      return roleName;
     } else if (user.role && user.role.name) {
-      return user.role.name.toLowerCase();
+      const roleName = user.role.name.toLowerCase();
+      if (roleName === "administrador" || roleName === "admin") {
+        return "administrador";
+      }
+      return roleName;
     }
 
+    // Fallback a la lógica existente
     const workerProfileExists = hasWorkerProfile === true;
     const employerProfileExists = hasEmployerProfile === true;
 
     if (workerProfileExists) return "trabajador";
     if (employerProfileExists) return "empleador";
 
-    return "trabajador"; // Default seguro
+    return "trabajador";
   };
 
   if (isLoading || hasSeenOnboarding === null) {
@@ -114,140 +271,65 @@ function RootNavigator() {
     const userRole = getUserRole();
     const isWorker = userRole === "trabajador";
     const isEmployer = userRole === "empleador";
+    const isAdmin = userRole === "administrador";
 
-    // Debug: ver los roles calculados
-    console.log("🎭 Roles calculados:", { userRole, isWorker, isEmployer });
+    console.log("🔍 User role detected:", userRole);
 
     return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {/* 🏠 PANTALLA PRINCIPAL */}
-        {isWorker ? (
-          <Stack.Screen name="MainApp" component={WorkerAppWithTabs} />
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        {/* Main app screens based on role */}
+        {isAdmin ? (
+          <RootStack.Screen name="AdminApp" component={AdminAppWithTabs} />
+        ) : isWorker ? (
+          <RootStack.Screen name="WorkerApp" component={WorkerAppWithTabs} />
         ) : (
-          <Stack.Screen name="MainApp" component={TabNavigator} />
+          <RootStack.Screen
+            name="EmployerApp"
+            component={EmployerAppWithTabs}
+          />
         )}
 
-        {/* 🌟 PANTALLAS COMUNES - SIEMPRE DISPONIBLES */}
-        <Stack.Screen name="About" component={AboutScreen} />
-        <Stack.Screen name="Contact" component={ContactScreen} />
-        <Stack.Screen name="Terms" component={Terms} />
-        <Stack.Screen name="Notifications" component={NotificationsScreen} />
-        <Stack.Screen name="TutorialApp" component={TutorialApp} />
-
-        {/* 🎯 PANTALLAS DEL TRABAJADOR */}
-        <Stack.Screen name="MyJobs" component={MyJobsScreen} />
-        <Stack.Screen name="WorkerProfile" component={WorkerProfileScreen} />
-        <Stack.Screen name="WorkerMessage" component={WorkerMessage} />
-        <Stack.Screen name="RateProducer" component={RateProducer} />
-        <Stack.Screen name="WorkerJobs" component={WorkerJobsScreen} />
-        <Stack.Screen name="CancelApplication" component={CancelApplication} />
-        <Stack.Screen
-          name="WorkerApplications"
-          component={WorkerApplicationsScreen}
-        />
-        <Stack.Screen
-          name="WorkerApplicationDetail"
-          component={WorkerApplicationDetail}
-        />
-        <Stack.Screen
-          name="WorkerJobOfferDetail"
-          component={WorkerJobOfferDetail}
-        />
-
-        {/* PANTALLAS DE MENSAJES DEL TRABAJADOR */}
-
-        {/* 🏭 PANTALLAS DEL EMPLEADOR */}
-        <Stack.Screen name="AddTerrain" component={AddTerrainScreen} />
-        <Stack.Screen name="EditTerrain" component={EditTerrain} />
-        <Stack.Screen name="TerrainDetail" component={TerrainDetail} />
-        <Stack.Screen name="AddMessage" component={AddMessageScreen} />
-        <Stack.Screen name="Terrenos" component={TerrainScreen} />
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="WorkerList" component={WorkerListScreen} />
-        <Stack.Screen name="CreateJobOffer" component={CreateJobOfferScreen} />
-        <Stack.Screen name="JobOffers" component={JobOffersScreen} />
-        <Stack.Screen name="EditJobOffer" component={EditJobOffer} />
-        <Stack.Screen name="JobApplications" component={JobApplications} />
-        <Stack.Screen name="Mensajes" component={MessagesScreen} />
-        <Stack.Screen name="NewMessage" component={NewMessageScreen} />
-        <Stack.Screen name="WorkerSearch" component={WorkerSearch} />
-        <Stack.Screen name="JobOfferDetail" component={JobOfferDetail} />
-        <Stack.Screen name="PublicHomePreview" component={PublicHomePreview} />
-        <Stack.Screen name="EditProfileEmployer" component={EditProfileEmployer} />
-        <Stack.Screen
-          name="WorkerProfileByEmployer"
-          component={WorkerProfileByEmployer}
-        />
-        <Stack.Screen
-          name="WorkerProfileApplication"
-          component={WorkerProfileApplication}
-        />
-        {/* <Stack.Screen name="Reports" component={ReportsScreen} /> */}
-      </Stack.Navigator>
+        {/* Shared screens that all roles might need */}
+        <RootStack.Screen name="About" component={AboutScreen} />
+        <RootStack.Screen name="Contact" component={ContactScreen} />
+        <RootStack.Screen name="Terms" component={Terms} />
+        <RootStack.Screen name="CancelAccount" component={CancelAccount} />
+        <RootStack.Screen name="TutorialApp" component={TutorialApp} />
+      </RootStack.Navigator>
     );
   }
 
-  // PANTALLAS PÚBLICAS - PublicHome como vista principal
+  // Public screens
   return (
-    <Stack.Navigator
+    <RootStack.Navigator
       screenOptions={{ headerShown: false }}
-      initialRouteName={hasSeenOnboarding ? "PublicHome" : "Tutorial"}>
-      {/* 🎯 ONBOARDING FLOW */}
-      <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-      <Stack.Screen name="Tutorial" component={TutorialScreen} />
-
-      {/* 🏠 PANTALLA PRINCIPAL PÚBLICA */}
-      <Stack.Screen name="PublicHome" component={PublicHome} />
-
-      {/* 🔐 AUTENTICACIÓN */}
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Signup" component={RegisterScreen} />
-      <Stack.Screen
-        name="PasswordReset"
-        component={PasswordResetScreen}
-        options={{
-          title: "Recuperar Contraseña",
-          gestureEnabled: true,
-        }}
-      />
-
-      <Stack.Screen
-        name="VerifyEmail"
-        component={VerifyEmailScreen}
-        options={{
-          title: "Verificar Email",
-        }}
-      />
-      <Stack.Screen name="About" component={AboutScreen} />
-      <Stack.Screen name="Contact" component={ContactScreen} />
-      <Stack.Screen name="Terms" component={Terms} />
-
-      {/* 📄 DETALLE DE OFERTAS PÚBLICAS */}
-      <Stack.Screen
+      initialRouteName={hasSeenOnboarding ? "PublicHome" : "Onboarding"}>
+      <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
+      <RootStack.Screen name="Tutorial" component={TutorialScreen} />
+      <RootStack.Screen name="PublicHome" component={PublicHome} />
+      <RootStack.Screen name="Login" component={LoginScreen} />
+      <RootStack.Screen name="Signup" component={RegisterScreen} />
+      <RootStack.Screen name="PasswordReset" component={PasswordResetScreen} />
+      <RootStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+      <RootStack.Screen name="About" component={AboutScreen} />
+      <RootStack.Screen name="Contact" component={ContactScreen} />
+      <RootStack.Screen name="Terms" component={Terms} />
+      <RootStack.Screen
         name="WorkerJobOfferDetailNoAuth"
         component={WorkerJobOfferDetailNoAuth}
       />
-      {/* 🔍 PANTALLAS ADICIONALES PÚBLICAS */}
-      <Stack.Screen
-        name="AllJobs"
-        component={JobOffersScreen}
-        options={{ title: "Todas las ofertas" }}
-      />
-      <Stack.Screen
-        name="CategoryJobs"
-        component={JobOffersScreen}
-        options={{ title: "Ofertas por categoría" }}
-      />
-    </Stack.Navigator>
+    </RootStack.Navigator>
   );
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NavigationContainer>
-        <RootNavigator />
-      </NavigationContainer>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <NavigationContainer>
+          <RootNavigator />
+        </NavigationContainer>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

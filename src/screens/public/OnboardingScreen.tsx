@@ -30,19 +30,22 @@ const slides: OnboardingSlide[] = [
   {
     id: "1",
     title: "Bienvenido(a) a Jornaleando",
-    description: "Únete a una comunidad que impulsa el trabajo agrícola en cultivos de sacha inchi, miel y cacao. Regístrate como productor o trabajador y encuentra oportunidades cerca de ti.",
+    description:
+      "Únete a una comunidad que impulsa el trabajo agrícola en cultivos de sacha inchi, miel y cacao. Regístrate como productor o trabajador y encuentra oportunidades cerca de ti.",
     image: require("../../../assets/onboarding/slide1.png"),
   },
   {
     id: "2",
     title: "Si eres Productor",
-    description: "Encuentra jornaleros disponibles para trabajar en tu terreno, de forma rápida, segura y confiable. Gestiona tus ofertas, fechas y pagos desde un solo lugar.",
+    description:
+      "Encuentra jornaleros disponibles para trabajar en tu terreno, de forma rápida, segura y confiable. Gestiona tus ofertas, fechas y pagos desde un solo lugar.",
     image: require("../../../assets/onboarding/slide2.jpg"),
   },
   {
     id: "3",
     title: "Si eres Trabajador",
-    description: "Elige los trabajos que mejor se adapten a ti, con condiciones claras. Haz lo que sabes hacer, trabajando en cultivos de Cacao, Sacha Inchi o Miel.",
+    description:
+      "Elige los trabajos que mejor se adapten a ti, con condiciones claras. Haz lo que sabes hacer, trabajando en cultivos de Cacao, Sacha Inchi o Miel.",
     image: require("../../../assets/onboarding/slide3.png"),
   },
 ];
@@ -51,9 +54,19 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  const handleGetStarted = async () => {
-    await AsyncStorage.setItem("@has_seen_onboarding", "true");
-    navigation.navigate("Login");
+  // ✅ FUNCIÓN CORREGIDA - Ahora navega a PublicHome
+  const completeOnboarding = async () => {
+    try {
+      await AsyncStorage.setItem("@has_seen_onboarding", "true");
+      console.log("✅ Onboarding marked as completed");
+      
+      // Navegar a PublicHome, no a Login
+      navigation.navigate("PublicHome");
+    } catch (error) {
+      console.error("❌ Error saving onboarding status:", error);
+      // Aún así navegar, por si hay error con AsyncStorage
+      navigation.navigate("PublicHome");
+    }
   };
 
   const handleNext = () => {
@@ -64,12 +77,14 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
       });
       setCurrentIndex(currentIndex + 1);
     } else {
-      handleGetStarted();
+      // Usar la función correcta
+      completeOnboarding();
     }
   };
 
   const handleSkip = () => {
-    handleGetStarted();
+    // Usar la función correcta
+    completeOnboarding();
   };
 
   const handleScroll = (event: any) => {
@@ -80,13 +95,17 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
   const renderSlide = (slide: OnboardingSlide) => (
     <View key={slide.id} style={styles.slide}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
-      
+
       {/* Background Image */}
-      <Image source={slide.image} style={styles.backgroundImage} resizeMode="cover" />
-      
+      <Image
+        source={slide.image}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      />
+
       {/* Dark Overlay */}
       <View style={styles.overlay} />
-      
+
       {/* Content */}
       <View style={styles.contentContainer}>
         <View style={styles.textContainer}>
@@ -105,7 +124,8 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
           style={[
             styles.dot,
             {
-              backgroundColor: currentIndex === index ? "#fff" : "rgba(255, 255, 255, 0.3)",
+              backgroundColor:
+                currentIndex === index ? "#fff" : "rgba(255, 255, 255, 0.3)",
               width: currentIndex === index ? 24 : 8,
             },
           ]}
@@ -144,7 +164,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ navigation }) => {
             </>
           ) : (
             <TouchableOpacity
-              onPress={handleGetStarted}
+              onPress={completeOnboarding} // ✅ Usar la función correcta
               style={styles.getStartedButton}>
               <Text style={styles.getStartedText}>Comenzar</Text>
             </TouchableOpacity>

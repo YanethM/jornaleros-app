@@ -13,8 +13,17 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useAuth } from "../../context/AuthContext";
-import ScreenLayout from "../../components/ScreenLayout";
-import CustomTabBar from "../../components/CustomTabBar";
+import ScreenLayoutAdmin from "../../components/ScreenLayoutAdmin";
+import CustomTabBarAdmin from "../../components/CustomTabBarAdmin";
+import {
+  getGeneralStats,
+  getApplicationsReport,
+  getFarmsReport,
+  getWorkersReport,
+  getCropsReport,
+  getLowRatedWorkersReport,
+  exportReport
+} from "../../services/adminService";
 
 const COLORS = {
   primary: "#274F66",
@@ -45,68 +54,105 @@ const ReportsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [reportData, setReportData] = useState(null);
+  const [quickStats, setQuickStats] = useState([]);
 
   const reportTypes = [
     {
-      id: "messages",
-      title: "Reporte de Mensajes",
-      subtitle: "Estadísticas de conversaciones y mensajes",
-      icon: "chat-bubble-outline",
+      id: "applications",
+      title: "Reporte de Postulaciones",
+      subtitle: "Análisis de postulaciones aceptadas y rechazadas",
+      icon: "people-outline",
       color: COLORS.primary,
       gradient: [COLORS.primary, COLORS.primaryLight],
-      description: "Analiza el volumen de mensajes enviados y recibidos",
+      description: "Estadísticas completas de postulaciones, tiempos de respuesta y estado actual",
+      serviceFunction: getApplicationsReport,
     },
     {
-      id: "activity",
-      title: "Actividad de Usuario",
-      subtitle: "Patrones de uso y tiempo activo",
-      icon: "analytics-outline",
+      id: "farms",
+      title: "Gestión de Fincas",
+      subtitle: "Estado y productividad de fincas",
+      icon: "leaf-outline",
       color: COLORS.success,
       gradient: [COLORS.success, COLORS.teal],
-      description: "Visualiza tu actividad diaria y semanal en la app",
+      description: "Análisis de fincas activas, distribución por tamaño y productividad",
+      serviceFunction: getFarmsReport,
     },
     {
-      id: "contacts",
-      title: "Análisis de Contactos",
-      subtitle: "Interacciones con otros usuarios",
-      icon: "people-outline",
+      id: "workers",
+      title: "Rendimiento de Personal",
+      subtitle: "Productividad y desempeño de trabajadores",
+      icon: "person-outline",
       color: COLORS.info,
       gradient: [COLORS.info, COLORS.purple],
-      description: "Estadísticas de tus contactos más frecuentes",
+      description: "Evaluación del rendimiento, asistencia y eficiencia del personal",
+      serviceFunction: getWorkersReport,
     },
     {
-      id: "performance",
-      title: "Rendimiento de Red",
-      subtitle: "Velocidad y calidad de conexión",
-      icon: "speedometer-outline",
+      id: "crops",
+      title: "Análisis de Cultivos",
+      subtitle: "Rendimiento y temporadas de cosecha",
+      icon: "leaf-outline",
+      color: COLORS.success,
+      gradient: [COLORS.success, COLORS.warning],
+      description: "Seguimiento de cultivos, rendimiento por hectárea y análisis estacional",
+      serviceFunction: getCropsReport,
+    },
+    {
+      id: "low-rated-workers",
+      title: "Reporte Peores Calificados",
+      subtitle: "Calificaciones de desempeño por debajo de 3",
+      icon: "trending-down-outline",
       color: COLORS.orange,
       gradient: [COLORS.orange, COLORS.warning],
-      description: "Monitorea la calidad de tu conexión y rendimiento",
-    },
-    {
-      id: "usage",
-      title: "Uso de Funciones",
-      subtitle: "Características más utilizadas",
-      icon: "bar-chart-outline",
-      color: COLORS.purple,
-      gradient: [COLORS.purple, COLORS.accent],
-      description: "Descubre qué funciones de la app usas más",
-    },
-    {
-      id: "timeline",
-      title: "Línea de Tiempo",
-      subtitle: "Historial de actividades",
-      icon: "time-outline",
-      color: COLORS.teal,
-      gradient: [COLORS.teal, COLORS.success],
-      description: "Revisa tu historial cronológico de actividades",
+      description: "Análisis de trabajadores con calificaciones bajas y recomendaciones de mejora",
+      serviceFunction: getLowRatedWorkersReport,
     },
   ];
 
   const loadReportData = useCallback(async () => {
     try {
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Cargar estadísticas generales
+      const statsResponse = await getGeneralStats();
+      
+      if (statsResponse.success) {
+        const stats = statsResponse.data;
+        
+        // Formatear las estadísticas para mostrar en el UI
+        const formattedStats = [
+          {
+            title: "Postulaciones",
+            value: stats.totalApplications?.toString() || "0",
+            subtitle: stats.month || "Este mes",
+            color: COLORS.primary,
+            icon: "people",
+          },
+          {
+            title: "Fincas Activas",
+            value: stats.activeFarms?.toString() || "0",
+            subtitle: "Operando",
+            color: COLORS.success,
+            icon: "eco",
+          },
+          {
+            title: "Trabajadores",
+            value: stats.activeWorkers?.toString() || "0",
+            subtitle: "Activos",
+            color: COLORS.info,
+            icon: "person",
+          },
+          {
+            title: "Productividad",
+            value: `${stats.averageProductivity || 0}%`,
+            subtitle: "Promedio",
+            color: COLORS.orange,
+            icon: "trending-up",
+          },
+        ];
+        
+        setQuickStats(formattedStats);
+      }
       
       setReportData({
         loaded: true,
@@ -115,6 +161,38 @@ const ReportsScreen = ({ navigation }) => {
     } catch (error) {
       console.error("Error loading report data:", error);
       Alert.alert("Error", "No se pudieron cargar los datos del reporte");
+      
+      // Fallback a datos por defecto en caso de error
+      setQuickStats([
+        {
+          title: "Postulaciones",
+          value: "0",
+          subtitle: "Este mes",
+          color: COLORS.primary,
+          icon: "people",
+        },
+        {
+          title: "Fincas Activas",
+          value: "0",
+          subtitle: "Operando",
+          color: COLORS.success,
+          icon: "eco",
+        },
+        {
+          title: "Trabajadores",
+          value: "0",
+          subtitle: "Activos",
+          color: COLORS.info,
+          icon: "person",
+        },
+        {
+          title: "Productividad",
+          value: "0%",
+          subtitle: "Promedio",
+          color: COLORS.orange,
+          icon: "trending-up",
+        },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -130,7 +208,7 @@ const ReportsScreen = ({ navigation }) => {
     loadReportData();
   }, [loadReportData]);
 
-  const handleGenerateReport = (reportType) => {
+  const handleGenerateReport = async (reportType) => {
     Alert.alert(
       "Generar Reporte",
       `¿Deseas generar el reporte de ${reportType.title}?`,
@@ -138,31 +216,49 @@ const ReportsScreen = ({ navigation }) => {
         { text: "Cancelar", style: "cancel" },
         {
           text: "Generar",
-          onPress: () => {
-            setLoading(true);
-            // Aquí implementarías la lógica para generar el reporte específico
-            setTimeout(() => {
+          onPress: async () => {
+            try {
+              setLoading(true);
+              
+              // Llamar a la función específica del servicio
+              const reportResponse = await reportType.serviceFunction();
+              
+              if (reportResponse.success) {
+                setLoading(false);
+                Alert.alert(
+                  "Reporte Generado",
+                  `El reporte de ${reportType.title} ha sido generado exitosamente.`,
+                  [
+                    { 
+                      text: "Ver Reporte", 
+                      onPress: () => navigateToReport(reportType, reportResponse.data) 
+                    },
+                    { text: "Cerrar" },
+                  ]
+                );
+              } else {
+                throw new Error(reportResponse.message || "Error al generar el reporte");
+              }
+            } catch (error) {
               setLoading(false);
+              console.error(`Error generando reporte ${reportType.id}:`, error);
               Alert.alert(
-                "Reporte Generado",
-                `El reporte de ${reportType.title} ha sido generado exitosamente.`,
-                [
-                  { text: "Ver Reporte", onPress: () => navigateToReport(reportType) },
-                  { text: "Cerrar" },
-                ]
+                "Error",
+                `No se pudo generar el reporte de ${reportType.title}. Por favor, intenta nuevamente.`
               );
-            }, 2000);
+            }
           },
         },
       ]
     );
   };
 
-  const navigateToReport = (reportType) => {
-    // Navegación a pantalla específica del reporte
+  const navigateToReport = (reportType, reportData) => {
+    // Navegación a pantalla específica del reporte con datos
     navigation.navigate("ReportDetail", { 
       reportId: reportType.id,
-      reportTitle: reportType.title 
+      reportTitle: reportType.title,
+      reportData: reportData
     });
   };
 
@@ -172,18 +268,47 @@ const ReportsScreen = ({ navigation }) => {
       "Selecciona el formato de exportación:",
       [
         { text: "Cancelar", style: "cancel" },
-        { text: "PDF", onPress: () => exportReport("pdf") },
-        { text: "Excel", onPress: () => exportReport("excel") },
-        { text: "CSV", onPress: () => exportReport("csv") },
+        { text: "PDF", onPress: () => handleExportReport("pdf") },
+        { text: "Excel", onPress: () => handleExportReport("excel") },
+        { text: "CSV", onPress: () => handleExportReport("csv") },
       ]
     );
   };
 
-  const exportReport = (format) => {
-    Alert.alert(
-      "Exportando...",
-      `Tu reporte se está exportando en formato ${format.toUpperCase()}. Te notificaremos cuando esté listo.`
-    );
+  const handleExportReport = async (format) => {
+    try {
+      setLoading(true);
+      
+      const exportData = {
+        reportType: "general",
+        format: format,
+        data: reportData,
+        generatedBy: user.id,
+        timestamp: new Date().toISOString()
+      };
+      
+      const exportResponse = await exportReport(exportData);
+      
+      if (exportResponse.success) {
+        Alert.alert(
+          "Exportación Exitosa",
+          `Tu reporte se ha exportado exitosamente en formato ${format.toUpperCase()}.`,
+          [
+            { text: "OK" }
+          ]
+        );
+      } else {
+        throw new Error(exportResponse.message || "Error al exportar");
+      }
+    } catch (error) {
+      console.error("Error exportando reporte:", error);
+      Alert.alert(
+        "Error de Exportación",
+        `No se pudo exportar el reporte en formato ${format.toUpperCase()}. Por favor, intenta nuevamente.`
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderReportCard = (report) => (
@@ -210,9 +335,8 @@ const ReportsScreen = ({ navigation }) => {
   );
 
   return (
-    <ScreenLayout navigation={navigation}>
+    <ScreenLayoutAdmin navigation={navigation}>
       <View style={styles.container}>
-
         <ScrollView
           style={styles.scrollView}
           refreshControl={
@@ -227,9 +351,9 @@ const ReportsScreen = ({ navigation }) => {
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={styles.headerTitle}>Reportes y Análisis</Text>
+              <Text style={styles.headerTitle}>Reportes Agrícolas</Text>
               <Text style={styles.headerSubtitle}>
-                Genera informes detallados de tu actividad
+                Análisis completo de tu operación agrícola
               </Text>
             </View>
             <TouchableOpacity
@@ -240,9 +364,39 @@ const ReportsScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
+          {/* Quick Stats */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Resumen General</Text>
+            <Text style={styles.sectionSubtitle}>
+              Indicadores clave de tu operación
+            </Text>
+            
+            {quickStats.length > 0 ? (
+              <View style={styles.statsGrid}>
+                {quickStats.map((stat, index) => (
+                  <View key={index} style={styles.statCard}>
+                    <View style={styles.statHeader}>
+                      <View style={[styles.statIcon, { backgroundColor: `${stat.color}15` }]}>
+                        <Icon name={stat.icon} size={20} color={stat.color} />
+                      </View>
+                    </View>
+                    <Text style={styles.statValue}>{stat.value}</Text>
+                    <Text style={styles.statLabel}>{stat.title}</Text>
+                    <Text style={styles.statSubtitle}>{stat.subtitle}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+                <Text style={styles.loadingText}>Cargando estadísticas...</Text>
+              </View>
+            )}
+          </View>
+
           {/* Reports List */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Tipos de Reportes</Text>
+            <Text style={styles.sectionTitle}>Reportes Detallados</Text>
             <Text style={styles.sectionSubtitle}>
               Selecciona el tipo de análisis que deseas generar
             </Text>
@@ -271,10 +425,12 @@ const ReportsScreen = ({ navigation }) => {
             <View style={styles.recentReportsContainer}>
               <View style={styles.recentReportItem}>
                 <View style={styles.recentReportInfo}>
-                  <Icon name="description" size={20} color={COLORS.primary} />
+                  <Icon name="people" size={20} color={COLORS.primary} />
                   <View style={styles.recentReportText}>
-                    <Text style={styles.recentReportTitle}>Reporte Mensual - Marzo</Text>
-                    <Text style={styles.recentReportDate}>Generado hace 2 días</Text>
+                    <Text style={styles.recentReportTitle}>Postulaciones</Text>
+                    <Text style={styles.recentReportDate}>
+                      {quickStats[0]?.value || "0"} aplicaciones este mes
+                    </Text>
                   </View>
                 </View>
                 <TouchableOpacity style={styles.downloadButton}>
@@ -284,10 +440,12 @@ const ReportsScreen = ({ navigation }) => {
 
               <View style={styles.recentReportItem}>
                 <View style={styles.recentReportInfo}>
-                  <Icon name="analytics" size={20} color={COLORS.success} />
+                  <Icon name="eco" size={20} color={COLORS.success} />
                   <View style={styles.recentReportText}>
-                    <Text style={styles.recentReportTitle}>Análisis de Actividad</Text>
-                    <Text style={styles.recentReportDate}>Generado hace 1 semana</Text>
+                    <Text style={styles.recentReportTitle}>Productividad Fincas</Text>
+                    <Text style={styles.recentReportDate}>
+                      {quickStats[1]?.value || "0"} fincas analizadas
+                    </Text>
                   </View>
                 </View>
                 <TouchableOpacity style={styles.downloadButton}>
@@ -300,10 +458,20 @@ const ReportsScreen = ({ navigation }) => {
           {/* Bottom Spacing */}
           <View style={styles.bottomSpacing} />
         </ScrollView>
-        <CustomTabBar navigation={navigation} currentRoute="Reports" />
-
+        <CustomTabBarAdmin 
+          navigation={navigation} 
+          state={{
+            index: -1, // Ningún tab activo (Reports no está en la lista)
+            routes: [
+              { name: 'AdminHome' },
+              { name: 'CropTypes' },
+              { name: 'UsersApp' },
+              { name: 'QualificationQuestions' }
+            ]
+          }}
+        />
       </View>
-    </ScreenLayout>
+    </ScreenLayoutAdmin>
   );
 };
 
@@ -375,7 +543,7 @@ const styles = StyleSheet.create({
     padding: 16,
     width: (screenWidth - 64) / 2,
     elevation: 2,
-    shadowColor: COLORS.shadow,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -393,15 +561,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  statTrend: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  trendText: {
-    fontSize: 12,
-    fontWeight: "500",
-  },
   statValue: {
     fontSize: 24,
     fontWeight: "bold",
@@ -409,6 +568,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  statSubtitle: {
     fontSize: 12,
     color: COLORS.textSecondary,
   },
@@ -419,7 +584,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 16,
     elevation: 2,
-    shadowColor: COLORS.shadow,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,

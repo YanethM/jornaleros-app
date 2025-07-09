@@ -53,7 +53,6 @@ const SmartHeader = ({ navigation: propNavigation }) => {
             onPress: async () => {
               setIsMenuOpen(false);
               await logout();
-              console.log('✅ Sesión cerrada exitosamente');
             }
           }
         ]

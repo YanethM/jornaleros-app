@@ -23,6 +23,7 @@ import CustomDatePicker from "../../components/CustomDatePicker";
 import { getFarmByemployerId } from "../../services/farmService";
 import { editJobOfferById, getJobOfferById } from "../../services/jobOffers";
 import CustomTabBar from "../../components/CustomTabBar";
+import EnhancedFarmInfoCard from "./EnhancedFarmInfoCard";
 
 const PRIMARY_COLOR = "#284F66";
 const SECONDARY_COLOR = "#4A7C94";
@@ -57,7 +58,7 @@ const EditJobOfferScreen = ({ navigation, route }) => {
   // Estados para los datos originales que no se pueden cambiar
   const [originalFarmInfo, setOriginalFarmInfo] = useState(null);
   const [originalCropType, setOriginalCropType] = useState(null);
-  
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -73,9 +74,9 @@ const EditJobOfferScreen = ({ navigation, route }) => {
     paymentMode: "Efectivo",
     laborType: "",
     pricePerUnit: "",
-    plantCount: "", // NUEVO: Número de plantas
-    workType: "", // NUEVO: Tipo de trabajo
-    workersNeeded: "1", // NUEVO: Número de trabajadores necesarios
+    plantCount: "",
+    workType: "",
+    workersNeeded: "1",
     includesFood: false,
     includesLodging: false,
     status: "Activo",
@@ -83,8 +84,7 @@ const EditJobOfferScreen = ({ navigation, route }) => {
 
   const [selectedFarmInfo, setSelectedFarmInfo] = useState(null);
   const [farmCropTypes, setFarmCropTypes] = useState([]);
-  const [availablePhasesForSelectedCrop, setAvailablePhasesForSelectedCrop] =
-    useState([]);
+  const [availablePhasesForSelectedCrop, setAvailablePhasesForSelectedCrop] = useState([]);
 
   const calculateDaysBetweenDates = (startDate, endDate) => {
     const oneDay = 24 * 60 * 60 * 1000;
@@ -96,10 +96,14 @@ const EditJobOfferScreen = ({ navigation, route }) => {
     return diffDays.toString();
   };
 
-  // Función para calcular el salario total cuando es por planta
   const calculateTotalSalary = () => {
-    if (formData.paymentType === "Por_labor" && formData.plantCount && formData.pricePerUnit) {
-      const total = parseFloat(formData.plantCount) * parseFloat(formData.pricePerUnit);
+    if (
+      formData.paymentType === "Por_labor" &&
+      formData.plantCount &&
+      formData.pricePerUnit
+    ) {
+      const total =
+        parseFloat(formData.plantCount) * parseFloat(formData.pricePerUnit);
       return isNaN(total) ? 0 : total;
     }
     return parseFloat(formData.salary) || 0;
@@ -119,16 +123,14 @@ const EditJobOfferScreen = ({ navigation, route }) => {
     }
   }, [formData.startDate, formData.endDate]);
 
-
-  // Función para obtener fases del cultivo específico desde el backend
+  // Función mejorada para obtener fases del cultivo específico desde el backend
   const fetchPhasesForCropType = async (cropTypeId) => {
     try {
-      console.log("Consultando fases del backend para cropType:", cropTypeId);
+      console.log("🔍 Consultando fases del backend para cropType:", cropTypeId);
       const response = await ApiClient.get(`/phase/by-crop/${cropTypeId}`);
 
-      console.log("Respuesta completa del backend:", response);
+      console.log("📡 Respuesta completa del backend:", response);
 
-      // Manejar ambos formatos de respuesta (con y sin estructura success/data)
       const phasesData = response.data?.data || response.data;
 
       if (phasesData && Array.isArray(phasesData)) {
@@ -141,66 +143,78 @@ const EditJobOfferScreen = ({ navigation, route }) => {
           order: phase.order || null,
           isActive: true,
           cropType: phase.cropType,
-          fromFarm: false, // Marcador para indicar que viene del backend específico
+          source: "backend-api",
         }));
 
-        console.log("Fases obtenidas del backend:", phases);
+        console.log("✅ Fases obtenidas del backend:", phases);
         return phases;
       }
 
       return [];
     } catch (error) {
-      console.error("Error consultando fases del backend:", error);
-      // Mostrar detalles del error para debug
+      console.error("❌ Error consultando fases del backend:", error);
       if (error.response) {
-        console.error("Error response:", error.response.data);
-        console.error("Error status:", error.response.status);
+        console.error("📄 Error response:", error.response.data);
+        console.error("🔢 Error status:", error.response.status);
       }
       return [];
     }
   };
 
-  // Función mejorada para extraer TODOS los tipos de cultivo de una finca
+  // Función mejorada para extraer tipos de cultivo de una finca
   const extractAllCropTypesFromFarm = (selectedFarm) => {
+    console.log("🌾 Extrayendo tipos de cultivo de la finca:", selectedFarm.name);
+    console.log("🔍 Estructura de la finca:", {
+      cropTypesInfo: selectedFarm.cropTypesInfo ? selectedFarm.cropTypesInfo.length : "undefined",
+      cropTypes: selectedFarm.cropTypes ? selectedFarm.cropTypes.length : "undefined",
+      activePhasesInfo: selectedFarm.activePhasesInfo ? selectedFarm.activePhasesInfo.length : "undefined",
+    });
+
     const cropTypes = [];
 
-    // Opción 1: Si cropTypesInfo está disponible (parece ser la más completa)
-    if (selectedFarm.cropTypesInfo && selectedFarm.cropTypesInfo.length > 0) {
+    // Opción 1: cropTypesInfo (más completa)
+    if (selectedFarm.cropTypesInfo && Array.isArray(selectedFarm.cropTypesInfo)) {
+      console.log("📋 Usando cropTypesInfo");
       selectedFarm.cropTypesInfo.forEach((cropTypeInfo) => {
-        cropTypes.push({
-          id: cropTypeInfo.id,
-          name: cropTypeInfo.name,
-          phases: cropTypeInfo.phases || [],
-        });
+        if (cropTypeInfo && cropTypeInfo.id) {
+          cropTypes.push({
+            id: cropTypeInfo.id,
+            name: cropTypeInfo.name,
+            phases: cropTypeInfo.phases || [],
+            phasesCount: cropTypeInfo.phases ? cropTypeInfo.phases.length : 0,
+          });
+        }
       });
     }
 
-    // Opción 2: Si cropTypes está disponible con estructura diferente
-    if (selectedFarm.cropTypes && selectedFarm.cropTypes.length > 0) {
+    // Opción 2: cropTypes con estructura diferente
+    if (cropTypes.length === 0 && selectedFarm.cropTypes && Array.isArray(selectedFarm.cropTypes)) {
+      console.log("📋 Usando cropTypes");
       selectedFarm.cropTypes.forEach((cropTypeData) => {
         const cropType = cropTypeData.cropType || cropTypeData;
         if (cropType && cropType.id) {
-          // Verificar si ya existe este cropType
-          const existingCropType = cropTypes.find(
-            (ct) => ct.id === cropType.id
-          );
+          const existingCropType = cropTypes.find((ct) => ct.id === cropType.id);
           if (!existingCropType) {
             cropTypes.push({
               id: cropType.id,
               name: cropType.name,
               phases: cropType.phases || cropTypeData.phases || [],
+              phasesCount: (cropType.phases || cropTypeData.phases || []).length,
             });
           }
         }
       });
     }
 
+    console.log("✅ Tipos de cultivo extraídos:", cropTypes);
     return cropTypes;
   };
 
   const loadInitialData = async () => {
     setLoading(true);
     try {
+      console.log("🚀 Iniciando carga de datos...");
+      
       // Cargar la oferta existente y las fincas en paralelo
       const [jobOfferData, farmsData] = await Promise.all([
         loadJobOffer(),
@@ -211,7 +225,7 @@ const EditJobOfferScreen = ({ navigation, route }) => {
         await populateFormWithJobOffer(jobOfferData, farmsData);
       }
     } catch (error) {
-      console.error("Error cargando datos iniciales:", error);
+      console.error("❌ Error cargando datos iniciales:", error);
       setError("Error al cargar los datos de la oferta");
       Alert.alert("Error", "No se pudieron cargar los datos de la oferta", [
         {
@@ -226,31 +240,40 @@ const EditJobOfferScreen = ({ navigation, route }) => {
 
   const loadJobOffer = async () => {
     try {
-      console.log("Cargando oferta con ID:", jobOfferId);
+      console.log("📄 Cargando oferta con ID:", jobOfferId);
       const jobOfferData = await getJobOfferById(jobOfferId);
 
       if (!jobOfferData) {
         throw new Error("No se encontró la oferta de trabajo");
       }
 
+      console.log("📄 Oferta cargada:", {
+        title: jobOfferData.title,
+        farmId: jobOfferData.farmId || jobOfferData.farm?.id,
+        cropTypeId: jobOfferData.cropTypeId || jobOfferData.cropType?.id,
+        phaseId: jobOfferData.phaseId || jobOfferData.phase?.id,
+        phase: jobOfferData.phase,
+        cropType: jobOfferData.cropType,
+        farm: jobOfferData.farm,
+      });
+
       setOriginalJobOffer(jobOfferData);
       return jobOfferData;
     } catch (error) {
-      console.error("Error cargando oferta:", error);
+      console.error("❌ Error cargando oferta:", error);
       throw error;
     }
   };
 
   const loadFarms = async () => {
     try {
+      console.log("🏡 Cargando fincas...");
       const userData = await getUserData();
       if (!userData || !userData.employerProfile) {
         throw new Error("No se encontró el perfil de empleador");
       }
 
-      const farmsResult = await getFarmByemployerId(
-        userData.employerProfile.id
-      );
+      const farmsResult = await getFarmByemployerId(userData.employerProfile.id);
       const farmsData = Array.isArray(farmsResult)
         ? farmsResult
         : farmsResult.data && Array.isArray(farmsResult.data)
@@ -261,58 +284,85 @@ const EditJobOfferScreen = ({ navigation, route }) => {
         setError("No tienes fincas registradas.");
         setFarms([]);
       } else {
+        console.log("🏡 Fincas cargadas:", farmsData.length);
         setFarms(farmsData);
       }
 
       return farmsData;
     } catch (error) {
-      console.error("Error cargando fincas:", error);
+      console.error("❌ Error cargando fincas:", error);
       throw error;
     }
   };
 
-  // Función modificada para poblar el formulario y establecer datos originales
+  // Función corregida para poblar el formulario
   const populateFormWithJobOffer = async (jobOffer, farmsData) => {
     try {
-      console.log("Poblando formulario con oferta:", jobOffer);
+      console.log("📝 Poblando formulario con oferta:", jobOffer.title);
 
       // Convertir fechas
-      const startDate = jobOffer.startDate
-        ? new Date(jobOffer.startDate)
-        : new Date();
-      const endDate = jobOffer.endDate
-        ? new Date(jobOffer.endDate)
-        : new Date();
+      const startDate = jobOffer.startDate ? new Date(jobOffer.startDate) : new Date();
+      const endDate = jobOffer.endDate ? new Date(jobOffer.endDate) : new Date();
 
-      let phaseIdToUse = "";
-      if (jobOffer.phase && jobOffer.phase.id) {
-        phaseIdToUse = jobOffer.phase.id;
-      } else if (jobOffer.phaseId) {
-        phaseIdToUse = jobOffer.phaseId;
-      }
-
-      // Establecer información original de finca y cultivo (NO MODIFICABLES)
+      // Obtener IDs de la oferta con múltiples fallbacks
       const originalFarmId = jobOffer.farmId || jobOffer.farm?.id || "";
-      const originalCropTypeId =
-        jobOffer.cropTypeId || jobOffer.cropType?.id || "";
-
-      // Buscar y guardar la información original de la finca
-      const originalFarm = farmsData.find((farm) => farm.id === originalFarmId);
-      if (originalFarm) {
-        setOriginalFarmInfo(originalFarm);
-        // Extraer tipos de cultivo de la finca original
-        const cropTypesFromFarm = extractAllCropTypesFromFarm(originalFarm);
-        setFarmCropTypes(cropTypesFromFarm);
-
-        // Buscar y guardar el tipo de cultivo original
-        const originalCrop = cropTypesFromFarm.find(
-          (ct) => ct.id === originalCropTypeId
-        );
-        if (originalCrop) {
-          setOriginalCropType(originalCrop);
-        }
+      const originalCropTypeId = jobOffer.cropTypeId || jobOffer.cropType?.id || "";
+      
+      // Para el phaseId, intentar múltiples fuentes
+      let phaseIdToUse = "";
+      if (jobOffer.phaseId) {
+        phaseIdToUse = jobOffer.phaseId;
+      } else if (jobOffer.phase?.id) {
+        phaseIdToUse = jobOffer.phase.id;
+      } else if (jobOffer.phase?.cultivationPhaseId) {
+        phaseIdToUse = jobOffer.phase.cultivationPhaseId;
       }
 
+      console.log("🔍 IDs extraídos:", {
+        farmId: originalFarmId,
+        cropTypeId: originalCropTypeId,
+        phaseId: phaseIdToUse,
+        phaseObject: jobOffer.phase,
+        cropTypeObject: jobOffer.cropType,
+      });
+
+      // Buscar la finca original
+      const originalFarm = farmsData.find((farm) => farm.id === originalFarmId);
+      if (!originalFarm) {
+        throw new Error(`No se encontró la finca con ID: ${originalFarmId}`);
+      }
+
+      console.log("🏡 Finca original encontrada:", originalFarm.name);
+      setOriginalFarmInfo(originalFarm);
+
+      // Extraer tipos de cultivo de la finca original
+      const cropTypesFromFarm = extractAllCropTypesFromFarm(originalFarm);
+      setFarmCropTypes(cropTypesFromFarm);
+
+      // Buscar el tipo de cultivo original
+      let originalCrop = cropTypesFromFarm.find((ct) => ct.id === originalCropTypeId);
+      
+      // Si no se encuentra en la finca, crear uno con la información de la oferta
+      if (!originalCrop && jobOffer.cropType) {
+        console.log("⚠️ Cultivo no encontrado en finca, usando datos de la oferta");
+        originalCrop = {
+          id: originalCropTypeId,
+          name: jobOffer.cropType.name || "Cultivo desconocido",
+          phases: [],
+          phasesCount: 0,
+        };
+        cropTypesFromFarm.push(originalCrop);
+        setFarmCropTypes(cropTypesFromFarm);
+      }
+
+      if (originalCrop) {
+        console.log("🌾 Tipo de cultivo original:", originalCrop.name);
+        setOriginalCropType(originalCrop);
+      } else {
+        console.error("❌ No se pudo identificar el tipo de cultivo original");
+      }
+
+      // Establecer datos del formulario
       const newFormData = {
         title: jobOffer.title || "",
         description: jobOffer.description || "",
@@ -328,9 +378,9 @@ const EditJobOfferScreen = ({ navigation, route }) => {
         paymentMode: jobOffer.paymentMode || "Efectivo",
         laborType: jobOffer.laborType || "",
         pricePerUnit: jobOffer.pricePerUnit?.toString() || "",
-        plantCount: jobOffer.plantCount?.toString() || "", // NUEVO
-        workType: jobOffer.workType || "", // NUEVO
-        workersNeeded: jobOffer.workersNeeded?.toString() || "1", // NUEVO
+        plantCount: jobOffer.plantCount?.toString() || "",
+        workType: jobOffer.workType || "",
+        workersNeeded: jobOffer.workersNeeded?.toString() || "1",
         includesFood: jobOffer.includesFood || false,
         includesLodging: jobOffer.includesLodging || false,
         status: jobOffer.status || "Activo",
@@ -338,120 +388,74 @@ const EditJobOfferScreen = ({ navigation, route }) => {
 
       setFormData(newFormData);
 
-      // Cargar información de la finca y cultivo originales - USANDO farmsData directamente
-      if (originalFarmId && originalCropTypeId && originalFarm) {
-        await loadOriginalFarmAndCropInfoImmediate(
-          originalFarm,
-          originalCropTypeId,
-          phaseIdToUse
-        );
+      // Establecer información de la finca para el componente de visualización
+      setSelectedFarmInfo({
+        ...originalFarm,
+        name: originalFarm.name,
+        village: getLocationValueForFarm("village", originalFarm),
+        city: getLocationValueForFarm("city", originalFarm),
+        department: getLocationValueForFarm("department", originalFarm),
+        country: getLocationValueForFarm("country", originalFarm),
+        plantCount: originalFarm.plantCount || 0,
+        size: originalFarm.size || 0,
+        totalCropTypes: cropTypesFromFarm.length,
+      });
+
+      // Cargar fases para el cultivo original
+      if (originalCropTypeId) {
+        await loadPhasesForCropType(originalCropTypeId, phaseIdToUse);
       }
 
-      console.log("Formulario poblado con datos:", newFormData);
-      console.log("PhaseId usado:", phaseIdToUse);
+      console.log("✅ Formulario poblado exitosamente");
     } catch (error) {
-      console.error("Error poblando formulario:", error);
+      console.error("❌ Error poblando formulario:", error);
       throw error;
     }
   };
 
-  // Nueva función para cargar información original de finca y cultivo usando datos inmediatos
-  const loadOriginalFarmAndCropInfoImmediate = async (
-    selectedFarm,
-    cropTypeId,
-    initialPhaseId = null
-  ) => {
-    try {
-      setLoadingFarmInfo(true);
-
-      console.log("=== CARGANDO INFO ORIGINAL INMEDIATA ===");
-      console.log("Finca:", selectedFarm.name);
-      console.log("CropTypeId:", cropTypeId);
-
-      // Extraer tipos de cultivo de la finca
-      const allCropTypes = extractAllCropTypesFromFarm(selectedFarm);
-      setFarmCropTypes(allCropTypes);
-
-      // Establecer información de la finca
-      setSelectedFarmInfo({
-        ...selectedFarm,
-        name: selectedFarm.name,
-        village: getLocationValueForFarm("village", selectedFarm),
-        city: getLocationValueForFarm("city", selectedFarm),
-        department: getLocationValueForFarm("department", selectedFarm),
-        country: getLocationValueForFarm("country", selectedFarm),
-        plantCount: selectedFarm.plantCount || 0,
-        size: selectedFarm.size || 0,
-        totalCropTypes: allCropTypes.length,
-      });
-
-      // Cargar fases específicas para el cultivo original usando datos directos
-      await loadPhasesForOriginalCropImmediate(
-        selectedFarm,
-        cropTypeId,
-        initialPhaseId
-      );
-
-      console.log("Información original cargada - Finca:", selectedFarm.name);
-      console.log("Número de tipos de cultivo:", allCropTypes.length);
-    } catch (error) {
-      console.error("Error al cargar información original inmediata:", error);
-    } finally {
-      setLoadingFarmInfo(false);
-    }
-  };
-
-  // Nueva función para cargar fases del cultivo original usando datos directos
-  const loadPhasesForOriginalCropImmediate = async (
-    selectedFarm,
-    cropTypeId,
-    initialPhaseId = null
-  ) => {
-    if (!cropTypeId || !selectedFarm) {
+  // Función corregida para cargar fases del cultivo
+  const loadPhasesForCropType = async (cropTypeId, initialPhaseId = null) => {
+    if (!cropTypeId) {
       setAvailablePhasesForSelectedCrop([]);
       return;
     }
 
     try {
-      console.log("=== CARGANDO FASES DEL CULTIVO ORIGINAL (INMEDIATO) ===");
-      console.log("CropTypeId:", cropTypeId);
-      console.log("Finca:", selectedFarm.name);
+      setLoadingFarmInfo(true);
+      console.log("🔄 Cargando fases para cultivo:", cropTypeId);
+
+      let phases = [];
 
       // PRIORIDAD 1: Intentar obtener fases específicas del cultivo desde el backend
-      let phases = await fetchPhasesForCropType(cropTypeId);
-      console.log("Fases del backend:", phases.length);
+      try {
+        phases = await fetchPhasesForCropType(cropTypeId);
+        console.log("📡 Fases del backend:", phases.length);
+      } catch (error) {
+        console.warn("⚠️ Error obteniendo fases del backend, usando fases de la finca");
+      }
 
-      // PRIORIDAD 2: Si el backend no devuelve fases específicas, usar las fases de la finca
-      if (phases.length === 0) {
-        console.log(
-          "Backend no devolvió fases específicas, usando fases de la finca"
-        );
+      // PRIORIDAD 2: Si el backend no devuelve fases, usar las fases de la finca
+      if (phases.length === 0 && originalFarmInfo) {
+        console.log("🏡 Usando fases de la finca");
 
-        if (
-          selectedFarm.activePhasesInfo &&
-          selectedFarm.activePhasesInfo.length > 0
-        ) {
-          phases = selectedFarm.activePhasesInfo.map((activePhase) => ({
-            id: activePhase.farmPhaseId || activePhase.id, // ID del FarmPhase
-            cultivationPhaseId: activePhase.id, // ID del CultivationPhase
+        // Intentar desde activePhasesInfo
+        if (originalFarmInfo.activePhasesInfo && originalFarmInfo.activePhasesInfo.length > 0) {
+          phases = originalFarmInfo.activePhasesInfo.map((activePhase) => ({
+            id: activePhase.farmPhaseId || activePhase.id,
+            cultivationPhaseId: activePhase.cultivationPhaseId || activePhase.id,
             name: activePhase.name,
             description: activePhase.description || "",
             estimatedDuration: activePhase.duration || null,
             order: activePhase.order || null,
             isActive: activePhase.isActive,
-            fromFarm: true, // Marcador para indicar que viene de la finca
+            source: "farm-active-phases",
           }));
-
-          console.log("Fases extraídas de activePhasesInfo:", phases);
+          console.log("📋 Fases desde activePhasesInfo:", phases.length);
         }
 
-        // Si no hay activePhasesInfo, intentar con otras propiedades de la finca
-        if (
-          phases.length === 0 &&
-          selectedFarm.phases &&
-          selectedFarm.phases.length > 0
-        ) {
-          phases = selectedFarm.phases.map((phase) => ({
+        // Fallback: fases generales de la finca
+        if (phases.length === 0 && originalFarmInfo.phases && originalFarmInfo.phases.length > 0) {
+          phases = originalFarmInfo.phases.map((phase) => ({
             id: phase.id,
             cultivationPhaseId: phase.id,
             name: phase.name,
@@ -459,147 +463,103 @@ const EditJobOfferScreen = ({ navigation, route }) => {
             estimatedDuration: phase.duration || null,
             order: phase.order || null,
             isActive: true,
-            fromFarm: true,
+            source: "farm-general-phases",
           }));
-
-          console.log("Fases extraídas de phases:", phases);
+          console.log("📋 Fases desde phases generales:", phases.length);
         }
+      }
 
-        // Si aún no hay fases, intentar desde cropTypesInfo
-        if (phases.length === 0) {
-          console.log("Intentando extraer fases desde cropTypesInfo");
-          const allCropTypes = extractAllCropTypesFromFarm(selectedFarm);
-          const targetCropType = allCropTypes.find(
-            (ct) => ct.id === cropTypeId
-          );
+      // PRIORIDAD 3: Si aún no hay fases, crear una fase por defecto si tenemos información de la oferta original
+      if (phases.length === 0 && originalJobOffer && originalJobOffer.phase) {
+        console.log("🆘 Creando fase por defecto desde oferta original");
+        phases = [{
+          id: originalJobOffer.phase.id || originalJobOffer.phaseId,
+          cultivationPhaseId: originalJobOffer.phase.cultivationPhaseId || originalJobOffer.phase.id,
+          name: originalJobOffer.phase.name || "Fase actual",
+          description: originalJobOffer.phase.description || "",
+          estimatedDuration: originalJobOffer.phase.duration || null,
+          order: originalJobOffer.phase.order || null,
+          isActive: true,
+          source: "original-job-offer",
+        }];
+      }
 
-          if (
-            targetCropType &&
-            targetCropType.phases &&
-            targetCropType.phases.length > 0
-          ) {
-            phases = targetCropType.phases.map((phase) => ({
-              id: phase.id,
-              cultivationPhaseId: phase.id,
-              name: phase.name,
-              description: phase.description || "",
-              estimatedDuration: phase.duration || null,
-              order: phase.order || null,
-              isActive: true,
-              fromFarm: true,
-            }));
-
-            console.log("Fases extraídas de cropTypesInfo:", phases);
-          }
-        }
-
-        // Ordenar las fases por número en el nombre
+      // Ordenar las fases
+      if (phases.length > 0) {
         phases = phases
           .filter((phase) => phase.name && phase.name.trim() !== "")
           .sort((a, b) => {
+            if (a.order && b.order) return a.order - b.order;
             const getOrderFromName = (name) => {
               const match = name.match(/(\d+)\./);
               return match ? parseInt(match[1]) : 999;
             };
             return getOrderFromName(a.name) - getOrderFromName(b.name);
           });
-
-        console.log("Fases de la finca (ordenadas):", phases);
       }
 
       setAvailablePhasesForSelectedCrop(phases);
 
-      console.log("=== RESULTADO FINAL (INMEDIATO) ===");
-      console.log("Cultivo original:", cropTypeId);
-      console.log("Total de fases disponibles:", phases.length);
-      console.log(
-        "Fuente de las fases:",
-        phases.length > 0 && phases[0].fromFarm ? "Finca" : "Backend"
-      );
+      console.log("✅ Fases finales cargadas:", {
+        total: phases.length,
+        source: phases.length > 0 ? phases[0].source : "none",
+        names: phases.map(p => p.name),
+      });
 
-      if (phases.length === 0) {
-        console.warn(
-          "⚠️ NO SE ENCONTRARON FASES - Revisar estructura de datos de la finca"
+      // Si tenemos un phaseId inicial, verificar que esté en las fases cargadas
+      if (initialPhaseId && phases.length > 0) {
+        const foundPhase = phases.find(p => 
+          p.id === initialPhaseId || 
+          p.cultivationPhaseId === initialPhaseId
         );
-        console.log("Estructura de la finca:", {
-          activePhasesInfo: selectedFarm.activePhasesInfo
-            ? selectedFarm.activePhasesInfo.length
-            : "undefined",
-          phases: selectedFarm.phases
-            ? selectedFarm.phases.length
-            : "undefined",
-          cropTypesInfo: selectedFarm.cropTypesInfo
-            ? selectedFarm.cropTypesInfo.length
-            : "undefined",
-          keys: Object.keys(selectedFarm),
-        });
+        if (foundPhase) {
+          console.log("✅ Fase inicial encontrada:", foundPhase.name);
+        } else {
+          console.warn("⚠️ Fase inicial no encontrada en las fases cargadas");
+        }
       }
+
     } catch (error) {
-      console.error("Error en loadPhasesForOriginalCropImmediate:", error);
-
-      // Fallback: usar cualquier fase disponible en la finca
-      let phases = [];
-
-      if (
-        selectedFarm.activePhasesInfo &&
-        selectedFarm.activePhasesInfo.length > 0
-      ) {
-        phases = selectedFarm.activePhasesInfo.map((activePhase) => ({
-          id: activePhase.farmPhaseId || activePhase.id,
-          cultivationPhaseId: activePhase.id,
-          name: activePhase.name,
-          description: activePhase.description || "",
-          estimatedDuration: activePhase.duration || null,
-          order: activePhase.order || null,
-          isActive: activePhase.isActive,
-          fromFarm: true,
-        }));
-      }
-
-      setAvailablePhasesForSelectedCrop(phases);
-      console.log("Fallback - fases cargadas:", phases.length);
+      console.error("❌ Error en loadPhasesForCropType:", error);
+      setAvailablePhasesForSelectedCrop([]);
+    } finally {
+      setLoadingFarmInfo(false);
     }
   };
 
-  // Función modificada para manejar cambio de fase (única modificación permitida)
+  // Función mejorada para manejar selección de fases
   const handlePhaseSelection = (phaseId) => {
-    console.log("=== SELECCIONANDO FASE ===");
-    console.log("PhaseId recibido:", phaseId);
-    console.log("Fases disponibles:", availablePhasesForSelectedCrop);
-
+    console.log("🎯 Seleccionando fase:", phaseId);
+    
     if (!phaseId || phaseId === "") {
-      setFormData((prev) => ({
-        ...prev,
-        phaseId: "",
-      }));
-      console.log("Fase deseleccionada");
+      setFormData((prev) => ({ ...prev, phaseId: "" }));
+      console.log("❌ Fase deseleccionada");
       return;
     }
 
     // Buscar la fase seleccionada
-    const selectedPhase = availablePhasesForSelectedCrop.find(
-      (phase) => phase.id === phaseId
-    );
-    console.log("Fase encontrada:", selectedPhase);
-
-    // Determinar qué ID usar para el backend
-    let backendPhaseId = phaseId;
+    const selectedPhase = availablePhasesForSelectedCrop.find((phase) => phase.id === phaseId);
+    
     if (selectedPhase) {
-      // Si la fase viene de la finca, usar cultivationPhaseId
-      // Si viene del backend, usar el ID directo
-      backendPhaseId = selectedPhase.fromFarm
-        ? selectedPhase.cultivationPhaseId
-        : selectedPhase.id;
+      console.log("✅ Fase encontrada:", {
+        id: selectedPhase.id,
+        cultivationPhaseId: selectedPhase.cultivationPhaseId,
+        name: selectedPhase.name,
+        source: selectedPhase.source,
+      });
+
+      // Para el backend, usar cultivationPhaseId si está disponible, sino usar id
+      const backendPhaseId = selectedPhase.cultivationPhaseId || selectedPhase.id;
+      
+      setFormData((prev) => ({
+        ...prev,
+        phaseId: backendPhaseId,
+      }));
+
+      console.log("✅ Phase ID guardado para backend:", backendPhaseId);
+    } else {
+      console.warn("⚠️ Fase no encontrada con ID:", phaseId);
     }
-
-    setFormData((prev) => ({
-      ...prev,
-      phaseId: backendPhaseId, // Usar el ID correcto para el backend
-    }));
-
-    console.log("Fase seleccionada - ID original:", phaseId);
-    console.log("Fase seleccionada - ID para backend:", backendPhaseId);
-    console.log("Fase seleccionada - Nombre:", selectedPhase?.name);
   };
 
   const getLocationValueForFarm = (field, farm) => {
@@ -652,7 +612,6 @@ const EditJobOfferScreen = ({ navigation, route }) => {
     return `${day}/${month}/${year}`;
   };
 
-  // Validación actualizada para incluir campos Por_labor
   const validateCurrentStep = () => {
     switch (currentStep) {
       case 1:
@@ -669,20 +628,33 @@ const EditJobOfferScreen = ({ navigation, route }) => {
       case 3:
         if (!formData.paymentType) return "El tipo de pago es requerido";
         if (!formData.paymentMode) return "El modo de pago es requerido";
-        
-        if (isNaN(parseFloat(formData.workersNeeded)) || parseFloat(formData.workersNeeded) <= 0)
+
+        if (
+          isNaN(parseFloat(formData.workersNeeded)) ||
+          parseFloat(formData.workersNeeded) <= 0
+        )
           return "El número de trabajadores debe ser un número positivo";
-        
+
         if (formData.paymentType === "Por_dia") {
-          if (isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0)
+          if (
+            isNaN(parseFloat(formData.salary)) ||
+            parseFloat(formData.salary) <= 0
+          )
             return "El salario diario debe ser un número positivo";
         }
-        
+
         if (formData.paymentType === "Por_labor") {
-          if (!formData.workType.trim()) return "El tipo de trabajo es requerido";
-          if (isNaN(parseFloat(formData.plantCount)) || parseFloat(formData.plantCount) <= 0)
+          if (!formData.workType.trim())
+            return "El tipo de trabajo es requerido";
+          if (
+            isNaN(parseFloat(formData.plantCount)) ||
+            parseFloat(formData.plantCount) <= 0
+          )
             return "El número de plantas debe ser un número positivo";
-          if (isNaN(parseFloat(formData.pricePerUnit)) || parseFloat(formData.pricePerUnit) <= 0)
+          if (
+            isNaN(parseFloat(formData.pricePerUnit)) ||
+            parseFloat(formData.pricePerUnit) <= 0
+          )
             return "El precio por planta debe ser un número positivo";
         }
         break;
@@ -709,7 +681,6 @@ const EditJobOfferScreen = ({ navigation, route }) => {
     }
   };
 
-  // Función de envío actualizada
   const handleSubmit = async () => {
     const error = validateCurrentStep();
     if (error) {
@@ -732,12 +703,11 @@ const EditJobOfferScreen = ({ navigation, route }) => {
         status: formData.status,
         paymentType: formData.paymentType,
         paymentMode: formData.paymentMode,
-        workersNeeded: parseInt(formData.workersNeeded), // NUEVO
+        workersNeeded: parseInt(formData.workersNeeded),
         includesFood: formData.includesFood,
         includesLodging: formData.includesLodging,
       };
 
-      // Campos específicos según el tipo de pago
       if (formData.paymentType === "Por_dia") {
         dataToSend.salary = parseFloat(formData.salary);
         dataToSend.laborType = null;
@@ -745,14 +715,14 @@ const EditJobOfferScreen = ({ navigation, route }) => {
         dataToSend.plantCount = null;
         dataToSend.workType = null;
       } else if (formData.paymentType === "Por_labor") {
-        dataToSend.salary = calculateTotalSalary(); // Calcular automáticamente
+        dataToSend.salary = calculateTotalSalary();
         dataToSend.laborType = formData.laborType || null;
         dataToSend.pricePerUnit = parseFloat(formData.pricePerUnit);
         dataToSend.plantCount = parseInt(formData.plantCount);
         dataToSend.workType = formData.workType;
       }
 
-      console.log("Actualizando oferta con datos:", dataToSend);
+      console.log("💾 Actualizando oferta con datos:", dataToSend);
 
       const result = await editJobOfferById(jobOfferId, dataToSend);
 
@@ -774,7 +744,7 @@ const EditJobOfferScreen = ({ navigation, route }) => {
         );
       }
     } catch (error) {
-      console.error("Error actualizando la oferta de trabajo:", error);
+      console.error("❌ Error actualizando la oferta de trabajo:", error);
       Alert.alert(
         "Error",
         error.response?.data?.message ||
@@ -786,56 +756,67 @@ const EditJobOfferScreen = ({ navigation, route }) => {
     }
   };
 
+  // Función mejorada para obtener el nombre del cultivo
   const getSelectedCropTypeName = () => {
-    if (!originalCropType) return "No especificado";
-    return originalCropType.name;
+    if (originalCropType) {
+      return originalCropType.name;
+    }
+    
+    // Fallback: buscar en farmCropTypes
+    if (formData.cropTypeId && farmCropTypes.length > 0) {
+      const foundCrop = farmCropTypes.find(ct => ct.id === formData.cropTypeId);
+      if (foundCrop) {
+        return foundCrop.name;
+      }
+    }
+    
+    // Fallback final: usar datos de la oferta original
+    if (originalJobOffer && originalJobOffer.cropType) {
+      return originalJobOffer.cropType.name;
+    }
+    
+    return "No especificado";
   };
 
+  // Función mejorada para obtener el nombre de la fase
   const getSelectedPhaseName = () => {
     if (!formData.phaseId) return "No seleccionada";
 
-    console.log("=== OBTENIENDO NOMBRE DE FASE ===");
-    console.log("FormData.phaseId:", formData.phaseId);
-    console.log("Fases disponibles:", availablePhasesForSelectedCrop);
+    console.log("🔍 Obteniendo nombre de fase para ID:", formData.phaseId);
+    console.log("📋 Fases disponibles:", availablePhasesForSelectedCrop.length);
 
-    // Buscar por el ID que está en formData.phaseId
-    // Puede ser cultivationPhaseId o el ID directo dependiendo del origen
+    // Buscar en las fases disponibles
     const selectedPhase = availablePhasesForSelectedCrop.find((phase) => {
-      const match =
-        phase.cultivationPhaseId === formData.phaseId ||
-        phase.id === formData.phaseId;
-
-      if (match) {
-        console.log("Fase encontrada:", {
-          id: phase.id,
-          cultivationPhaseId: phase.cultivationPhaseId,
-          name: phase.name,
-          fromFarm: phase.fromFarm,
-        });
-      }
-
-      return match;
+      return (
+        phase.id === formData.phaseId ||
+        phase.cultivationPhaseId === formData.phaseId
+      );
     });
 
     if (selectedPhase) {
       const displayName = selectedPhase.order
         ? `${selectedPhase.order}. ${selectedPhase.name}`
         : selectedPhase.name;
-      console.log("Nombre a mostrar:", displayName);
+      console.log("✅ Fase encontrada:", displayName);
       return displayName;
     }
 
-    console.log("⚠️ Fase no encontrada para ID:", formData.phaseId);
-    return "No encontrada";
+    // Fallback: buscar en la oferta original
+    if (originalJobOffer && originalJobOffer.phase && originalJobOffer.phase.id === formData.phaseId) {
+      console.log("📄 Usando fase de oferta original");
+      return originalJobOffer.phase.name || "Fase de la oferta";
+    }
+
+    console.warn("⚠️ Fase no encontrada para ID:", formData.phaseId);
+    return "Fase no encontrada";
   };
 
-  // Función para obtener el nombre del tipo de trabajo
   const getWorkTypeName = (workType) => {
     const workTypeNames = {
       Podar: "Podar",
-      Injertar: "Injertar", 
+      Injertar: "Injertar",
       Podar_Injertar: "Podar e Injertar",
-      Otro: "Otro"
+      Otro: "Otro",
     };
     return workTypeNames[workType] || workType;
   };
@@ -926,7 +907,7 @@ const EditJobOfferScreen = ({ navigation, route }) => {
               </View>
 
               {/* Selector de fase del cultivo - MODIFICABLE */}
-              {availablePhasesForSelectedCrop.length > 0 && (
+              {availablePhasesForSelectedCrop.length > 0 ? (
                 <View style={styles.inputContainer}>
                   <Text style={styles.label}>
                     Seleccione la fase del cultivo *
@@ -944,11 +925,11 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                     <View style={styles.pickerContainer}>
                       <Picker
                         selectedValue={(() => {
-                          // Encontrar el ID del picker que corresponde al formData.phaseId
+                          // Buscar el picker value correcto
                           const phase = availablePhasesForSelectedCrop.find(
                             (p) =>
-                              p.cultivationPhaseId === formData.phaseId ||
-                              p.id === formData.phaseId
+                              p.id === formData.phaseId ||
+                              p.cultivationPhaseId === formData.phaseId
                           );
                           return phase ? phase.id : "";
                         })()}
@@ -959,9 +940,7 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                         {availablePhasesForSelectedCrop.map((phase) => (
                           <Picker.Item
                             key={phase.id}
-                            label={`${phase.order ? `${phase.order}. ` : ""}${
-                              phase.name
-                            }`}
+                            label={`${phase.order ? `${phase.order}. ` : ""}${phase.name}`}
                             value={phase.id}
                           />
                         ))}
@@ -969,21 +948,18 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                     </View>
                   </View>
                 </View>
-              )}
-
-              {selectedFarmInfo && (
-                <EnhancedFarmInfoCard
-                  farmInfo={selectedFarmInfo}
-                  farmCropTypes={farmCropTypes}
-                  selectedCropTypeId={formData.cropTypeId}
-                  availablePhasesForSelectedCrop={
-                    availablePhasesForSelectedCrop
-                  }
-                  selectedPhaseId={formData.phaseId}
-                  loading={loadingFarmInfo}
-                  isEditMode={true}
-                  originalCropType={originalCropType}
-                />
+              ) : (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Fases del cultivo</Text>
+                  <View style={styles.noDataContainer}>
+                    <Icon name="warning" size={20} color="#FF9800" />
+                    <Text style={styles.noDataText}>
+                      {loadingFarmInfo 
+                        ? "Cargando fases..." 
+                        : "No hay fases disponibles para este cultivo"}
+                    </Text>
+                  </View>
+                </View>
               )}
             </View>
           </View>
@@ -1066,7 +1042,9 @@ const EditJobOfferScreen = ({ navigation, route }) => {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Número de trabajadores necesarios *</Text>
+                <Text style={styles.label}>
+                  Número de trabajadores necesarios *
+                </Text>
                 <View style={styles.inputWrapper}>
                   <Icon
                     name="group"
@@ -1077,7 +1055,9 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                   <TextInput
                     style={styles.input}
                     value={formData.workersNeeded}
-                    onChangeText={(text) => handleInputChange("workersNeeded", text)}
+                    onChangeText={(text) =>
+                      handleInputChange("workersNeeded", text)
+                    }
                     placeholder="1"
                     placeholderTextColor="#999"
                     keyboardType="numeric"
@@ -1100,7 +1080,6 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                       style={styles.picker}
                       onValueChange={(itemValue) => {
                         handleInputChange("paymentType", itemValue);
-                        // Limpiar campos específicos cuando cambia el tipo
                         if (itemValue === "Por_dia") {
                           handleInputChange("workType", "");
                           handleInputChange("plantCount", "");
@@ -1117,7 +1096,6 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                 </View>
               </View>
 
-              {/* Campos para pago por jornal */}
               {formData.paymentType === "Por_dia" && (
                 <View style={styles.inputContainer}>
                   <Text style={styles.label}>Salario diario ($) *</Text>
@@ -1140,7 +1118,6 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                 </View>
               )}
 
-              {/* Campos para pago por planta */}
               {formData.paymentType === "Por_labor" && (
                 <>
                   <View style={styles.inputContainer}>
@@ -1160,10 +1137,16 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                             handleInputChange("workType", itemValue)
                           }
                           dropdownIconColor={PRIMARY_COLOR}>
-                          <Picker.Item label="Seleccione el tipo de trabajo..." value="" />
+                          <Picker.Item
+                            label="Seleccione el tipo de trabajo..."
+                            value=""
+                          />
                           <Picker.Item label="Podar" value="Podar" />
                           <Picker.Item label="Injertar" value="Injertar" />
-                          <Picker.Item label="Podar e Injertar" value="Podar_Injertar" />
+                          <Picker.Item
+                            label="Podar e Injertar"
+                            value="Podar_Injertar"
+                          />
                           <Picker.Item label="Otro" value="Otro" />
                         </Picker>
                       </View>
@@ -1182,7 +1165,9 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                       <TextInput
                         style={styles.input}
                         value={formData.plantCount}
-                        onChangeText={(text) => handleInputChange("plantCount", text)}
+                        onChangeText={(text) =>
+                          handleInputChange("plantCount", text)
+                        }
                         placeholder="0"
                         placeholderTextColor="#999"
                         keyboardType="numeric"
@@ -1202,7 +1187,9 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                       <TextInput
                         style={styles.input}
                         value={formData.pricePerUnit}
-                        onChangeText={(text) => handleInputChange("pricePerUnit", text)}
+                        onChangeText={(text) =>
+                          handleInputChange("pricePerUnit", text)
+                        }
                         placeholder="0"
                         placeholderTextColor="#999"
                         keyboardType="numeric"
@@ -1210,17 +1197,20 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                     </View>
                   </View>
 
-                  {/* Mostrar cálculo del salario total */}
                   {formData.plantCount && formData.pricePerUnit && (
                     <View style={styles.totalSalaryContainer}>
                       <Icon name="calculate" size={20} color={COLORS.success} />
                       <View style={styles.totalSalaryContent}>
-                        <Text style={styles.totalSalaryLabel}>Salario total calculado:</Text>
+                        <Text style={styles.totalSalaryLabel}>
+                          Salario total calculado:
+                        </Text>
                         <Text style={styles.totalSalaryValue}>
                           ${calculateTotalSalary().toLocaleString()}
                         </Text>
                         <Text style={styles.calculationDetail}>
-                          {formData.plantCount} plantas × ${formData.pricePerUnit} = ${calculateTotalSalary().toLocaleString()}
+                          {formData.plantCount} plantas × $
+                          {formData.pricePerUnit} = $
+                          {calculateTotalSalary().toLocaleString()}
                         </Text>
                       </View>
                     </View>
@@ -1330,7 +1320,6 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                 <Text style={styles.sectionTitle}>Resumen de los Cambios</Text>
               </View>
 
-              {/* Aviso sobre restricciones */}
               <View style={styles.restrictionNotice}>
                 <Icon name="info" size={16} color={COLORS.info} />
                 <Text style={styles.restrictionText}>
@@ -1408,8 +1397,12 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                   Pago y Requisitos
                 </Text>
                 <View style={styles.summaryItem}>
-                  <Text style={styles.summaryLabel}>Trabajadores necesarios:</Text>
-                  <Text style={styles.summaryValue}>{formData.workersNeeded}</Text>
+                  <Text style={styles.summaryLabel}>
+                    Trabajadores necesarios:
+                  </Text>
+                  <Text style={styles.summaryValue}>
+                    {formData.workersNeeded}
+                  </Text>
                 </View>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryLabel}>Tipo de pago:</Text>
@@ -1419,7 +1412,7 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                       : "Por Planta"}
                   </Text>
                 </View>
-                
+
                 {formData.paymentType === "Por_dia" ? (
                   <View style={styles.summaryItem}>
                     <Text style={styles.summaryLabel}>Salario diario:</Text>
@@ -1429,19 +1422,33 @@ const EditJobOfferScreen = ({ navigation, route }) => {
                   <>
                     <View style={styles.summaryItem}>
                       <Text style={styles.summaryLabel}>Tipo de trabajo:</Text>
-                      <Text style={styles.summaryValue}>{getWorkTypeName(formData.workType)}</Text>
+                      <Text style={styles.summaryValue}>
+                        {getWorkTypeName(formData.workType)}
+                      </Text>
                     </View>
                     <View style={styles.summaryItem}>
-                      <Text style={styles.summaryLabel}>Número de plantas:</Text>
-                      <Text style={styles.summaryValue}>{formData.plantCount}</Text>
+                      <Text style={styles.summaryLabel}>
+                        Número de plantas:
+                      </Text>
+                      <Text style={styles.summaryValue}>
+                        {formData.plantCount}
+                      </Text>
                     </View>
                     <View style={styles.summaryItem}>
-                      <Text style={styles.summaryLabel}>Precio por planta:</Text>
-                      <Text style={styles.summaryValue}>${formData.pricePerUnit}</Text>
+                      <Text style={styles.summaryLabel}>
+                        Precio por planta:
+                      </Text>
+                      <Text style={styles.summaryValue}>
+                        ${formData.pricePerUnit}
+                      </Text>
                     </View>
                     <View style={styles.summaryItem}>
                       <Text style={styles.summaryLabel}>Salario total:</Text>
-                      <Text style={[styles.summaryValue, styles.totalSalaryHighlight]}>
+                      <Text
+                        style={[
+                          styles.summaryValue,
+                          styles.totalSalaryHighlight,
+                        ]}>
                         ${calculateTotalSalary().toLocaleString()}
                       </Text>
                     </View>
@@ -1517,8 +1524,7 @@ const EditJobOfferScreen = ({ navigation, route }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header mejorado */}
+    <ScreenLayout navigation={navigation}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={handlePrevious}>
           <Icon name="arrow-back" size={24} color="#fff" />
@@ -1536,7 +1542,6 @@ const EditJobOfferScreen = ({ navigation, route }) => {
         style={styles.content}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
-        {/* Steps indicator mejorado */}
         <View style={styles.stepsContainer}>
           {[1, 2, 3, 4].map((step) => (
             <View key={step} style={styles.stepIndicatorContainer}>
@@ -1587,7 +1592,6 @@ const EditJobOfferScreen = ({ navigation, route }) => {
 
         {renderFormStep()}
 
-        {/* Botones de navegación mejorados */}
         <View style={styles.buttonsContainer}>
           <TouchableOpacity
             style={[styles.button, styles.secondaryButton]}
@@ -1626,283 +1630,8 @@ const EditJobOfferScreen = ({ navigation, route }) => {
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
-  );
-};
-
-// Componente mejorado para mostrar información de la finca en modo edición
-const EnhancedFarmInfoCard = ({
-  farmInfo,
-  farmCropTypes,
-  selectedCropTypeId,
-  availablePhasesForSelectedCrop,
-  selectedPhaseId,
-  loading,
-  isEditMode = false,
-  originalCropType,
-}) => {
-  if (loading) {
-    return (
-      <View style={styles.farmInfoContainer}>
-        <ActivityIndicator size="small" color={PRIMARY_COLOR} />
-        <Text style={styles.loadingText}>
-          Cargando información de la finca...
-        </Text>
-      </View>
-    );
-  }
-
-  if (!farmInfo || !farmInfo.name) {
-    return null;
-  }
-
-  const getLocationValue = (field) => {
-    if (!farmInfo) return "No especificado";
-
-    const directValue = farmInfo[field];
-    if (typeof directValue === "string") return directValue;
-    if (directValue?.name) return directValue.name;
-
-    const locationValue = farmInfo.locationInfo?.[field];
-    if (typeof locationValue === "string") return locationValue;
-    if (locationValue?.name) return locationValue.name;
-
-    return "No especificado";
-  };
-
-  const villageName = farmInfo.village || getLocationValue("village");
-  const cityName = getLocationValue("city");
-  const departmentName = getLocationValue("department");
-  const countryName = getLocationValue("country");
-
-
-  return (
-    <View style={styles.farmInfoContainer}>
-      <View style={styles.farmInfoHeader}>
-        <Icon name="agriculture" size={24} color={PRIMARY_COLOR} />
-        <Text style={styles.farmInfoTitle}>{farmInfo.name}</Text>
-        {isEditMode && (
-          <View style={styles.editModeBadge}>
-            <Text style={styles.editModeBadgeText}>Modo Edición</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Restricción de edición */}
-      {isEditMode && (
-        <View style={styles.editRestrictionCard}>
-          <Icon name="lock" size={20} color={COLORS.warning} />
-          <View style={styles.editRestrictionContent}>
-            <Text style={styles.editRestrictionTitle}>
-              Restricciones de Edición
-            </Text>
-            <Text style={styles.editRestrictionText}>
-              • La finca no se puede cambiar{"\n"}• El tipo de cultivo está fijo
-              {"\n"}• Solo se puede modificar la fase del cultivo
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* Card de Ubicación */}
-      <View style={styles.farmInfoCard}>
-        <View style={styles.farmInfoSection}>
-          <Icon name="location-on" size={20} color={SECONDARY_COLOR} />
-          <Text style={styles.farmInfoSectionTitle}>Ubicación</Text>
-        </View>
-
-        <View style={styles.locationGrid}>
-          <View style={styles.locationItem}>
-            <Icon name="public" size={16} color="#666" />
-            <View style={styles.locationTextContainer}>
-              <Text style={styles.locationLabel}>País</Text>
-              <Text style={styles.locationValue}>{countryName}</Text>
-            </View>
-          </View>
-
-          <View style={styles.locationItem}>
-            <Icon name="map" size={16} color="#666" />
-            <View style={styles.locationTextContainer}>
-              <Text style={styles.locationLabel}>Departamento</Text>
-              <Text style={styles.locationValue}>{departmentName}</Text>
-            </View>
-          </View>
-
-          <View style={styles.locationItem}>
-            <Icon name="location-city" size={16} color="#666" />
-            <View style={styles.locationTextContainer}>
-              <Text style={styles.locationLabel}>Ciudad</Text>
-              <Text style={styles.locationValue}>{cityName}</Text>
-            </View>
-          </View>
-
-          <View style={styles.locationItem}>
-            <Icon name="home" size={16} color="#666" />
-            <View style={styles.locationTextContainer}>
-              <Text style={styles.locationLabel}>Vereda</Text>
-              <Text style={styles.locationValue}>{villageName}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* Card del Cultivo Asignado */}
-      {originalCropType && (
-        <View style={styles.farmInfoCard}>
-          <View style={styles.farmInfoSection}>
-            <Icon name="eco" size={20} color={SECONDARY_COLOR} />
-            <Text style={styles.farmInfoSectionTitle}>Cultivo Asignado</Text>
-            <Icon
-              name="lock"
-              size={16}
-              color="#666"
-              style={{ marginLeft: 8 }}
-            />
-          </View>
-
-          <View style={styles.assignedCropCard}>
-            <View style={styles.assignedCropHeader}>
-              <Icon name="grass" size={20} color={PRIMARY_COLOR} />
-              <Text style={styles.assignedCropName}>
-                {originalCropType.name}
-              </Text>
-              <View style={styles.fixedBadge}>
-                <Text style={styles.fixedBadgeText}>FIJO</Text>
-              </View>
-            </View>
-            <Text style={styles.assignedCropNote}>
-              Este cultivo no se puede modificar en modo edición
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* Card de Fases Disponibles */}
-      {availablePhasesForSelectedCrop.length > 0 && (
-        <View style={styles.farmInfoCard}>
-          <View style={styles.farmInfoSection}>
-            <Icon name="timeline" size={20} color={SECONDARY_COLOR} />
-            <Text style={styles.farmInfoSectionTitle}>
-              Fases Disponibles para {originalCropType?.name}
-            </Text>
-            <Icon
-              name="edit"
-              size={16}
-              color={COLORS.success}
-              style={{ marginLeft: 8 }}
-            />
-          </View>
-
-          <View style={styles.phaseInfoNote}>
-            <Icon name="info" size={16} color={COLORS.info} />
-            <Text style={styles.phaseInfoNoteText}>
-              {availablePhasesForSelectedCrop.length > 0 &&
-              availablePhasesForSelectedCrop[0].fromFarm
-                ? `Se muestran todas las fases disponibles en la finca para el cultivo ${originalCropType?.name}. Puede seleccionar cualquier fase.`
-                : `Fases específicas del cultivo ${originalCropType?.name}. Seleccione la fase deseada.`}
-            </Text>
-          </View>
-
-          <View style={styles.phasesContainer}>
-            {availablePhasesForSelectedCrop.map((phase, index) => {
-              // Determinar si esta fase está seleccionada
-              const isSelected =
-                phase.cultivationPhaseId === selectedPhaseId ||
-                phase.id === selectedPhaseId;
-
-              return (
-                <View
-                  key={phase.id}
-                  style={[
-                    styles.phaseCard,
-                    isSelected && styles.selectedPhaseCard,
-                  ]}>
-                  <View style={styles.phaseCardHeader}>
-                    <View
-                      style={[
-                        styles.phaseCircle,
-                        isSelected && styles.selectedPhaseCircle,
-                      ]}>
-                      <Text
-                        style={[
-                          styles.phaseNumber,
-                          isSelected && styles.selectedPhaseNumber,
-                        ]}>
-                        {index + 1}
-                      </Text>
-                    </View>
-                    <View style={styles.phaseInfo}>
-                      <Text
-                        style={[
-                          styles.phaseName,
-                          isSelected && styles.selectedPhaseName,
-                        ]}>
-                        {phase.name}
-                      </Text>
-                      {phase.description && (
-                        <Text style={styles.phaseDescription}>
-                          {phase.description}
-                        </Text>
-                      )}
-                      {phase.estimatedDuration && (
-                        <Text style={styles.phaseDuration}>
-                          Duración estimada: {phase.estimatedDuration} días
-                        </Text>
-                      )}
-                      {phase.fromFarm && (
-                        <Text style={styles.phaseSource}>
-                          📍 Fase de la finca
-                        </Text>
-                      )}
-                    </View>
-                    {isSelected && (
-                      <View style={styles.selectedIndicator}>
-                        <Icon
-                          name="check-circle"
-                          size={20}
-                          color={PRIMARY_COLOR}
-                        />
-                        <Text style={styles.selectedText}>Seleccionada</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      )}
-
-      {/* Card de Estadísticas de la Finca */}
-      <View style={styles.farmInfoCard}>
-        <View style={styles.farmInfoSection}>
-          <Icon name="assessment" size={20} color={SECONDARY_COLOR} />
-          <Text style={styles.farmInfoSectionTitle}>Estadísticas</Text>
-        </View>
-
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Icon name="grass" size={20} color={SECONDARY_COLOR} />
-            <Text style={styles.statValue}>{farmInfo.plantCount || 0}</Text>
-            <Text style={styles.statLabel}>Plantas Total</Text>
-          </View>
-
-          <View style={styles.statItem}>
-            <Icon name="square-foot" size={20} color={SECONDARY_COLOR} />
-            <Text style={styles.statValue}>{farmInfo.size || 0}</Text>
-            <Text style={styles.statLabel}>Hectáreas</Text>
-          </View>
-
-          <View style={styles.statItem}>
-            <Icon name="spa" size={20} color={SECONDARY_COLOR} />
-            <Text style={styles.statValue}>{farmCropTypes.length}</Text>
-            <Text style={styles.statLabel}>
-              Tipo{farmCropTypes.length !== 1 ? "s" : ""} de Cultivo
-            </Text>
-          </View>
-        </View>
-      </View>
-    </View>
+      <CustomTabBar navigation={navigation} currentRoute="EditJobOffer" />
+    </ScreenLayout>
   );
 };
 
@@ -2149,7 +1878,6 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: "top",
   },
-  // Nuevos estilos para campos de solo lectura
   readOnlyInfoCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -2176,7 +1904,6 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontWeight: "600",
   },
-  // Hint para campos editables
   editableHint: {
     fontSize: 12,
     color: COLORS.success,
@@ -2243,7 +1970,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontStyle: "italic",
   },
-  // Estilos para la sección de salario total
   totalSalaryContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -2298,7 +2024,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginLeft: 10,
   },
-  // Nuevos estilos para el resumen
   restrictionNotice: {
     flexDirection: "row",
     alignItems: "center",
@@ -2362,7 +2087,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 15,
-    marginBottom: 30,
+    marginBottom: 100, 
   },
   button: {
     flex: 1,
@@ -2400,262 +2125,5 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.7,
   },
-  // Estilos mejorados de FarmInfoCard para modo edición
-  farmInfoContainer: {
-    marginTop: 10,
-  },
-  farmInfoHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e1e8ed",
-  },
-  farmInfoTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: PRIMARY_COLOR,
-    marginLeft: 8,
-    flex: 1,
-  },
-  editModeBadge: {
-    backgroundColor: `${COLORS.warning}20`,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: `${COLORS.warning}50`,
-  },
-  editModeBadgeText: {
-    fontSize: 12,
-    color: COLORS.warning,
-    fontWeight: "600",
-  },
-  // Card de restricción de edición
-  editRestrictionCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: `${COLORS.warning}10`,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: `${COLORS.warning}30`,
-  },
-  editRestrictionContent: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  editRestrictionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.warning,
-    marginBottom: 4,
-  },
-  editRestrictionText: {
-    fontSize: 13,
-    color: COLORS.warning,
-    lineHeight: 18,
-  },
-  farmInfoCard: {
-    backgroundColor: "white",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#e1e8ed",
-  },
-  farmInfoSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  farmInfoSectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: SECONDARY_COLOR,
-    marginLeft: 8,
-  },
-  locationGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -6,
-  },
-  locationItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "50%",
-    paddingHorizontal: 6,
-    marginBottom: 12,
-  },
-  locationTextContainer: {
-    marginLeft: 8,
-    flex: 1,
-  },
-  locationLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 2,
-  },
-  locationValue: {
-    fontSize: 14,
-    color: "#333",
-    fontWeight: "500",
-  },
-  // Estilos para el cultivo asignado
-  assignedCropCard: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 10,
-    padding: 16,
-    borderWidth: 2,
-    borderColor: "#e2e8f0",
-    borderStyle: "dashed",
-  },
-  assignedCropHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  assignedCropName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: PRIMARY_COLOR,
-    marginLeft: 8,
-    flex: 1,
-  },
-  fixedBadge: {
-    backgroundColor: "#6b7280",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  fixedBadgeText: {
-    fontSize: 10,
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  assignedCropNote: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontStyle: "italic",
-  },
-  // Estilos para fases
-  phasesContainer: {
-    gap: 10,
-  },
-  phaseInfoNote: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: `${COLORS.info}10`,
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: `${COLORS.info}30`,
-  },
-  phaseInfoNoteText: {
-    flex: 1,
-    fontSize: 13,
-    color: COLORS.info,
-    lineHeight: 18,
-  },
-  phaseCard: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  selectedPhaseCard: {
-    backgroundColor: `${PRIMARY_COLOR}10`,
-    borderColor: PRIMARY_COLOR,
-    borderWidth: 2,
-  },
-  phaseCardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  phaseCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#e2e8f0",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  selectedPhaseCircle: {
-    backgroundColor: PRIMARY_COLOR,
-  },
-  phaseNumber: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#666",
-  },
-  selectedPhaseNumber: {
-    color: "#fff",
-  },
-  phaseInfo: {
-    flex: 1,
-  },
-  phaseName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 4,
-  },
-  selectedPhaseName: {
-    color: PRIMARY_COLOR,
-  },
-  phaseDescription: {
-    fontSize: 13,
-    color: "#6b7280",
-    lineHeight: 18,
-    marginBottom: 4,
-  },
-  phaseDuration: {
-    fontSize: 12,
-    color: "#9ca3af",
-    fontStyle: "italic",
-  },
-  phaseSource: {
-    fontSize: 11,
-    color: "#8b5cf6",
-    fontWeight: "500",
-    marginTop: 2,
-  },
-  selectedIndicator: {
-    alignItems: "center",
-  },
-  selectedText: {
-    fontSize: 10,
-    color: PRIMARY_COLOR,
-    fontWeight: "600",
-    marginTop: 2,
-  },
-  statsRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 8,
-  },
-  statItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: PRIMARY_COLOR,
-    marginTop: 4,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: "#666",
-    marginTop: 2,
-    textAlign: "center",
-  },
 });
-
 export default EditJobOfferScreen;

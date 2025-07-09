@@ -400,7 +400,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
     }
   };
 
-  // ✅ MEJORADO: Componente LocationModal con mejor diseño
   const LocationModal = ({
     visible,
     onClose,
@@ -732,6 +731,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
     }
   };
 
+  
   return (
     <View style={styles.container}>
       <CustomHeaderNoAuth navigation={navigation} />
@@ -865,23 +865,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
                 </View>
               )}
 
-              {selectedMunicipality && villages.length > 0 && (
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Vereda (Opcional)</Text>
-                  <TouchableOpacity
-                    style={styles.locationButton}
-                    onPress={() => setShowVillageModal(true)}>
-                    <Text style={[
-                      styles.locationButtonText,
-                      !selectedVillage && styles.placeholderText
-                    ]}>
-                      {selectedVillage ? selectedVillage.name : "Seleccionar vereda"}
-                    </Text>
-                    <Icon name="keyboard-arrow-down" size={24} color="#666" />
-                  </TouchableOpacity>
-                </View>
-              )}
-
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Contraseña</Text>
                 <View style={styles.passwordInputContainer}>
@@ -962,21 +945,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
                 )}
               </TouchableOpacity>
 
-              <View style={styles.dividerContainer}>
-                <View style={styles.divider} />
-                <Text style={styles.dividerText}>O</Text>
-                <View style={styles.divider} />
-              </View>
-
-              <TouchableOpacity style={styles.googleButton}>
-                <Image
-                  source={require("../../../assets/google-icon.webp")}
-                  style={styles.googleIcon}
-                />
-                <Text style={styles.googleButtonText}>
-                  Registrarse con Google
-                </Text>
-              </TouchableOpacity>
 
               <View style={styles.loginContainer}>
                 <TouchableOpacity onPress={handleLoginPress}>
@@ -1458,75 +1426,105 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  
   container: {
     flex: 1,
     backgroundColor: "#fff",
   },
   scrollContent: {
     flexGrow: 1,
+    justifyContent: 'center', // Centrado vertical
+    paddingBottom: 40, // Espacio inferior
   },
   content: {
     flex: 1,
-    paddingHorizontal: 25,
-    paddingTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    maxWidth: 420, // Ancho máximo para pantallas grandes
+    alignSelf: 'center', // Centrado horizontal
+    width: '100%',
   },
   headerContainer: {
-    marginBottom: 30,
+    marginBottom: 32,
     alignItems: "center",
+    paddingTop: 20,
   },
   title: {
-    fontSize: 30,
+    fontSize: 32,
     fontWeight: "bold",
     color: "#284F66",
     marginBottom: 8,
-    alignItems: "center",
+    textAlign: "center",
   },
   subtitle: {
     fontSize: 16,
-    color: "#284F66",
-    alignItems: "center",
+    color: "#6B7280",
+    textAlign: "center",
   },
   formContainer: {
-    flex: 1,
+    width: '100%',
   },
   inputContainer: {
     marginBottom: 20,
+    width: '100%',
   },
   label: {
     fontSize: 14,
-    color: "#666",
+    color: "#374151",
     marginBottom: 8,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 8,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
-    color: "#333",
+    color: "#111827",
+    backgroundColor: "#FAFBFC",
+    width: '100%',
+    // Sombra sutil
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    // Focus state
+    borderWidth: 1,
+  },
+  inputFocused: {
+    borderColor: "#284F66",
     backgroundColor: "#fff",
+    shadowColor: "#284F66",
+    shadowOpacity: 0.15,
   },
   passwordInputContainer: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 8,
-    backgroundColor: "#fff",
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    backgroundColor: "#FAFBFC",
     overflow: "hidden",
+    width: '100%',
+    // Sombra sutil
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   passwordInput: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
-    color: "#333",
+    color: "#111827",
   },
   passwordToggle: {
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 14,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1535,187 +1533,206 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 8,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    minHeight: 48,
+    paddingVertical: 14,
+    backgroundColor: "#FAFBFC",
+    minHeight: 50,
+    width: '100%',
+    // Sombra sutil
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   customPickerText: {
     fontSize: 16,
-    color: "#333",
+    color: "#111827",
     flex: 1,
   },
   placeholderText: {
-    color: "#999",
+    color: "#9CA3AF",
   },
-  // ✅ AGREGADO: Estilos para botones de ubicación
   locationButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 8,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    minHeight: 48,
+    paddingVertical: 14,
+    backgroundColor: "#FAFBFC",
+    minHeight: 50,
+    width: '100%',
+    // Sombra sutil
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   locationButtonText: {
     fontSize: 16,
-    color: "#333",
+    color: "#111827",
     flex: 1,
   },
+  
+  // Sección mejorada para pickers/modales
   pickerModalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 20,
   },
   pickerModalContent: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    maxHeight: "70%",
-    width: "90%",
+    borderRadius: 20,
+    maxHeight: "75%",
+    width: "100%",
     maxWidth: 400,
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 15,
   },
   pickerModalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: "#f8f9fa",
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: "#F8FAFC",
     borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
+    borderBottomColor: "#E5E7EB",
   },
   pickerModalTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
     color: "#284F66",
   },
   pickerCloseButton: {
-    padding: 5,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "#E5E7EB",
   },
   pickerOption: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderBottomColor: "#F1F5F9",
   },
   selectedOption: {
-    backgroundColor: "#E8F4F8",
+    backgroundColor: "#EBF4FF",
+    borderLeftWidth: 4,
+    borderLeftColor: "#284F66",
   },
   pickerOptionText: {
     fontSize: 16,
-    color: "#333",
+    color: "#374151",
     flex: 1,
   },
   selectedOptionText: {
     color: "#284F66",
     fontWeight: "600",
   },
+  
+  // Botones mejorados
   registerButton: {
     backgroundColor: "#284F66",
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
+    marginTop: 24,
     marginBottom: 20,
-    marginTop: 10,
+    width: '100%',
+    // Sombra más prominente
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
   registerButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
   },
-  dividerContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 20,
+  disabledButton: {
+    opacity: 0.7,
   },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E0E0E0",
-  },
-  dividerText: {
-    marginHorizontal: 10,
-    color: "#666",
-    fontSize: 14,
-  },
-  googleButton: {
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 30,
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-  googleIcon: {
-    width: 20,
-    height: 20,
-    marginRight: 10,
-  },
-  googleButtonText: {
-    color: "#333",
-    fontSize: 16,
-    fontWeight: "500",
-  },
+  
+  // Enlaces centrados
   loginContainer: {
     flexDirection: "row",
     justifyContent: "center",
     marginBottom: 20,
+    alignItems: 'center',
   },
   termsContainer: {
     marginBottom: 30,
+    paddingHorizontal: 16,
   },
   termsText: {
     textAlign: "center",
-    color: "#284F66",
-    fontSize: 12,
-    lineHeight: 18,
+    color: "#6B7280",
+    fontSize: 13,
+    lineHeight: 20,
   },
   termsLink: {
     color: "#284F66",
     textDecorationLine: "underline",
-    fontWeight: "bold",
+    fontWeight: "600",
   },
   signupText: {
-    color: "#284F66",
+    color: "#6B7280",
     fontSize: 14,
+    textAlign: 'center',
   },
   signupLink: {
     color: "#284F66",
-    fontWeight: "bold",
+    fontWeight: "600",
   },
+  
+  // Modales de pantalla completa mejorados
   fullScreenModal: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
   },
   newModalContainer: {
     flex: 1,
     backgroundColor: "#fff",
-    marginTop: 50,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    marginTop: 60,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 16,
   },
   newModalHeader: {
     backgroundColor: "#284F66",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
   headerTitleContainer: {
     flexDirection: "row",
@@ -1724,40 +1741,54 @@ const styles = StyleSheet.create({
   },
   headerIcon: {
     marginRight: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    padding: 8,
+    borderRadius: 8,
   },
   newModalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "bold",
     color: "#fff",
   },
   newCloseButton: {
-    padding: 5,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
   },
   newModalScroll: {
     flex: 1,
+    backgroundColor: "#FAFBFC",
   },
   documentContainer: {
-    padding: 20,
+    padding: 24,
+    backgroundColor: "#fff",
+    margin: 16,
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   documentTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "bold",
     color: "#284F66",
     textAlign: "center",
-    marginBottom: 15,
+    marginBottom: 16,
   },
   lastUpdated: {
     fontSize: 12,
-    color: "#666",
+    color: "#9CA3AF",
     fontStyle: "italic",
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 24,
   },
   documentIntro: {
     fontSize: 16,
-    color: "#333",
-    lineHeight: 24,
-    marginBottom: 25,
+    color: "#374151",
+    lineHeight: 26,
+    marginBottom: 28,
     textAlign: "justify",
   },
   brandName: {
@@ -1768,21 +1799,21 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#284F66",
-    marginTop: 20,
-    marginBottom: 10,
+    marginTop: 24,
+    marginBottom: 12,
   },
   sectionContent: {
     fontSize: 16,
-    color: "#333",
-    lineHeight: 22,
-    marginBottom: 10,
+    color: "#374151",
+    lineHeight: 24,
+    marginBottom: 12,
   },
   bulletPoint: {
     fontSize: 16,
-    color: "#333",
-    lineHeight: 22,
-    marginBottom: 8,
-    marginLeft: 10,
+    color: "#374151",
+    lineHeight: 24,
+    marginBottom: 10,
+    marginLeft: 12,
   },
   highlight: {
     fontWeight: "600",
@@ -1790,9 +1821,14 @@ const styles = StyleSheet.create({
   },
   newModalFooter: {
     backgroundColor: "#fff",
-    padding: 20,
+    padding: 24,
     borderTopWidth: 1,
-    borderTopColor: "#E8E8E8",
+    borderTopColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 4,
   },
   newAcceptButton: {
     backgroundColor: "#284F66",
@@ -1803,34 +1839,37 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 6,
   },
   newAcceptButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
   },
+  
+  // Modal de verificación mejorado
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 20,
   },
   modalContent: {
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 28,
-    width: "90%",
-    maxWidth: 400,
+    borderRadius: 20,
+    padding: 32,
+    width: "100%",
+    maxWidth: 420,
     alignItems: "center",
-    shadowColor: "#284F66",
-    shadowOffset: { width: 0, height: 10 },
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 15 },
     shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 12,
+    shadowRadius: 20,
+    elevation: 15,
   },
   modalTitle: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: "bold",
     color: "#284F66",
     marginBottom: 16,
@@ -1838,32 +1877,37 @@ const styles = StyleSheet.create({
   },
   modalDescription: {
     fontSize: 16,
-    color: "#666",
+    color: "#6B7280",
     textAlign: "center",
     marginBottom: 12,
-    lineHeight: 24,
+    lineHeight: 26,
   },
   modalEmail: {
     fontSize: 18,
     color: "#284F66",
     fontWeight: "bold",
-    marginBottom: 28,
+    marginBottom: 32,
     textAlign: "center",
   },
   codeInput: {
     borderWidth: 2,
     borderColor: "#284F66",
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 28,
+    paddingVertical: 16,
+    fontSize: 32,
     fontWeight: "bold",
-    color: "#333",
+    color: "#111827",
     width: "100%",
     textAlign: "center",
     letterSpacing: 16,
-    marginBottom: 28,
-    backgroundColor: "#f8f9fa",
+    marginBottom: 32,
+    backgroundColor: "#F8FAFC",
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   modalButtons: {
     flexDirection: "row",
@@ -1873,16 +1917,16 @@ const styles = StyleSheet.create({
   },
   verifyButton: {
     backgroundColor: "#284F66",
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 10,
+    borderRadius: 12,
     flex: 1,
     alignItems: "center",
     shadowColor: "#284F66",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 5,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   verifyButtonText: {
     color: "#fff",
@@ -1890,22 +1934,19 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   cancelButton: {
-    backgroundColor: "#f0f0f0",
-    paddingVertical: 14,
+    backgroundColor: "#F3F4F6",
+    paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 10,
+    borderRadius: 12,
     flex: 1,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#e0e0e0",
+    borderColor: "#E5E7EB",
   },
   cancelButtonText: {
-    color: "#555",
+    color: "#6B7280",
     fontSize: 16,
-    fontWeight: "500",
-  },
-  disabledButton: {
-    opacity: 0.6,
+    fontWeight: "600",
   },
   resendButton: {
     paddingVertical: 12,
@@ -1915,31 +1956,34 @@ const styles = StyleSheet.create({
   resendButtonText: {
     color: "#284F66",
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "600",
     textDecorationLine: "underline",
   },
+  
+  // Modal de éxito mejorado
   successModalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 20,
   },
   successModalContent: {
     backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 30,
-    width: "90%",
-    maxWidth: 400,
+    borderRadius: 24,
+    padding: 36,
+    width: "100%",
+    maxWidth: 420,
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 15 },
+    shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 15,
+    shadowRadius: 25,
+    elevation: 20,
   },
   successIconContainer: {
     position: "relative",
-    marginBottom: 25,
+    marginBottom: 28,
     alignItems: "center",
     justifyContent: "center",
     width: 120,
@@ -1952,27 +1996,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#284F66",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#284F70",
+    shadowColor: "#284F66",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
-    shadowRadius: 15,
-    elevation: 10,
+    shadowRadius: 16,
+    elevation: 12,
     zIndex: 2,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 25,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-    backgroundColor: "#f8fafc",
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-  },
-  modalTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
   },
   decorativeCircle: {
     position: "absolute",
@@ -2004,25 +2033,25 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   successTitle: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "bold",
     color: "#284F66",
-    marginBottom: 15,
+    marginBottom: 16,
     textAlign: "center",
   },
   successMessage: {
     fontSize: 16,
-    color: "#666",
+    color: "#6B7280",
     textAlign: "center",
-    lineHeight: 24,
-    marginBottom: 25,
+    lineHeight: 26,
+    marginBottom: 28,
   },
   benefitsContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
     width: "100%",
-    marginBottom: 30,
-    paddingHorizontal: 10,
+    marginBottom: 32,
+    paddingHorizontal: 12,
   },
   benefitItem: {
     alignItems: "center",
@@ -2030,26 +2059,26 @@ const styles = StyleSheet.create({
   },
   benefitText: {
     fontSize: 12,
-    color: "#666",
-    marginTop: 5,
+    color: "#6B7280",
+    marginTop: 6,
     textAlign: "center",
-    fontWeight: "500",
+    fontWeight: "600",
   },
   continueButton: {
     backgroundColor: "#284F66",
     paddingVertical: 16,
-    paddingHorizontal: 30,
-    borderRadius: 25,
+    paddingHorizontal: 32,
+    borderRadius: 28,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 20,
-    minWidth: 200,
-    shadowColor: "#284F60",
-    shadowOffset: { width: 0, height: 6 },
+    minWidth: 220,
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowRadius: 12,
+    elevation: 10,
   },
   continueButtonText: {
     color: "#fff",
@@ -2058,27 +2087,28 @@ const styles = StyleSheet.create({
   },
   welcomeText: {
     fontSize: 14,
-    color: "#284F90",
+    color: "#284F66",
     fontWeight: "600",
     textAlign: "center",
   },
-  // ✅ NUEVOS ESTILOS MEJORADOS PARA MODALES DE UBICACIÓN
+  
+  // Modales de ubicación mejorados
   locationModalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
     justifyContent: "flex-end",
   },
   locationModalContainer: {
     backgroundColor: "#fff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     maxHeight: "85%",
     minHeight: "50%",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 10,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 16,
   },
   modalHandleContainer: {
     alignItems: "center",
@@ -2087,7 +2117,7 @@ const styles = StyleSheet.create({
   modalHandle: {
     width: 40,
     height: 4,
-    backgroundColor: "#d1d5db",
+    backgroundColor: "#D1D5DB",
     borderRadius: 2,
   },
   locationModalHeader: {
@@ -2098,13 +2128,8 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f4f8",
+    borderBottomColor: "#F1F5F9",
     backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
   locationModalHeaderContent: {
     flexDirection: "row",
@@ -2113,56 +2138,57 @@ const styles = StyleSheet.create({
   },
   locationHeaderIcon: {
     marginRight: 12,
-    backgroundColor: "#f0f4f8",
-    padding: 8,
-    borderRadius: 8,
+    backgroundColor: "#EBF4FF",
+    padding: 10,
+    borderRadius: 12,
   },
   locationModalTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
     color: "#284F66",
     flex: 1,
   },
   locationModalCloseButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: "#f8f9fa",
+    padding: 10,
+    borderRadius: 24,
+    backgroundColor: "#F8F9FA",
     borderWidth: 1,
-    borderColor: "#e9ecef",
+    borderColor: "#E9ECEF",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   locationModalContent: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#FAFBFC",
   },
   locationModalList: {
     flex: 1,
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
+    paddingTop: 8,
   },
   locationModalItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 16,
+    paddingVertical: 18,
     paddingHorizontal: 20,
     marginHorizontal: 12,
-    marginVertical: 2,
-    borderRadius: 12,
+    marginVertical: 3,
+    borderRadius: 16,
     backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#f0f4f8",
+    borderColor: "#F1F5F9",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   locationModalItemLast: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   locationModalItemContent: {
     flexDirection: "row",
@@ -2170,24 +2196,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   locationModalItemIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#f0f4f8",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#EBF4FF",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 14,
   },
   locationModalItemText: {
     fontSize: 16,
-    color: "#374151",
+    color: "#111827",
     fontWeight: "500",
     flex: 1,
   },
   locationModalItemArrow: {
-    padding: 4,
+    padding: 6,
   },
-  // Estados de carga y vacío mejorados
+  
+  // Estados de carga mejorados
   locationLoadingState: {
     flex: 1,
     justifyContent: "center",
@@ -2196,20 +2223,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   loadingIndicatorContainer: {
-    marginBottom: 24,
+    marginBottom: 28,
   },
   locationLoadingText: {
-    fontSize: 18,
+    fontSize: 20,
     color: "#284F66",
-    fontWeight: "600",
+    fontWeight: "700",
     textAlign: "center",
     marginBottom: 8,
   },
   locationLoadingSubtext: {
-    fontSize: 14,
-    color: "#6b7280",
+    fontSize: 15,
+    color: "#6B7280",
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 22,
   },
   locationEmptyState: {
     flex: 1,
@@ -2219,32 +2246,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   emptyStateIconContainer: {
-    marginBottom: 24,
+    marginBottom: 28,
     opacity: 0.7,
   },
   locationEmptyStateTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
     color: "#374151",
     textAlign: "center",
     marginBottom: 8,
   },
   locationEmptyStateText: {
-    fontSize: 14,
-    color: "#6b7280",
+    fontSize: 15,
+    color: "#6B7280",
     textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 24,
+    lineHeight: 22,
+    marginBottom: 28,
   },
   retryButton: {
     backgroundColor: "#284F66",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: "#284F66",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
   },
   retryButtonText: {
     color: "#fff",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
   },
 });

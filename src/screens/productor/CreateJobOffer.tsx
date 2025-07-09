@@ -7,10 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   Switch,
-  Platform,
-  KeyboardAvoidingView,
   ActivityIndicator,
-  Alert,
   Modal,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
@@ -21,9 +18,14 @@ import { useAuth } from "../../context/AuthContext";
 import ApiClient from "../../utils/api";
 import { getUserData } from "../../services/userService";
 import CustomDatePicker from "../../components/CustomDatePicker";
-import { getFarmByemployerId } from "../../services/farmService";
+import {
+  getFarmByemployerId,
+  getFarmPhasesByCrop,
+} from "../../services/farmService";
 import { getCultivationPhasesByCropId } from "../../services/cultivationPhaseService";
 import CustomTabBar from "../../components/CustomTabBar";
+import { extractCropTypesFromOptimizedResponse } from "../../services/cropTypeService";
+import EnhancedFarmInfoCard from "./EnhancedFarmInfoCard";
 
 const PRIMARY_COLOR = "#284F66";
 const SECONDARY_COLOR = "#4A7C94";
@@ -39,7 +41,6 @@ const COLORS = {
   warning: "#D97706",
 };
 
-// Componente de Alerta Personalizada
 const CustomAlert = ({
   visible,
   type = "info",
@@ -103,7 +104,6 @@ const CustomAlert = ({
                 borderColor: config.borderColor,
               },
             ]}>
-            {/* Header con icono */}
             <View style={customAlertStyles.header}>
               <View
                 style={[
@@ -116,17 +116,14 @@ const CustomAlert = ({
                   color={config.iconColor}
                 />
               </View>
-
               <Text
                 style={[customAlertStyles.title, { color: config.titleColor }]}>
                 {title}
               </Text>
             </View>
 
-            {/* Mensaje */}
             <Text style={customAlertStyles.message}>{message}</Text>
 
-            {/* Botones */}
             <View style={customAlertStyles.buttonsContainer}>
               {buttons.map((button, index) => (
                 <TouchableOpacity
@@ -184,12 +181,10 @@ const CreateJobOfferScreen = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
   const [farms, setFarms] = useState([]);
   const [loadingFarmInfo, setLoadingFarmInfo] = useState(false);
   const [loadingPhases, setLoadingPhases] = useState(false);
-
-  // Estados para alertas personalizadas
+  const [farmPhasesData, setFarmPhasesData] = useState(null);
   const [alertConfig, setAlertConfig] = useState({
     visible: false,
     type: "info",
@@ -213,11 +208,11 @@ const CreateJobOfferScreen = ({ navigation }) => {
     paymentMode: "Efectivo",
     laborType: "",
     pricePerUnit: "",
-    plantCount: "", // Nuevo campo para número de plantas
-    workType: "", // Nuevo campo para tipo de trabajo (podar/injertar)
+    plantCount: "",
+    workType: "",
     includesFood: false,
     includesLodging: false,
-    workersNeeded: "", // Número de trabajadores
+    workersNeeded: "",
     status: "Activo",
   });
 
@@ -226,7 +221,7 @@ const CreateJobOfferScreen = ({ navigation }) => {
   const [availablePhasesForSelectedCrop, setAvailablePhasesForSelectedCrop] =
     useState([]);
 
-  // Función para mostrar alertas personalizadas
+  // Helper functions
   const showCustomAlert = (type, title, message, buttons = []) => {
     setAlertConfig({
       visible: true,
@@ -250,7 +245,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
     setAlertConfig((prev) => ({ ...prev, visible: false }));
   };
 
-  // Función para mostrar alerta de éxito
   const showSuccessAlert = (title, message, onSuccess) => {
     showCustomAlert("success", title, message, [
       {
@@ -265,7 +259,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
     ]);
   };
 
-  // Función para mostrar alerta de error
   const showErrorAlert = (title, message) => {
     showCustomAlert("error", title, message, [
       {
@@ -277,7 +270,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
     ]);
   };
 
-  // Función para mostrar alerta de validación
   const showValidationAlert = (message) => {
     showCustomAlert("warning", "Campos Requeridos", message, [
       {
@@ -300,6 +292,7 @@ const CreateJobOfferScreen = ({ navigation }) => {
     return diffDays.toString();
   };
 
+  // Data loading
   useEffect(() => {
     loadInitialData();
   }, []);
@@ -314,7 +307,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
     }
   }, [formData.startDate, formData.endDate]);
 
-  // Calcular salario diario automáticamente cuando es "Por Planta"
   useEffect(() => {
     if (
       formData.paymentType === "Por_labor" &&
@@ -334,74 +326,13 @@ const CreateJobOfferScreen = ({ navigation }) => {
     }
   }, [formData.paymentType, formData.pricePerUnit, formData.plantCount]);
 
-  const extractAllCropTypesFromFarm = (selectedFarm) => {
-    console.log("🔍 === EXTRAYENDO CULTIVOS DE LA FINCA ===");
-    console.log("Nombre de la finca:", selectedFarm?.name);
-
-    if (!selectedFarm) {
-      console.log("❌ No hay finca seleccionada");
-      return [];
-    }
-
-    const cropTypes = [];
-    if (
-      selectedFarm.cropTypesInfo &&
-      Array.isArray(selectedFarm.cropTypesInfo)
-    ) {
-      selectedFarm.cropTypesInfo.forEach((cropTypeInfo) => {
-        cropTypes.push({
-          id: cropTypeInfo.id,
-          name: cropTypeInfo.name,
-          createdAt: cropTypeInfo.createdAt,
-          updatedAt: cropTypeInfo.updatedAt,
-          // ✅ NO incluir fases aquí - se cargarán específicamente cuando se seleccione
-          phases: [], // Placeholder vacío
-        });
-      });
-
-      console.log(
-        `✅ Extraídos ${cropTypes.length} cultivos desde cropTypesInfo`
-      );
-      return cropTypes;
-    }
-
-    // Opción 2: Fallback usando cropTypes
-    if (selectedFarm.cropTypes && Array.isArray(selectedFarm.cropTypes)) {
-      selectedFarm.cropTypes.forEach((cropTypeData) => {
-        const cropType = cropTypeData.cropType || cropTypeData;
-        if (cropType && cropType.id) {
-          const existingCropType = cropTypes.find(
-            (ct) => ct.id === cropType.id
-          );
-          if (!existingCropType) {
-            cropTypes.push({
-              id: cropType.id,
-              name: cropType.name,
-              createdAt: cropType.createdAt,
-              updatedAt: cropType.updatedAt,
-              phases: [], // Placeholder vacío
-            });
-          }
-        }
-      });
-
-      console.log(
-        `✅ Extraídos ${cropTypes.length} cultivos desde cropTypes (fallback)`
-      );
-      return cropTypes;
-    }
-
-    console.log("❌ No se encontraron cultivos en la finca");
-    return [];
-  };
-
   const loadInitialData = async () => {
     setLoading(true);
     try {
       await loadFarms();
     } catch (error) {
       console.error("Error cargando datos iniciales:", error);
-      setError("Error al cargar los datos necesarios");
+      showErrorAlert("Error", "Error al cargar los datos necesarios");
     } finally {
       setLoading(false);
     }
@@ -424,7 +355,8 @@ const CreateJobOfferScreen = ({ navigation }) => {
         : [];
 
       if (!farmsData || farmsData.length === 0) {
-        setError(
+        showErrorAlert(
+          "Sin fincas",
           "No tienes fincas registradas. Debes crear una finca primero."
         );
         setFarms([]);
@@ -434,256 +366,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
     } catch (error) {
       console.error("Error cargando fincas:", error);
       throw error;
-    }
-  };
-
-  const handleFarmSelection = async (farmId) => {
-    if (!farmId) {
-      setSelectedFarmInfo(null);
-      setFarmCropTypes([]);
-      setAvailablePhasesForSelectedCrop([]);
-      setFormData((prev) => ({
-        ...prev,
-        farmId: "",
-        cropTypeId: "",
-        phaseId: "",
-      }));
-      return;
-    }
-
-    try {
-      setLoadingFarmInfo(true);
-
-      const selectedFarm = farms.find((farm) => farm.id === farmId);
-      if (!selectedFarm) {
-        console.warn("No se encontró la finca con ID:", farmId);
-        return;
-      }
-
-      // Extraer TODOS los tipos de cultivo de la finca seleccionada
-      const allCropTypes = extractAllCropTypesFromFarm(selectedFarm);
-      setFarmCropTypes(allCropTypes);
-
-      console.log("🌾 Tipos de cultivo encontrados:", allCropTypes.length);
-
-      setFormData((prev) => ({
-        ...prev,
-        farmId,
-        cropTypeId: "", // Reset cropType selection
-        phaseId: "", // Reset phase selection
-      }));
-
-      setSelectedFarmInfo({
-        ...selectedFarm,
-        name: selectedFarm.name,
-        village: getLocationValueForFarm("village", selectedFarm),
-        city: getLocationValueForFarm("city", selectedFarm),
-        department: getLocationValueForFarm("department", selectedFarm),
-        country: getLocationValueForFarm("country", selectedFarm),
-        plantCount: selectedFarm.plantCount || 0,
-        size: selectedFarm.size || 0,
-        totalCropTypes: allCropTypes.length,
-      });
-
-      console.log("✅ Finca seleccionada:", selectedFarm.name);
-    } catch (error) {
-      console.error("Error al cargar detalles de la finca:", error);
-      showErrorAlert(
-        "Error de Carga",
-        "No se pudieron cargar los detalles de la finca seleccionada. Por favor, intente nuevamente."
-      );
-    } finally {
-      setLoadingFarmInfo(false);
-    }
-  };
-
-  const handleCropTypeSelection = async (cropTypeId) => {
-    if (!cropTypeId || !selectedFarmInfo) {
-      setAvailablePhasesForSelectedCrop([]);
-      setFormData((prev) => ({
-        ...prev,
-        cropTypeId: "",
-        phaseId: "",
-      }));
-      return;
-    }
-
-    try {
-      console.log("🌱 === SELECCIONANDO CULTIVO ===");
-      console.log("CropTypeId:", cropTypeId);
-
-      // ✅ ESTRATEGIA CORREGIDA: Cargar fases específicas del cultivo usando el servicio
-      // (igual que EditTerrain que funciona correctamente)
-
-      setLoadingPhases(true);
-
-      // 1. Buscar el cultivo seleccionado en farmCropTypes para obtener el nombre
-      const selectedCropType = farmCropTypes.find((ct) => ct.id === cropTypeId);
-
-      if (!selectedCropType) {
-        console.error("❌ Cultivo no encontrado en farmCropTypes");
-        setAvailablePhasesForSelectedCrop([]);
-        setFormData((prev) => ({
-          ...prev,
-          cropTypeId,
-          phaseId: "",
-        }));
-        setLoadingPhases(false);
-        return;
-      }
-
-      console.log(`🔍 Cultivo encontrado: ${selectedCropType.name}`);
-
-      // 2. ✅ Cargar fases específicas del cultivo usando el servicio (como EditTerrain)
-      console.log(
-        `🔄 Cargando fases específicas para ${selectedCropType.name}...`
-      );
-
-      const phasesResponse = await getCultivationPhasesByCropId(cropTypeId);
-
-      let phasesData = [];
-      if (phasesResponse?.data) {
-        phasesData = phasesResponse.data;
-      } else if (phasesResponse && Array.isArray(phasesResponse)) {
-        phasesData = phasesResponse;
-      }
-
-      console.log(
-        `✅ Cargadas ${phasesData.length} fases específicas para ${selectedCropType.name}`
-      );
-
-      // 3. Formatear las fases al formato esperado por el componente
-      const formattedPhases = phasesData.map((phase, index) => {
-        console.log(`  ${index + 1}. ${phase.name} (ID: ${phase.id})`);
-
-        return {
-          id: phase.id, // ID de la fase de cultivo para el picker
-          cultivationPhaseId: phase.id, // ID para el backend
-          name: phase.name,
-          description: phase.description || "",
-          estimatedDuration: phase.duration || null,
-          order: phase.order || null,
-          isActive: true, // Las fases del servicio están activas
-          cropType: {
-            id: cropTypeId,
-            name: selectedCropType.name,
-          },
-          cropTypeId: cropTypeId,
-          cropTypeName: selectedCropType.name,
-          source: "cultivation-phase-service", // Marcador para indicar la fuente
-          isRequired: phase.isRequired || false,
-          createdAt: phase.createdAt,
-          updatedAt: phase.updatedAt,
-        };
-      });
-
-      // 4. Ordenar las fases por orden o por número en el nombre
-      formattedPhases.sort((a, b) => {
-        if (a.order && b.order) {
-          return a.order - b.order;
-        }
-        const getOrderFromName = (name) => {
-          const match = name.match(/(\d+)\./);
-          return match ? parseInt(match[1]) : 999;
-        };
-        return getOrderFromName(a.name) - getOrderFromName(b.name);
-      });
-
-      setAvailablePhasesForSelectedCrop(formattedPhases);
-      setFormData((prev) => ({
-        ...prev,
-        cropTypeId,
-        phaseId: "", // Reset phase selection when crop type changes
-      }));
-
-      console.log("📊 === RESULTADO FINAL ===");
-      console.log("Cultivo seleccionado:", selectedCropType.name);
-      console.log("Total de fases disponibles:", formattedPhases.length);
-      console.log(
-        "Fuente de las fases:",
-        formattedPhases.length > 0 ? formattedPhases[0].source : "ninguna"
-      );
-
-      formattedPhases.forEach((phase, index) => {
-        console.log(`Fase ${index + 1}: ${phase.name} (ID: ${phase.id})`);
-      });
-    } catch (error) {
-      console.error("❌ Error cargando fases del cultivo:", error);
-
-      // ⚠️ Fallback: Si falla la carga específica, intentar usar las fases de la finca
-      console.log("🔄 Intentando fallback con fases de la finca...");
-
-      try {
-        const selectedFarm = farms.find((farm) => farm.id === formData.farmId);
-        if (selectedFarm && selectedFarm.activePhasesInfo) {
-          const fallbackPhases = selectedFarm.activePhasesInfo
-            .filter((phase) => phase.cropTypeId === cropTypeId)
-            .map((phase) => ({
-              id: phase.id,
-              cultivationPhaseId: phase.id,
-              name: phase.name,
-              description: phase.description || "",
-              estimatedDuration: phase.duration || null,
-              order: phase.order || null,
-              isActive: phase.isActive !== false,
-              cropType: phase.cropType,
-              cropTypeId: phase.cropTypeId,
-              cropTypeName: phase.cropTypeName,
-              source: "farm-fallback",
-            }));
-
-          console.log(
-            `🔄 Fallback: ${fallbackPhases.length} fases de la finca`
-          );
-          setAvailablePhasesForSelectedCrop(fallbackPhases);
-        } else {
-          setAvailablePhasesForSelectedCrop([]);
-        }
-      } catch (fallbackError) {
-        console.error("❌ Error en fallback:", fallbackError);
-        setAvailablePhasesForSelectedCrop([]);
-      }
-
-      setFormData((prev) => ({
-        ...prev,
-        cropTypeId,
-        phaseId: "",
-      }));
-    } finally {
-      setLoadingPhases(false);
-    }
-  };
-
-  const handlePhaseSelection = (selectedPhaseId) => {
-    // Buscar la fase seleccionada en el array de fases disponibles
-    const selectedPhase = availablePhasesForSelectedCrop.find(
-      (phase) => phase.id === selectedPhaseId
-    );
-
-    if (selectedPhase) {
-      // Usar cultivationPhaseId para el backend (que es lo que espera el API)
-      const phaseIdForBackend =
-        selectedPhase.cultivationPhaseId || selectedPhase.id;
-
-      setFormData((prev) => ({
-        ...prev,
-        phaseId: phaseIdForBackend,
-      }));
-
-      console.log("📋 === FASE SELECCIONADA ===");
-      console.log("Fase:", selectedPhase.name);
-      console.log("ID para picker:", selectedPhaseId);
-      console.log("CultivationPhaseId para backend:", phaseIdForBackend);
-      console.log(
-        "Cultivo asociado:",
-        selectedPhase.cropTypeName || selectedPhase.cropType?.name
-      );
-    } else {
-      console.warn("⚠️ No se encontró la fase seleccionada");
-      setFormData((prev) => ({
-        ...prev,
-        phaseId: selectedPhaseId,
-      }));
     }
   };
 
@@ -699,6 +381,320 @@ const CreateJobOfferScreen = ({ navigation }) => {
     if (locationValue?.name) return locationValue.name;
 
     return "No especificado";
+  };
+
+  const handleCropTypeSelection = async (cropTypeId) => {
+    console.log("🌾 Selecting crop type:", cropTypeId);
+
+    if (!cropTypeId || !farmPhasesData) {
+      console.log("❌ No crop type selected or no farm phases data");
+      setAvailablePhasesForSelectedCrop([]);
+      setFormData((prev) => ({
+        ...prev,
+        cropTypeId: "",
+        phaseId: "",
+      }));
+      return;
+    }
+
+    try {
+      setLoadingPhases(true);
+      const selectedCropType = farmCropTypes.find((ct) => ct.id === cropTypeId);
+
+      if (!selectedCropType) {
+        console.warn("⚠️ Selected crop type not found in farmCropTypes");
+        setAvailablePhasesForSelectedCrop([]);
+        setFormData((prev) => ({ ...prev, cropTypeId, phaseId: "" }));
+        return;
+      }
+
+      console.log("✅ Found selected crop type:", selectedCropType);
+
+      // USAR las fases activas de los datos del backend (ya filtradas)
+      let phasesForCrop = [];
+
+      if (farmPhasesData.cultivos) {
+        const cultivoOptimizado = farmPhasesData.cultivos.find(
+          ({ cultivo }) => cultivo.id === cropTypeId
+        );
+
+        console.log("🔍 Found optimized crop data:", cultivoOptimizado);
+
+        // ❌ ANTES: cultivoOptimizado.fases
+        // ✅ AHORA: cultivoOptimizado.fasesActivas
+        if (cultivoOptimizado && cultivoOptimizado.fasesActivas) {
+          // ❌ ANTES: fasesActivas.map (variable indefinida)
+          // ✅ AHORA: cultivoOptimizado.fasesActivas.map
+          phasesForCrop = cultivoOptimizado.fasesActivas.map((fase, index) => ({
+            id: fase.id,
+            cultivationPhaseId: fase.id,
+            farmPhaseId: fase.farmPhaseId, // ✅ NUEVO: ID específico de la fase en la finca
+            // ❌ ANTES: fase.nombre
+            // ✅ AHORA: fase.name
+            name: fase.name,
+            // ❌ ANTES: fase.descripcion
+            // ✅ AHORA: fase.description
+            description: fase.description || "",
+            // ❌ ANTES: fase.duracion
+            // ✅ AHORA: fase.estimatedDuration (si existe) o null
+            estimatedDuration: fase.estimatedDuration || null,
+            // ❌ ANTES: fase.orden
+            // ✅ AHORA: fase.order
+            order: fase.order || index + 1,
+            isActive: true, // Ya están filtradas por el backend
+            cropType: { id: cropTypeId, name: selectedCropType.name },
+            cropTypeId: cropTypeId,
+            cropTypeName: selectedCropType.name,
+            source: "backend-activas", // ✅ CAMBIADO: indicar que vienen del backend
+            // ❌ ANTES: fase.requerida
+            // ✅ AHORA: fase.required (si existe)
+            isRequired: fase.required || false,
+            // Información adicional de la finca (si existe)
+            plantasEnFase: fase.plantasEnFase || fase.plantCount || 0,
+            fechaInicio: fase.fechaInicio || fase.startDate || null,
+            progreso: fase.progreso || fase.progress || 0,
+            // ✅ NUEVO: Datos originales para debug
+            originalData: { ...fase },
+          }));
+
+          console.log(
+            `📋 Active phases for ${selectedCropType.name}:`,
+            phasesForCrop.length,
+            phasesForCrop
+          );
+        }
+      }
+
+      // Si no hay fases activas en la finca, mostrar mensaje informativo
+      if (phasesForCrop.length === 0) {
+        console.warn(
+          `❌ No active phases found for crop ${selectedCropType.name}`
+        );
+        setAvailablePhasesForSelectedCrop([]);
+
+        // Mostrar alerta informativa
+        showCustomAlert(
+          "warning", // ✅ CAMBIADO: de "info" a "warning"
+          "Sin Fases Activas",
+          `El cultivo "${selectedCropType.name}" no tiene fases activas disponibles en esta finca en este momento. Esto puede deberse a que todas las fases están completadas o no han sido iniciadas aún.`,
+          [
+            {
+              text: "Entendido",
+              style: "primary",
+              onPress: () => hideCustomAlert(),
+            },
+          ]
+        );
+      } else {
+        // Ordenar las fases por orden o por nombre
+        phasesForCrop.sort((a, b) => {
+          if (a.order && b.order) return a.order - b.order;
+          return a.name.localeCompare(b.name);
+        });
+
+        setAvailablePhasesForSelectedCrop(phasesForCrop);
+        console.log("✅ Successfully set available phases for selected crop");
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        cropTypeId,
+        phaseId: "",
+      }));
+    } catch (error) {
+      console.error("❌ Error loading active phases for crop:", error);
+      setAvailablePhasesForSelectedCrop([]);
+      setFormData((prev) => ({ ...prev, cropTypeId, phaseId: "" }));
+      showErrorAlert(
+        "Error",
+        "No se pudieron cargar las fases activas del cultivo seleccionado"
+      );
+    } finally {
+      setLoadingPhases(false);
+    }
+  };
+
+  const extractActiveCropTypesFromOptimizedResponse = (optimizedData) => {
+    console.log(
+      "🔍 Processing optimized data:",
+      JSON.stringify(optimizedData, null, 2)
+    );
+
+    if (!optimizedData || !optimizedData.cultivos) {
+      console.warn("❌ No optimized data or cultivos found");
+      return [];
+    }
+
+    const activeCropTypes = optimizedData.cultivos
+      .map(({ cultivo, fasesActivas, totalFases }) => {
+        console.log(`🌱 Processing crop: ${cultivo?.name}`, {
+          cultivo,
+          fasesActivasLength: fasesActivas?.length || 0,
+          totalFases,
+        });
+
+        // Verificar que tenemos cultivo y fasesActivas válidas
+        if (!cultivo || !fasesActivas || !Array.isArray(fasesActivas)) {
+          console.warn(
+            `⚠️ Invalid crop or fasesActivas data for ${
+              cultivo?.name || "unknown"
+            }`
+          );
+          return null;
+        }
+
+        // El backend ya envía solo las fases activas, no necesitamos filtrar
+        console.log(
+          `  ✅ Active phases for ${cultivo.name}: ${fasesActivas.length}/${totalFases}`
+        );
+
+        // Solo incluir el cultivo si tiene al menos una fase activa
+        if (fasesActivas.length === 0) {
+          console.warn(`  ⚠️ No active phases found for crop ${cultivo.name}`);
+          return null;
+        }
+
+        return {
+          id: cultivo.id,
+          name: cultivo.name, // Backend usa 'name', no 'nombre'
+          description: cultivo.description || "",
+          fasesActivas: fasesActivas.length,
+          totalFases: totalFases,
+          fases: fasesActivas, // Usamos fasesActivas directamente
+        };
+      })
+      .filter(Boolean); // Remover nulls
+
+    console.log(
+      `🎯 Final active crop types: ${activeCropTypes.length}`,
+      activeCropTypes.map((ct) => ({
+        id: ct.id,
+        name: ct.name,
+        activePhasesCount: ct.fasesActivas,
+      }))
+    );
+
+    return activeCropTypes;
+  };
+  // Modifica la función handleFarmSelection para usar la nueva función de extracción
+  const handleFarmSelection = async (farmId) => {
+    if (!farmId) {
+      setSelectedFarmInfo(null);
+      setFarmCropTypes([]);
+      setAvailablePhasesForSelectedCrop([]);
+      setFarmPhasesData(null);
+      setFormData((prev) => ({
+        ...prev,
+        farmId: "",
+        cropTypeId: "",
+        phaseId: "",
+      }));
+      return;
+    }
+
+    try {
+      setLoadingFarmInfo(true);
+      const selectedFarm = farms.find((farm) => farm.id === farmId);
+      if (!selectedFarm) {
+        console.warn("No se encontró la finca con ID:", farmId);
+        return;
+      }
+
+      // Load farm phases data
+      const phasesResponse = await getFarmPhasesByCrop(farmId);
+
+      if (phasesResponse.success && phasesResponse.data) {
+        // Usar la nueva función que solo extrae cultivos con fases activas
+        const extractedActiveCropTypes =
+          extractActiveCropTypesFromOptimizedResponse(phasesResponse.data);
+
+        setFarmPhasesData(phasesResponse.data);
+        setFarmCropTypes(extractedActiveCropTypes);
+        setSelectedFarmInfo({
+          ...selectedFarm,
+          name: selectedFarm.name,
+          village: getLocationValueForFarm("village", selectedFarm),
+          city: getLocationValueForFarm("city", selectedFarm),
+          department: getLocationValueForFarm("department", selectedFarm),
+          country: getLocationValueForFarm("country", selectedFarm),
+          plantCount: selectedFarm.plantCount || 0,
+          size: selectedFarm.size || 0,
+          totalCropTypes: extractedActiveCropTypes.length,
+          optimizedData: phasesResponse.data,
+        });
+
+        setFormData((prev) => ({
+          ...prev,
+          farmId,
+          cropTypeId: "",
+          phaseId: "",
+        }));
+
+        // Mostrar mensaje informativo si no hay cultivos activos
+        if (extractedActiveCropTypes.length === 0) {
+          showCustomAlert(
+            "warning",
+            "Sin Cultivos Activos",
+            "Esta finca no tiene cultivos con fases activas disponibles en este momento.",
+            [
+              {
+                text: "Entendido",
+                style: "primary",
+                onPress: () => hideCustomAlert(),
+              },
+            ]
+          );
+        }
+      } else {
+        throw new Error(
+          phasesResponse.message || "Error al cargar los datos de la finca"
+        );
+      }
+    } catch (error) {
+      console.error("Error al cargar detalles de la finca:", error);
+      showErrorAlert(
+        "Error de Carga",
+        "No se pudieron cargar los detalles de la finca seleccionada. Por favor, intente nuevamente."
+      );
+    } finally {
+      setLoadingFarmInfo(false);
+    }
+  };
+
+  // Actualiza el texto del helper para las fases
+  const phaseHelperText = () => {
+    const activePhasesCount = availablePhasesForSelectedCrop.length;
+    const selectedCropName = getSelectedCropTypeName();
+
+    if (activePhasesCount === 0) {
+      return `No hay fases activas disponibles para ${selectedCropName} en esta finca`;
+    }
+
+    return `${activePhasesCount} fase${
+      activePhasesCount !== 1 ? "s" : ""
+    } activa${activePhasesCount !== 1 ? "s" : ""} disponible${
+      activePhasesCount !== 1 ? "s" : ""
+    } para ${selectedCropName}`;
+  };
+
+  const handlePhaseSelection = (selectedPhaseId) => {
+    const selectedPhase = availablePhasesForSelectedCrop.find(
+      (phase) => phase.id === selectedPhaseId
+    );
+
+    if (selectedPhase) {
+      const phaseIdForBackend =
+        selectedPhase.cultivationPhaseId || selectedPhase.id;
+      setFormData((prev) => ({
+        ...prev,
+        phaseId: phaseIdForBackend,
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        phaseId: selectedPhaseId,
+      }));
+    }
   };
 
   const handleInputChange = (field, value) => {
@@ -752,20 +748,21 @@ const CreateJobOfferScreen = ({ navigation }) => {
       case 2:
         if (!formData.startDate) return "La fecha de inicio es requerida";
         if (!formData.endDate) return "La fecha de finalización es requerida";
-        if (formData.endDate < formData.startDate)
+        if (formData.endDate < formData.startDate) {
           return "La fecha de finalización debe ser posterior a la fecha de inicio";
+        }
         break;
       case 3:
         if (!formData.paymentType) return "El tipo de pago es requerido";
         if (!formData.paymentMode) return "El modo de pago es requerido";
 
-        // Validación diferente según el tipo de pago
         if (formData.paymentType === "Por_dia") {
           if (
             isNaN(parseFloat(formData.salary)) ||
             parseFloat(formData.salary) <= 0
-          )
+          ) {
             return "El salario debe ser un número positivo";
+          }
         }
 
         if (
@@ -781,7 +778,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
         ) {
           return "El precio por planta debe ser un número positivo";
         }
-        // Validaciones para los nuevos campos de "Por Planta"
         if (
           formData.paymentType === "Por_labor" &&
           (!formData.plantCount || parseInt(formData.plantCount) <= 0)
@@ -824,7 +820,7 @@ const CreateJobOfferScreen = ({ navigation }) => {
 
     setSubmitting(true);
     try {
-      let dataToSend = {
+      const dataToSend = {
         title: formData.title,
         description: formData.description,
         farmId: formData.farmId,
@@ -844,24 +840,15 @@ const CreateJobOfferScreen = ({ navigation }) => {
             ? parseFloat(formData.pricePerUnit)
             : null,
         workersNeeded: parseInt(formData.workersNeeded),
-        // Nuevos campos para "Por Planta"
         plantCount:
           formData.paymentType === "Por_labor"
             ? parseInt(formData.plantCount)
             : null,
         workType:
           formData.paymentType === "Por_labor" ? formData.workType : null,
+        includesFood: formData.includesFood,
+        includesLodging: formData.includesLodging,
       };
-
-      // Solo incluir beneficios si están definidos explícitamente
-      if (formData.includesFood !== undefined) {
-        dataToSend.includesFood = formData.includesFood;
-      }
-      if (formData.includesLodging !== undefined) {
-        dataToSend.includesLodging = formData.includesLodging;
-      }
-
-      console.log("📤 Enviando datos:", dataToSend);
 
       const result = await ApiClient.post("/job-offer/create", dataToSend);
 
@@ -878,12 +865,10 @@ const CreateJobOfferScreen = ({ navigation }) => {
       }
     } catch (error) {
       console.error("Error creando la oferta de trabajo:", error);
-
       const errorMessage =
         error.response?.data?.message ||
         error.message ||
         "No se pudo crear la oferta de trabajo";
-
       showErrorAlert(
         "Error al Crear Oferta",
         `Ocurrió un problema al publicar tu oferta: ${errorMessage}. Por favor, verifica la información e intenta nuevamente.`
@@ -903,21 +888,15 @@ const CreateJobOfferScreen = ({ navigation }) => {
 
   const getSelectedPhaseName = () => {
     if (!formData.phaseId) return "No seleccionada";
-
-    // Buscar por cultivationPhaseId (que es lo que se guarda en formData.phaseId)
     const selectedPhase = availablePhasesForSelectedCrop.find(
       (phase) =>
         phase.cultivationPhaseId === formData.phaseId ||
         phase.id === formData.phaseId
     );
-
-    if (selectedPhase) {
-      return selectedPhase.name;
-    }
-
-    return "No encontrada";
+    return selectedPhase ? selectedPhase.name : "No encontrada";
   };
 
+  // Render functions
   const renderFormStep = () => {
     switch (currentStep) {
       case 1:
@@ -929,6 +908,7 @@ const CreateJobOfferScreen = ({ navigation }) => {
                 <Text style={styles.sectionTitle}>Información Básica</Text>
               </View>
 
+              {/* Título de la oferta */}
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Título de la oferta *</Text>
                 <View style={styles.inputWrapper}>
@@ -948,6 +928,7 @@ const CreateJobOfferScreen = ({ navigation }) => {
                 </View>
               </View>
 
+              {/* Descripción */}
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Descripción *</Text>
                 <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
@@ -971,7 +952,7 @@ const CreateJobOfferScreen = ({ navigation }) => {
                 </View>
               </View>
 
-              {/* Campo: Número de trabajadores */}
+              {/* Número de trabajadores */}
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>
                   Número de trabajadores requeridos *
@@ -999,6 +980,7 @@ const CreateJobOfferScreen = ({ navigation }) => {
                 </Text>
               </View>
 
+              {/* Selector de finca */}
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Seleccione una finca *</Text>
                 {farms.length === 0 ? (
@@ -1034,10 +1016,18 @@ const CreateJobOfferScreen = ({ navigation }) => {
                     </View>
                   </View>
                 )}
+                {loadingFarmInfo && (
+                  <View style={styles.simpleLoadingContainer}>
+                    <ActivityIndicator size="small" color={PRIMARY_COLOR} />
+                    <Text style={styles.simpleLoadingText}>
+                      Cargando cultivos...
+                    </Text>
+                  </View>
+                )}
               </View>
 
-              {/* Selector de tipo de cultivo */}
-              {farmCropTypes.length > 0 && (
+              {/* Selector de cultivo */}
+              {farmCropTypes.length > 0 && !loadingFarmInfo && (
                 <View style={styles.inputContainer}>
                   <Text style={styles.label}>
                     Seleccione el tipo de cultivo *
@@ -1069,33 +1059,44 @@ const CreateJobOfferScreen = ({ navigation }) => {
                       </Picker>
                     </View>
                   </View>
+                  <Text style={styles.helperText}>
+                    {farmCropTypes.length} cultivo
+                    {farmCropTypes.length !== 1 ? "s" : ""} disponible
+                    {farmCropTypes.length !== 1 ? "s" : ""}
+                  </Text>
                 </View>
               )}
 
-              {formData.cropTypeId && (
+              {/* Mensaje cuando no hay cultivos activos */}
+              {formData.farmId &&
+                !loadingFarmInfo &&
+                farmCropTypes.length === 0 && (
+                  <View style={styles.inputContainer}>
+                    <View style={styles.warningContainer}>
+                      <Icon name="info" size={20} color={COLORS.warning} />
+                      <Text style={styles.warningText}>
+                        Esta finca no tiene cultivos con fases activas
+                        disponibles.
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+              {/* Selector de fase */}
+              {formData.cropTypeId && !loadingFarmInfo && (
                 <View style={styles.inputContainer}>
                   <Text style={styles.label}>
                     Seleccione la fase del cultivo *
                   </Text>
                   {loadingPhases ? (
-                    <View style={styles.loadingPhasesContainer}>
+                    <View style={styles.simpleLoadingContainer}>
                       <ActivityIndicator size="small" color={PRIMARY_COLOR} />
-                      <Text style={styles.loadingPhasesText}>
-                        Cargando fases específicas del cultivo{" "}
-                        {getSelectedCropTypeName()}...
+                      <Text style={styles.simpleLoadingText}>
+                        Cargando fases...
                       </Text>
                     </View>
                   ) : availablePhasesForSelectedCrop.length > 0 ? (
                     <>
-                      <View style={styles.phaseSourceInfo}>
-                        <Icon name="info" size={16} color={COLORS.info} />
-                        <Text style={styles.phaseSourceText}>
-                          {availablePhasesForSelectedCrop[0]?.source ===
-                          "cultivation-phase-service"
-                            ? `✅ Fases específicas del cultivo ${getSelectedCropTypeName()}`
-                            : `📍 Fases del cultivo ${getSelectedCropTypeName()} desde la finca`}
-                        </Text>
-                      </View>
                       <View style={styles.pickerWrapper}>
                         <Icon
                           name="timeline"
@@ -1116,44 +1117,36 @@ const CreateJobOfferScreen = ({ navigation }) => {
                             {availablePhasesForSelectedCrop.map((phase) => (
                               <Picker.Item
                                 key={phase.id}
-                                label={`${
-                                  phase.order ? `${phase.order}. ` : ""
-                                }${phase.name}`}
+                                label={phase.name}
                                 value={phase.id}
                               />
                             ))}
                           </Picker>
                         </View>
                       </View>
+                      <Text style={styles.helperText}>
+                        {availablePhasesForSelectedCrop.length} fase
+                        {availablePhasesForSelectedCrop.length !== 1 ? "s" : ""}{" "}
+                        activa
+                        {availablePhasesForSelectedCrop.length !== 1 ? "s" : ""}{" "}
+                        disponible
+                        {availablePhasesForSelectedCrop.length !== 1 ? "s" : ""}
+                      </Text>
                     </>
                   ) : (
-                    <View style={styles.noPhasesContainer}>
-                      <Icon name="warning" size={24} color="#FF9800" />
-                      <Text style={styles.noPhasesText}>
-                        No se pudieron cargar las fases para este cultivo.
-                        Intente seleccionar otro cultivo.
+                    <View style={styles.warningContainer}>
+                      <Icon name="info" size={20} color={COLORS.warning} />
+                      <Text style={styles.warningText}>
+                        No hay fases activas para {getSelectedCropTypeName()} en
+                        esta finca.
                       </Text>
                     </View>
                   )}
                 </View>
               )}
-
-              {selectedFarmInfo && (
-                <EnhancedFarmInfoCard
-                  farmInfo={selectedFarmInfo}
-                  farmCropTypes={farmCropTypes}
-                  selectedCropTypeId={formData.cropTypeId}
-                  availablePhasesForSelectedCrop={
-                    availablePhasesForSelectedCrop
-                  }
-                  selectedPhaseId={formData.phaseId}
-                  loading={loadingFarmInfo}
-                />
-              )}
             </View>
           </View>
         );
-
       case 2:
         return (
           <View style={styles.formCard}>
@@ -1277,7 +1270,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
                     </View>
                   </View>
 
-                  {/* NUEVO: Campo para número de plantas */}
                   <View style={styles.inputContainer}>
                     <Text style={styles.label}>Número de plantas *</Text>
                     <View style={styles.inputWrapper}>
@@ -1303,11 +1295,8 @@ const CreateJobOfferScreen = ({ navigation }) => {
                     </Text>
                   </View>
 
-                  {/* NUEVO: Campo para tipo de trabajo */}
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>
-                      Tipo de trabajo a realizar *
-                    </Text>
+                    <Text style={styles.label}>Tipo de trabajo realizar *</Text>
                     <View style={styles.pickerWrapper}>
                       <Icon
                         name="build"
@@ -1860,282 +1849,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
   );
 };
 
-// Componente mejorado para mostrar información de la finca con múltiples cultivos
-const EnhancedFarmInfoCard = ({
-  farmInfo,
-  farmCropTypes,
-  selectedCropTypeId,
-  availablePhasesForSelectedCrop,
-  selectedPhaseId,
-  loading,
-}) => {
-  if (loading) {
-    return (
-      <View style={styles.farmInfoContainer}>
-        <ActivityIndicator size="small" color={PRIMARY_COLOR} />
-        <Text style={styles.loadingText}>
-          Cargando información de la finca...
-        </Text>
-      </View>
-    );
-  }
-
-  if (!farmInfo || !farmInfo.name) {
-    return null;
-  }
-
-  const getLocationValue = (field) => {
-    if (!farmInfo) return "No especificado";
-
-    const directValue = farmInfo[field];
-    if (typeof directValue === "string") return directValue;
-    if (directValue?.name) return directValue.name;
-
-    const locationValue = farmInfo.locationInfo?.[field];
-    if (typeof locationValue === "string") return locationValue;
-    if (locationValue?.name) return locationValue.name;
-
-    return "No especificado";
-  };
-
-  const villageName = farmInfo.village || getLocationValue("village");
-  const cityName = getLocationValue("city");
-  const departmentName = getLocationValue("department");
-  const countryName = getLocationValue("country");
-
-  const selectedCropType = farmCropTypes.find(
-    (ct) => ct.id === selectedCropTypeId
-  );
-
-  return (
-    <>
-      <View style={styles.farmInfoContainer}>
-        <View style={styles.farmInfoHeader}>
-          <Icon name="agriculture" size={24} color={PRIMARY_COLOR} />
-          <Text style={styles.farmInfoTitle}>{farmInfo.name}</Text>
-          <View style={styles.farmInfoBadge}>
-            <Text style={styles.farmInfoBadgeText}>
-              {farmCropTypes.length} cultivo
-              {farmCropTypes.length !== 1 ? "s" : ""}
-            </Text>
-          </View>
-        </View>
-
-        {/* Card de Ubicación */}
-        <View style={styles.farmInfoCard}>
-          <View style={styles.farmInfoSection}>
-            <Icon name="location-on" size={20} color={SECONDARY_COLOR} />
-            <Text style={styles.farmInfoSectionTitle}>Ubicación</Text>
-          </View>
-
-          <View style={styles.locationGrid}>
-            <View style={styles.locationItem}>
-              <Icon name="public" size={16} color="#666" />
-              <View style={styles.locationTextContainer}>
-                <Text style={styles.locationLabel}>País</Text>
-                <Text style={styles.locationValue}>{countryName}</Text>
-              </View>
-            </View>
-
-            <View style={styles.locationItem}>
-              <Icon name="map" size={16} color="#666" />
-              <View style={styles.locationTextContainer}>
-                <Text style={styles.locationLabel}>Departamento</Text>
-                <Text style={styles.locationValue}>{departmentName}</Text>
-              </View>
-            </View>
-
-            <View style={styles.locationItem}>
-              <Icon name="location-city" size={16} color="#666" />
-              <View style={styles.locationTextContainer}>
-                <Text style={styles.locationLabel}>Ciudad</Text>
-                <Text style={styles.locationValue}>{cityName}</Text>
-              </View>
-            </View>
-
-            <View style={styles.locationItem}>
-              <Icon name="home" size={16} color="#666" />
-              <View style={styles.locationTextContainer}>
-                <Text style={styles.locationLabel}>Vereda</Text>
-                <Text style={styles.locationValue}>{villageName}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Card de Todos los Cultivos */}
-        <View style={styles.farmInfoCard}>
-          <View style={styles.farmInfoSection}>
-            <Icon name="grass" size={20} color={SECONDARY_COLOR} />
-            <Text style={styles.farmInfoSectionTitle}>
-              Cultivos Disponibles ({farmCropTypes.length})
-            </Text>
-          </View>
-
-          <View style={styles.cropTypesContainer}>
-            {farmCropTypes.map((cropType, index) => (
-              <View
-                key={cropType.id}
-                style={[
-                  styles.cropTypeCard,
-                  selectedCropTypeId === cropType.id &&
-                    styles.selectedCropTypeCard,
-                ]}>
-                <View style={styles.cropTypeHeader}>
-                  <Icon
-                    name="eco"
-                    size={16}
-                    color={
-                      selectedCropTypeId === cropType.id
-                        ? PRIMARY_COLOR
-                        : "#666"
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.cropTypeName,
-                      selectedCropTypeId === cropType.id &&
-                        styles.selectedCropTypeName,
-                    ]}>
-                    {cropType.name}
-                  </Text>
-                  {selectedCropTypeId === cropType.id && (
-                    <Icon name="check-circle" size={16} color={PRIMARY_COLOR} />
-                  )}
-                </View>
-
-                {cropType.phases && cropType.phases.length > 0 && (
-                  <View style={styles.phasesPreview}>
-                    <Text style={styles.phasesPreviewText}>
-                      {cropType.phases.length} fase
-                      {cropType.phases.length !== 1 ? "s" : ""} disponible
-                      {cropType.phases.length !== 1 ? "s" : ""}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Card de Fases del Cultivo Seleccionado */}
-        {selectedCropType && availablePhasesForSelectedCrop.length > 0 && (
-          <View style={styles.farmInfoCard}>
-            <View style={styles.farmInfoSection}>
-              <Icon name="timeline" size={20} color={SECONDARY_COLOR} />
-              <Text style={styles.farmInfoSectionTitle}>
-                Fases Disponibles para {selectedCropType.name}
-              </Text>
-            </View>
-            <View style={styles.phaseInfoNote}>
-              <Icon name="info" size={16} color={COLORS.info} />
-              <Text style={styles.phaseInfoNoteText}>
-                {availablePhasesForSelectedCrop.length > 0 &&
-                availablePhasesForSelectedCrop[0].source ===
-                  "farm-crop-specific"
-                  ? `Fases específicas del cultivo ${selectedCropType.name} configuradas para esta finca.`
-                  : availablePhasesForSelectedCrop.length > 0
-                  ? `Fases disponibles para el cultivo ${selectedCropType.name}.`
-                  : `No hay fases configuradas para el cultivo ${selectedCropType.name} en esta finca.`}
-              </Text>
-            </View>
-            <View style={styles.phasesContainer}>
-              {availablePhasesForSelectedCrop.map((phase, index) => (
-                <View
-                  key={phase.id}
-                  style={[
-                    styles.phaseCard,
-                    selectedPhaseId === phase.id && styles.selectedPhaseCard,
-                  ]}>
-                  <View style={styles.phaseCardHeader}>
-                    <View
-                      style={[
-                        styles.phaseCircle,
-                        selectedPhaseId === phase.id &&
-                          styles.selectedPhaseCircle,
-                      ]}>
-                      <Text
-                        style={[
-                          styles.phaseNumber,
-                          selectedPhaseId === phase.id &&
-                            styles.selectedPhaseNumber,
-                        ]}>
-                        {index + 1}
-                      </Text>
-                    </View>
-                    <View style={styles.phaseInfo}>
-                      <Text
-                        style={[
-                          styles.phaseName,
-                          selectedPhaseId === phase.id &&
-                            styles.selectedPhaseName,
-                        ]}>
-                        {phase.name}
-                      </Text>
-                      {phase.description && (
-                        <Text style={styles.phaseDescription}>
-                          {phase.description}
-                        </Text>
-                      )}
-                      {phase.estimatedDuration && (
-                        <Text style={styles.phaseDuration}>
-                          Duración estimada: {phase.estimatedDuration} días
-                        </Text>
-                      )}
-                      <Text style={styles.phaseSource}>
-                        {phase.source === "backend"
-                          ? "🔗 Fase específica del cultivo"
-                          : "📍 Fase de la finca"}
-                      </Text>
-                    </View>
-                    {selectedPhaseId === phase.id && (
-                      <Icon
-                        name="check-circle"
-                        size={20}
-                        color={PRIMARY_COLOR}
-                      />
-                    )}
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Card de Estadísticas de la Finca */}
-        <View style={styles.farmInfoCard}>
-          <View style={styles.farmInfoSection}>
-            <Icon name="assessment" size={20} color={SECONDARY_COLOR} />
-            <Text style={styles.farmInfoSectionTitle}>Estadísticas</Text>
-          </View>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Icon name="grass" size={20} color={SECONDARY_COLOR} />
-              <Text style={styles.statValue}>{farmInfo.plantCount || 0}</Text>
-              <Text style={styles.statLabel}>Plantas Total</Text>
-            </View>
-
-            <View style={styles.statItem}>
-              <Icon name="square-foot" size={20} color={SECONDARY_COLOR} />
-              <Text style={styles.statValue}>{farmInfo.size || 0}</Text>
-              <Text style={styles.statLabel}>Hectáreas</Text>
-            </View>
-
-            <View style={styles.statItem}>
-              <Icon name="spa" size={20} color={SECONDARY_COLOR} />
-              <Text style={styles.statValue}>{farmCropTypes.length}</Text>
-              <Text style={styles.statLabel}>
-                Tipo{farmCropTypes.length !== 1 ? "s" : ""} de Cultivo
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-    </>
-  );
-};
-
 // Estilos para alertas personalizadas
 const customAlertStyles = StyleSheet.create({
   overlay: {
@@ -2186,6 +1899,60 @@ const customAlertStyles = StyleSheet.create({
   buttonsContainer: {
     flexDirection: "row",
     gap: 12,
+  },
+  // Agregar estos estilos dentro de StyleSheet.create({...})
+  simpleLoadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  simpleLoadingText: {
+    marginLeft: 8,
+    color: PRIMARY_COLOR,
+    fontSize: 14,
+  },
+  warningContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#fff3cd",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#ffeaa7",
+    gap: 8,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 14,
+    color: "#856404",
+    lineHeight: 18,
+  },
+  noDataContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    backgroundColor: "#fff3cd",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ffeaa7",
+    gap: 12,
+  },
+  noDataText: {
+    fontSize: 14,
+    color: "#856404",
+    textAlign: "center",
+    flex: 1,
+  },
+  helperText: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 6,
+    fontStyle: "italic",
   },
   button: {
     flex: 1,
@@ -2709,6 +2476,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 15,
     marginBottom: 30,
+    paddingBottom: 80,
+    paddingHorizontal: 0,
   },
   button: {
     flex: 1,

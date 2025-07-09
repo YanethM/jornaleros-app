@@ -16,6 +16,7 @@ import { getStatusBarHeight } from "../utils/dimensions";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useAuth } from "../context/AuthContext";
 import { getUserData } from "../services/userService";
+import { logout } from "../services/authService";
 
 const CustomHeaderWorker = ({ navigation }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -62,13 +63,7 @@ const CustomHeaderWorker = ({ navigation }) => {
 
   const menuItems = [
     { title: "Mis trabajos", icon: "work", route: "MyJobs" },
-    { title: "Mensajes", icon: "message", route: "WorkerMessage" },
-    { title: "Calificar productor", icon: "star", route: "RateProducer" },
-    {
-      title: "Cancelar postulación",
-      icon: "cancel",
-      route: "CancelApplication",
-    },
+    { title: "Calificar productor", icon: "star", route: "RateProducer" }
   ];
 
   const profileMenuItems = [
@@ -112,7 +107,7 @@ const CustomHeaderWorker = ({ navigation }) => {
           try {
             await signOut();
           } catch (error) {
-            Alert.alert("Error", "Error al cerrar sesión");
+            console.error("Error cerrando sesión:", error);
           }
         },
         style: "destructive",

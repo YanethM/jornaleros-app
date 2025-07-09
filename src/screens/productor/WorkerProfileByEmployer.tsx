@@ -13,9 +13,9 @@ import {
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { ScrollView } from "react-native";
 import { getWorkerById } from "../../services/workerService";
-
+import { acceptApplication, rejectApplication } from "../../services/employerService";
+import { useAuth } from "../../context/AuthContext";
 import ApiClient from "../../utils/api";
-import AsyncStorage from "@react-native-async-storage/async-storage"; // Para obtener el token
 
 const PRIMARY_COLOR = "#274F66";
 const SECONDARY_COLOR = "#B6883E";
@@ -37,7 +37,48 @@ const COLORS = {
   muted: "#EDF2F7",
 };
 
+const isPendingApplication = (status) => {
+  const pendingStatuses = ["PENDIENTE", "SOLICITADO", "APLICADO", "EN_REVISION"];
+  return !status || pendingStatuses.includes(status.toUpperCase());
+};
+
+const getStatusColor = (status) => {
+  switch (status?.toUpperCase()) {
+    case "PENDIENTE":
+    case "SOLICITADO":
+    case "APLICADO":
+    case "EN_REVISION":
+      return COLORS.warning;
+    case "ACEPTADA":
+    case "APROBADA":
+      return COLORS.success;
+    case "RECHAZADA":
+      return COLORS.error;
+    default:
+      return COLORS.info;
+  }
+};
+
+const getStatusIcon = (status) => {
+  switch (status?.toUpperCase()) {
+    case "PENDIENTE":
+    case "SOLICITADO":
+    case "APLICADO":
+    case "EN_REVISION":
+      return "pending";
+    case "ACEPTADA":
+    case "APROBADA":
+      return "check-circle";
+    case "RECHAZADA":
+      return "cancel";
+    default:
+      return "info";
+  }
+};
+
+
 const WorkerProfileByEmployer = ({ navigation, route }) => {
+  const { user } = useAuth();
   const [worker, setWorker] = useState(null);
   const {
     workerId,
@@ -51,16 +92,7 @@ const WorkerProfileByEmployer = ({ navigation, route }) => {
   const [processingStatus, setProcessingStatus] = useState(false);
   const [currentApplicationStatus, setCurrentApplicationStatus] =
     useState(applicationStatus);
-
-  // NUEVA: Función para obtener el token de autenticación
-  const getAuthToken = async () => {
-    try {
-      return await AsyncStorage.getItem("@user_token");
-    } catch (error) {
-      console.error("Error getting auth token:", error);
-      return null;
-    }
-  };
+  const [employerId, setEmployerId] = useState(null);
 
   const getRandomPillColor = (index) => {
     const colors = [
@@ -74,10 +106,39 @@ const WorkerProfileByEmployer = ({ navigation, route }) => {
     return colors[index % colors.length];
   };
 
+  // Función para obtener el employerId del usuario actual
+  const getEmployerId = async () => {
+    try {
+      if (!user?.id) {
+        throw new Error("No hay usuario autenticado");
+      }
+
+      const result = await ApiClient.get(`/user/list/${user.id}`);
+      if (!result.success || !result.data) {
+        throw new Error("Error al obtener datos del usuario");
+      }
+
+      if (!result.data.employerProfile) {
+        throw new Error("El usuario no tiene perfil de empleador");
+      }
+
+      return result.data.employerProfile.id;
+    } catch (error) {
+      console.error("Error obteniendo employerId:", error);
+      throw error;
+    }
+  };
+
   const loadWorkerProfile = async () => {
     try {
       setLoading(true);
       setError(null);
+
+      // Obtener employerId si no lo tenemos
+      if (!employerId) {
+        const empId = await getEmployerId();
+        setEmployerId(empId);
+      }
 
       const workerData = await getWorkerById(workerId);
 
@@ -141,13 +202,13 @@ const WorkerProfileByEmployer = ({ navigation, route }) => {
   const handleAcceptApplication = async () => {
     Alert.alert(
       "Confirmar Aceptación",
-      "¿Estás seguro de que deseas aceptar esta aplicación?",
+      `¿Estás seguro de que deseas aceptar la aplicación de ${worker?.user?.name} ${worker?.user?.lastname}?`,
       [
         { text: "Cancelar", style: "cancel" },
         {
-          text: "Aceptar",
+          text: "Aceptar Aplicación",
           style: "default",
-          onPress: () => acceptApplication(),
+          onPress: () => performAcceptApplication(),
         },
       ]
     );
@@ -156,192 +217,159 @@ const WorkerProfileByEmployer = ({ navigation, route }) => {
   const handleRejectApplication = async () => {
     Alert.alert(
       "Confirmar Rechazo",
-      "¿Estás seguro de que deseas rechazar esta aplicación?",
+      `¿Estás seguro de que deseas rechazar la aplicación de ${worker?.user?.name} ${worker?.user?.lastname}?`,
       [
         { text: "Cancelar", style: "cancel" },
         {
-          text: "Rechazar",
+          text: "Rechazar Aplicación",
           style: "destructive",
-          onPress: () => cancelApplication(),
+          onPress: () => performRejectApplication(),
         },
       ]
     );
   };
 
-  const acceptApplication = async () => {
+  const performAcceptApplication = async () => {
     try {
       setProcessingStatus(true);
 
-      const authToken = await getAuthToken();
+      console.log("=== ACEPTANDO APLICACIÓN ===");
+      console.log("Application ID:", applicationId);
+      console.log("Employer ID:", employerId);
+      console.log("Worker:", worker?.user?.name, worker?.user?.lastname);
+      console.log("===========================");
 
-      if (!authToken) {
-        throw new Error("No se encontró token de autenticación");
-      }
-
-      // First, let's debug what ApiClient actually returns
-      console.log("Making API call...");
-      const response = await ApiClient.put(
-        `/application/accept/${applicationId}`,
-        {
-          jobOfferId: jobOfferId,
-          workerId: workerId,
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`,
-          },
-        }
-      );
-
-      // Debug: Log the response to understand its structure
-      console.log("Response received:", response);
-      console.log("Response type:", typeof response);
-      console.log("Response keys:", Object.keys(response || {}));
-
-      // Option A: If ApiClient returns parsed JSON directly
-      if (
-        response &&
-        typeof response === "object" &&
-        !response.data &&
-        !response.ok
-      ) {
-        // Response is likely the parsed JSON data
-        const data = response;
-        setCurrentApplicationStatus("ACEPTADA");
-      }
-      // Option B: If ApiClient returns axios-style response
-      else if (response && response.data) {
-        const data = response.data;
-        setCurrentApplicationStatus("ACEPTADA");
-      }
-      // Option C: If ApiClient returns fetch-style response
-      else if (response && response.ok && typeof response.json === "function") {
-        const data = await response.json();
-        setCurrentApplicationStatus("ACEPTADA");
+      if (!employerId) {
+        const empId = await getEmployerId();
+        setEmployerId(empId);
+        
+        const result = await acceptApplication(
+          applicationId,
+          empId,
+          "¡Felicidades! Tu aplicación ha sido aceptada."
+        );
       } else {
-        setCurrentApplicationStatus("ACEPTADA");
+        const result = await acceptApplication(
+          applicationId,
+          employerId,
+          "¡Felicidades! Tu aplicación ha sido aceptada."
+        );
       }
 
-      Alert.alert("Éxito", "Aplicación aceptada correctamente", [
-        {
-          text: "OK",
-          onPress: () => {
-            navigation.goBack();
-          },
-        },
-      ]);
-    } catch (error) {
-      console.error("Error accepting application:", error);
-      console.error("Error details:", {
-        message: error.message,
-        response: error.response,
-        status: error.status,
-        data: error.data,
-      });
+      console.log("✅ Aplicación aceptada exitosamente");
+      
+      // Actualizar el estado local
+      setCurrentApplicationStatus("ACEPTADA");
 
-      // Handle different error formats
+      Alert.alert(
+        "¡Éxito!", 
+        `La aplicación de ${worker?.user?.name} ${worker?.user?.lastname} ha sido aceptada correctamente.`,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Volver a la pantalla anterior con resultado
+              navigation.goBack();
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("❌ Error aceptando aplicación:", error);
+
       let errorMessage = "No se pudo aceptar la aplicación";
 
+      // Manejar diferentes tipos de errores
       if (error.response?.data?.msg) {
         errorMessage = error.response.data.msg;
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.data?.msg) {
         errorMessage = error.data.msg;
-      } else if (error.data?.message) {
-        errorMessage = error.data.message;
       } else if (error.message) {
         errorMessage = error.message;
       }
 
-      Alert.alert("Error", errorMessage);
+      Alert.alert("Error al Aceptar", errorMessage, [
+        { text: "Cerrar", style: "cancel" },
+        { 
+          text: "Reintentar", 
+          onPress: () => performAcceptApplication() 
+        }
+      ]);
     } finally {
       setProcessingStatus(false);
     }
   };
 
-  const cancelApplication = async () => {
+  const performRejectApplication = async () => {
     try {
       setProcessingStatus(true);
 
-      const authToken = await getAuthToken();
+      console.log("=== RECHAZANDO APLICACIÓN ===");
+      console.log("Application ID:", applicationId);
+      console.log("Employer ID:", employerId);
+      console.log("Worker:", worker?.user?.name, worker?.user?.lastname);
+      console.log("============================");
 
-      if (!authToken) {
-        throw new Error("No se encontró token de autenticación");
+      if (!employerId) {
+        const empId = await getEmployerId();
+        setEmployerId(empId);
+        
+        const result = await rejectApplication(
+          applicationId,
+          empId,
+          "Tu aplicación no cumple con los requisitos solicitados en este momento."
+        );
+      } else {
+        const result = await rejectApplication(
+          applicationId,
+          employerId,
+          "Tu aplicación no cumple con los requisitos solicitados en este momento."
+        );
       }
 
-      console.log("Making delete API call...");
-      const response = await ApiClient.delete(`/application/${applicationId}`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
+      console.log("✅ Aplicación rechazada exitosamente");
+      
+      // Actualizar el estado local
+      setCurrentApplicationStatus("RECHAZADA");
 
-      // Debug: Log the response to understand its structure
-      console.log("Delete response received:", response);
-      console.log("Delete response type:", typeof response);
-
-      // Handle different response formats (same logic as accept)
-      if (
-        response &&
-        typeof response === "object" &&
-        !response.data &&
-        !response.ok
-      ) {
-        // Response is likely the parsed JSON data
-        const data = response;
-        setCurrentApplicationStatus("RECHAZADA");
-      }
-      // Option B: If ApiClient returns axios-style response
-      else if (response && response.data) {
-        const data = response.data;
-        setCurrentApplicationStatus("RECHAZADA");
-      }
-      // Option C: If ApiClient returns fetch-style response
-      else if (response && response.ok && typeof response.json === "function") {
-        const data = await response.json();
-        setCurrentApplicationStatus("RECHAZADA");
-      }
-      // Option D: If response is successful but different format
-      else {
-        setCurrentApplicationStatus("RECHAZADA");
-      }
-
-      Alert.alert("Éxito", "Aplicación rechazada correctamente", [
-        {
-          text: "OK",
-          onPress: () => {
-            navigation.goBack();
+      Alert.alert(
+        "Aplicación Rechazada", 
+        `La aplicación de ${worker?.user?.name} ${worker?.user?.lastname} ha sido rechazada.`,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Volver a la pantalla anterior con resultado
+              navigation.goBack();
+            },
           },
-        },
-      ]);
+        ]
+      );
     } catch (error) {
-      console.error("Error canceling application:", error);
-      console.error("Delete error details:", {
-        message: error.message,
-        response: error.response,
-        status: error.status,
-        data: error.data,
-      });
+      console.error("❌ Error rechazando aplicación:", error);
 
-      // Handle different error formats
       let errorMessage = "No se pudo rechazar la aplicación";
 
+      // Manejar diferentes tipos de errores
       if (error.response?.data?.msg) {
         errorMessage = error.response.data.msg;
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.data?.msg) {
         errorMessage = error.data.msg;
-      } else if (error.data?.message) {
-        errorMessage = error.data.message;
       } else if (error.message) {
         errorMessage = error.message;
       }
 
-      Alert.alert("Error", errorMessage);
+      Alert.alert("Error al Rechazar", errorMessage, [
+        { text: "Cerrar", style: "cancel" },
+        { 
+          text: "Reintentar", 
+          onPress: () => performRejectApplication() 
+        }
+      ]);
     } finally {
       setProcessingStatus(false);
     }
@@ -353,34 +381,8 @@ const WorkerProfileByEmployer = ({ navigation, route }) => {
 
   const renderEmployerActions = () => {
     if (!shouldShowEmployerActions()) return null;
-
-    const getStatusColor = (status) => {
-      switch (status?.toUpperCase()) {
-        case "PENDIENTE":
-          return COLORS.warning;
-        case "ACEPTADA":
-          return COLORS.success;
-        case "RECHAZADA":
-          return COLORS.error;
-        default:
-          return COLORS.info;
-      }
-    };
-
-    const getStatusIcon = (status) => {
-      switch (status?.toUpperCase()) {
-        case "PENDIENTE":
-          return "pending";
-        case "ACEPTADA":
-          return "check-circle";
-        case "RECHAZADA":
-          return "cancel";
-        default:
-          return "info";
-      }
-    };
-
-    // NUEVA: Si no hay applicationId, mostrar mensaje informativo
+  
+    // Si no hay applicationId, mostrar mensaje informativo
     if (!applicationId) {
       return (
         <View style={styles.employerActionsCard}>
@@ -395,23 +397,21 @@ const WorkerProfileByEmployer = ({ navigation, route }) => {
         </View>
       );
     }
-
+  
     return (
       <View style={styles.employerActionsCard}>
         <View style={styles.sectionHeader}>
           <Icon name="admin-panel-settings" size={24} color={PRIMARY_COLOR} />
           <Text style={styles.sectionTitle}>Gestión de Aplicación</Text>
         </View>
-
+  
         <View style={styles.currentStatusContainer}>
           <Text style={styles.statusLabel}>Estado Actual:</Text>
           <View
             style={[
               styles.statusBadge,
               {
-                backgroundColor: `${getStatusColor(
-                  currentApplicationStatus
-                )}20`,
+                backgroundColor: `${getStatusColor(currentApplicationStatus)}20`,
               },
             ]}>
             <Icon
@@ -428,45 +428,43 @@ const WorkerProfileByEmployer = ({ navigation, route }) => {
             </Text>
           </View>
         </View>
-
-        {/* CORREGIDA: Mostrar botones solo si está pendiente Y tenemos applicationId */}
-        {(currentApplicationStatus?.toUpperCase() === "PENDIENTE" ||
-          !currentApplicationStatus) &&
-          applicationId && (
-            <View style={styles.actionButtonsContainer}>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.acceptButton]}
-                onPress={handleAcceptApplication}
-                disabled={processingStatus}>
-                {processingStatus ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Icon name="check" size={20} color="#fff" />
-                    <Text style={styles.actionButtonText}>Aceptar</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionButton, styles.rejectButton]}
-                onPress={handleRejectApplication}
-                disabled={processingStatus}>
-                {processingStatus ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Icon name="close" size={20} color="#fff" />
-                    <Text style={styles.actionButtonText}>Rechazar</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-
-        {/* MEJORADA: Mensaje cuando la aplicación ya fue procesada */}
+  
+        {/* Mostrar botones si está pendiente Y tenemos applicationId */}
+        {isPendingApplication(currentApplicationStatus) && applicationId && (
+          <View style={styles.actionButtonsContainer}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.acceptButton]}
+              onPress={handleAcceptApplication}
+              disabled={processingStatus}>
+              {processingStatus ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Icon name="check" size={20} color="#fff" />
+                  <Text style={styles.actionButtonText}>Aceptar</Text>
+                </>
+              )}
+            </TouchableOpacity>
+  
+            <TouchableOpacity
+              style={[styles.actionButton, styles.rejectButton]}
+              onPress={handleRejectApplication}
+              disabled={processingStatus}>
+              {processingStatus ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Icon name="close" size={20} color="#fff" />
+                  <Text style={styles.actionButtonText}>Rechazar</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+  
+        {/* Mensaje cuando la aplicación ya fue procesada */}
         {currentApplicationStatus &&
-          currentApplicationStatus.toUpperCase() !== "PENDIENTE" && (
+          !isPendingApplication(currentApplicationStatus) && (
             <View style={styles.completedActionContainer}>
               <Icon name="info" size={16} color={COLORS.textSecondary} />
               <Text style={styles.completedActionText}>
@@ -475,6 +473,21 @@ const WorkerProfileByEmployer = ({ navigation, route }) => {
               </Text>
             </View>
           )}
+  
+        {/* Información adicional sobre la aplicación */}
+        {applicationId && (
+          <View style={styles.applicationInfoContainer}>
+            <Text style={styles.applicationInfoTitle}>Detalles de la Aplicación:</Text>
+            <Text style={styles.applicationInfoText}>
+              ID: {applicationId}
+            </Text>
+            {jobOfferId && (
+              <Text style={styles.applicationInfoText}>
+                Oferta de Trabajo: {jobOfferId}
+              </Text>
+            )}
+          </View>
+        )}
       </View>
     );
   };
@@ -488,22 +501,24 @@ const WorkerProfileByEmployer = ({ navigation, route }) => {
     }
   }, [workerId]);
 
-  // NUEVA: Debug para ayudar a identificar problemas
+  // Debug para ayudar a identificar problemas
   useEffect(() => {
-    console.log("WorkerProfileByEmployer Debug:", {
-      workerId,
-      applicationId,
-      applicationStatus,
-      showApplicationActions,
-      currentApplicationStatus,
-      shouldShow: shouldShowEmployerActions(),
-    });
+    console.log("=== WorkerProfileByEmployer Debug ===");
+    console.log("workerId:", workerId);
+    console.log("applicationId:", applicationId);
+    console.log("applicationStatus:", applicationStatus);
+    console.log("showApplicationActions:", showApplicationActions);
+    console.log("currentApplicationStatus:", currentApplicationStatus);
+    console.log("employerId:", employerId);
+    console.log("shouldShow:", shouldShowEmployerActions());
+    console.log("====================================");
   }, [
     workerId,
     applicationId,
     applicationStatus,
     showApplicationActions,
     currentApplicationStatus,
+    employerId,
   ]);
 
   const handleCallWorker = (phoneNumber) => {
@@ -951,7 +966,26 @@ const WorkerProfileByEmployer = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
-  // NUEVO: Estilo para texto informativo
+  // Nuevo estilo para información de aplicación
+  applicationInfoContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  applicationInfoTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+    marginBottom: 8,
+  },
+  applicationInfoText: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    marginBottom: 4,
+    fontFamily: 'monospace',
+  },
+  // Estilo para texto informativo
   infoText: {
     fontSize: 14,
     color: COLORS.textSecondary,

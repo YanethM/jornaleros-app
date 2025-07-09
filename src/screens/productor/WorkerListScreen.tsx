@@ -10,60 +10,213 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Animated,
+  Dimensions,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import CustomTabBar from "../../components/CustomTabBar";
 import { useAuth } from "../../context/AuthContext";
 import ApiClient from "../../utils/api";
+import { getApprovedWorkersByEmployer } from "../../services/employerService";
+import { checkWorkerRating } from "../../services/qualifitionService";
 
+const { width } = Dimensions.get('window');
 const PRIMARY_COLOR = "#284F66";
+const SECONDARY_COLOR = "#B5883E";
+const LIGHT_GRAY = "#F8F9FA";
+const SUCCESS_COLOR = "#4CAF50";
+const WARNING_COLOR = "#FFC107";
+const CARD_SHADOW = {
+  shadowColor: "#000",
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.1,
+  shadowRadius: 12,
+  elevation: 6,
+};
 
 interface Worker {
   id: string;
+  workerId?: string;
   user: {
     id: string;
     name: string;
     lastname: string;
     email: string;
     phone?: string;
-    city?:
-      | {
-          name: string;
-        }
-      | string;
-    departmentState?:
-      | {
-          name: string;
-        }
-      | string;
-    state?:
-      | {
-          name: string;
-        }
-      | string;
+    documentId?: string;
+    documentType?: string;
+    city?: {
+      name: string;
+    } | string;
+    departmentState?: {
+      name: string;
+    } | string;
+    state?: {
+      name: string;
+    } | string;
+    location?: {
+      country?: string;
+      departmentState?: string;
+      city?: string;
+    };
   };
   skills?: Array<{ name: string }> | string[];
   experience?: string;
   availability: boolean;
   applicationStatus: string;
+  farmName?: string;
+  workerProfile?: {
+    skills?: string[];
+    experience?: string;
+    availability?: boolean;
+    paymentAmount?: number;
+  };
+  ratings?: {
+    averageRating?: number;
+    totalReviews: number;
+    totalQualifications: number;
+    isRated: boolean;
+    latestReviews?: Array<{
+      id: string;
+      rating: number;
+      comment?: string;
+      createdAt: string;
+      reviewer: {
+        name: string;
+        lastname: string;
+      };
+    }>;
+    qualifications?: Array<{
+      id: string;
+      rating: number;
+      description?: string;
+      createdAt: string;
+      question: {
+        question: string;
+      };
+    }>;
+  };
+  farm?: {
+    id: string;
+    name: string;
+    size: number;
+    plantCount?: number;
+    specificLocation?: string;
+    fullLocation?: string;
+    location: {
+      country?: string;
+      department?: string;
+      city?: string;
+      village?: string;
+    };
+  } | null;
+  applicationDate?: string;
+  acceptedAt?: string;
+  employerMessage?: string;
+  message?: string;
+  jobOffer?: {
+    id: string;
+    title: string;
+    description: string;
+    startDate: string;
+    endDate: string;
+    salary: number;
+    paymentType: string;
+    cropType?: string;
+    phase?: string;
+    phaseDescription?: string;
+  };
+}
+
+interface Stats {
+  averageExperience?: number;
+  totalApprovedWorkers: number;
+  totalJobOffers: number;
+  ratingsStatistics?: {
+    totalRatedWorkers: number;
+    totalUnratedWorkers: number;
+    ratingPercentage: number;
+    globalAverageRating?: number;
+    totalReviews: number;
+    totalQualifications: number;
+  };
+  farmsInfo?: {
+    uniqueFarms: Array<{
+      id: string;
+      name: string;
+      size: number;
+      fullLocation?: string;
+    }>;
+    totalFarms: number;
+  };
+}
+
+interface Pagination {
+  currentPage: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+  limit: number;
+  totalPages: number;
+  totalWorkers: number;
 }
 
 interface WorkerListScreenProps {
   navigation: any;
 }
 
+type FilterTab = 'all' | 'rated' | 'unrated';
+
 const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [filteredWorkers, setFilteredWorkers] = useState<Worker[]>([]);
+  const [ratedWorkers, setRatedWorkers] = useState<Record<string, boolean>>({});
+  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [stats, setStats] = useState<Stats>({
+    averageExperience: 0,
+    totalApprovedWorkers: 0,
+    totalJobOffers: 0,
+    ratingsStatistics: {
+      totalRatedWorkers: 0,
+      totalUnratedWorkers: 0,
+      ratingPercentage: 0,
+      totalReviews: 0,
+      totalQualifications: 0,
+    },
+    farmsInfo: {
+      uniqueFarms: [],
+      totalFarms: 0,
+    },
+  });
+  const [pagination, setPagination] = useState<Pagination>({
+    currentPage: 1,
+    hasNext: false,
+    hasPrev: false,
+    limit: 20,
+    totalPages: 0,
+    totalWorkers: 0,
+  });
   const [error, setError] = useState<string | null>(null);
-  const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>(
-    {}
-  );
+  const [searchTerm, setSearchTerm] = useState("");
+  const [unreadMessages, setUnreadMessages] = useState<Record<string, number>>({});
+  const [slideAnim] = useState(new Animated.Value(0));
+
+  const tabs = [
+    { key: 'all', title: 'Todos', icon: 'people' },
+    { key: 'rated', title: 'Evaluados', icon: 'star' },
+    { key: 'unrated', title: 'Sin Evaluar', icon: 'star-border' },
+  ];
 
   useEffect(() => {
     loadWorkers();
+    Animated.timing(slideAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
   useEffect(() => {
@@ -72,120 +225,227 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
         loadUnreadMessages();
       }
     });
-
     return unsubscribe;
   }, [navigation, workers]);
+
+  useEffect(() => {
+    filterWorkers();
+  }, [workers, activeTab]);
+
+  const filterWorkers = () => {
+    let filtered = [...workers];
+    
+    switch (activeTab) {
+      case 'rated':
+        filtered = workers.filter(worker => worker.ratings?.isRated || ratedWorkers[worker.id]);
+        break;
+      case 'unrated':
+        filtered = workers.filter(worker => !(worker.ratings?.isRated || ratedWorkers[worker.id]));
+        break;
+      default:
+        filtered = workers;
+    }
+    
+    setFilteredWorkers(filtered);
+  };
 
   const totalUnreadMessages = Object.values(unreadMessages).reduce(
     (sum, count) => sum + count,
     0
   );
 
-  const getUserData = async () => {
-    try {
-      const result = await ApiClient.get(`/user/list/${user.id}`);
-      if (!result.success || !result.data) {
-        throw new Error("Error al obtener datos del usuario");
-      }
-      return result.data;
-    } catch (error) {
-      console.error("Error obteniendo datos del usuario:", error);
-      throw error;
-    }
+  const processJobOffers = (jobOffersWithWorkers: any[]) => {
+    const workersMap = new Map();
+    jobOffersWithWorkers.forEach((jobOfferData) => {
+      jobOfferData?.approvedWorkers?.forEach((worker: any) => {
+        if (worker && (worker.workerId || worker.id) && !workersMap.has(worker.workerId || worker.id)) {
+          const workerId = worker.workerId || worker.id;
+          workersMap.set(workerId, {
+            id: workerId,
+            workerId: workerId,
+            user: {
+              ...worker.user,
+              city: worker.user.location?.city ? { name: worker.user.location.city } : worker.user.city,
+              departmentState: worker.user.location?.departmentState ? { name: worker.user.location.departmentState } : worker.user.departmentState,
+            },
+            workerProfile: worker.workerProfile || {},
+            skills: worker.workerProfile?.skills || worker.skills || [],
+            experience: worker.workerProfile?.experience || worker.experience || "",
+            availability: worker.workerProfile?.availability ?? worker.availability ?? true,
+            applicationStatus: "Aceptada",
+            farmName: worker.farm?.name || jobOfferData.jobOffer?.farm?.name || "Finca no especificada",
+            ratings: worker.ratings || {
+              isRated: false,
+              totalReviews: 0,
+              totalQualifications: 0,
+            },
+            farm: worker.farm,
+            jobOffer: worker.jobOffer || jobOfferData.jobOffer,
+            applicationDate: worker.applicationDate,
+            acceptedAt: worker.acceptedAt,
+            employerMessage: worker.employerMessage,
+            message: worker.message,
+          });
+        }
+      });
+    });
+    return Array.from(workersMap.values());
   };
 
-  const loadWorkers = async (isRefreshing = false) => {
+  const loadWorkers = async (page = 1, search = "", append = false) => {
     try {
-      if (!isRefreshing) {
+      if (page === 1) {
+        setRefreshing(true);
         setLoading(true);
+      } else {
+        setLoadingMore(true);
       }
+
       setError(null);
 
-      if (!user?.id) {
-        throw new Error("No hay usuario autenticado");
-      }
+      if (!user?.id) throw new Error("No hay usuario autenticado");
 
-      const fullUserData = await getUserData();
+      const fullUserData = await ApiClient.get(`/user/list/${user.id}`);
+      const employerId = fullUserData?.data?.employerProfile?.id;
+      
+      if (!employerId) throw new Error("El usuario no tiene perfil de empleador");
 
-      if (!fullUserData.employerProfile) {
-        throw new Error("El usuario no tiene perfil de empleador");
-      }
+      const response = await getApprovedWorkersByEmployer(employerId);
+      if (!response.success || !response.data) throw new Error(response.message || "Error al obtener datos");
 
-      const employerId = fullUserData.employerProfile.id;
-      if (!employerId) {
-        throw new Error("No se encontró el ID del empleador");
-      }
+      const jobOffersWithWorkers = response.data.data?.jobOffersWithWorkers || response.data.jobOffersWithWorkers || [];
+      const allWorkers = processJobOffers(jobOffersWithWorkers);
+      
+      const filteredWorkers = search.trim()
+        ? allWorkers.filter((w) => 
+            w.user.name.toLowerCase().includes(search.toLowerCase()) || 
+            w.user.lastname.toLowerCase().includes(search.toLowerCase()) || 
+            w.user.email.toLowerCase().includes(search.toLowerCase()) ||
+            w.farmName?.toLowerCase().includes(search.toLowerCase())
+          )
+        : allWorkers;
 
-      const result = await ApiClient.get(`/employer/${employerId}/workers`);
-      setWorkers(result.data || []);
-    } catch (error) {
-      console.error("Error cargando trabajadores:", error);
-      setError(error.message || "Error al cargar los trabajadores");
+      // Verificar estado de calificaciones para compatibilidad con versión anterior
+      const ratedStatusMap: Record<string, boolean> = {};
+      await Promise.all(filteredWorkers.map(async (w) => { 
+        try {
+          const ratingCheck = await checkWorkerRating(w.id);
+          ratedStatusMap[w.id] = ratingCheck?.data?.alreadyRated || false;
+        } catch (error) {
+          console.error(`Error checking rating for worker ${w.id}:`, error);
+          ratedStatusMap[w.id] = false;
+        }
+      }));
+      setRatedWorkers(ratedStatusMap);
+
+      const paginated = filteredWorkers.slice((page - 1) * 20, page * 20);
+      setWorkers((prev) => (append ? [...prev, ...paginated] : paginated));
+
+      setPagination({
+        currentPage: page,
+        hasNext: page * 20 < filteredWorkers.length,
+        hasPrev: page > 1,
+        limit: 20,
+        totalPages: Math.ceil(filteredWorkers.length / 20),
+        totalWorkers: filteredWorkers.length,
+      });
+
+      // Establecer estadísticas con valores por defecto
+      setStats({
+        averageExperience: 0,
+        totalApprovedWorkers: response.data.totalApprovedWorkers || allWorkers.length,
+        totalJobOffers: response.data.totalJobOffers || jobOffersWithWorkers.length,
+        ratingsStatistics: response.data.ratingsStatistics || {
+          totalRatedWorkers: allWorkers.filter(w => w.ratings?.isRated).length,
+          totalUnratedWorkers: allWorkers.filter(w => !w.ratings?.isRated).length,
+          ratingPercentage: allWorkers.length > 0 ? Math.round((allWorkers.filter(w => w.ratings?.isRated).length / allWorkers.length) * 100) : 0,
+          totalReviews: 0,
+          totalQualifications: 0,
+        },
+        farmsInfo: response.data.farmsInfo || {
+          uniqueFarms: [],
+          totalFarms: 0,
+        },
+      });
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   };
 
   const onRefresh = () => {
-    setRefreshing(true);
-    loadWorkers(true);
+    loadWorkers(1, searchTerm, false);
   };
 
-  const handleContactWorker = (worker) => {
+  const loadMoreWorkers = () => {
+    if (!loadingMore && pagination.hasNext) {
+      loadWorkers(pagination.currentPage + 1, searchTerm, true);
+    }
+  };
+
+  const handleContactWorker = (worker: Worker) => {
     const workerFullName = getWorkerFullName(worker);
 
-    Alert.alert(
-      "💬 Contactar Trabajador",
-      `Enviar mensaje a ${workerFullName}`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "📱 Enviar Mensaje",
-          onPress: () => {
-            setUnreadMessages((prev) => ({
-              ...prev,
-              [worker.id]: 0,
-            }));
-            
-            if (!worker.user?.id) {
-              Alert.alert("Error", "No se pudo obtener el ID del usuario");
-              return;
-            }
+    setUnreadMessages((prev) => ({
+      ...prev,
+      [worker.id]: 0,
+    }));
 
-            // ✅ NAVEGACIÓN CORREGIDA: Pasar datos completos sin necesidad de cargar desde backend
-            navigation.navigate("AddMessage", {
-              // Para evitar confusión, pasamos todos los datos que necesitamos:
-              receiverId: worker.user.id, // ← User ID para enviar mensaje
-              workerName: workerFullName,
-              workerEmail: worker.user?.email,
-              workerPhone: worker.user?.phone,
+    if (!worker.user?.id) {
+      Alert.alert("Error", "No se pudo obtener el ID del usuario");
+      return;
+    }
 
-              // Datos completos del worker para mostrar en la UI
-              workerProfile: {
-                id: worker.id, // WorkerProfile ID
-                user: worker.user, // Datos del usuario
-                skills: worker.skills || [],
-                availability: worker.availability,
-                experience: worker.experience,
-                applicationStatus: worker.applicationStatus,
-                location: getLocationText(worker),
-              },
-            });
-          },
-        },
-      ],
-      { cancelable: true }
-    );
+    navigation.navigate("AddMessage", {
+      receiverId: worker.user.id,
+      workerName: workerFullName,
+      workerEmail: worker.user?.email,
+      workerPhone: worker.user?.phone,
+      workerProfile: {
+        id: worker.id,
+        user: worker.user,
+        skills: worker.skills || [],
+        availability: worker.availability,
+        experience: worker.experience,
+        applicationStatus: worker.applicationStatus,
+        location: getLocationText(worker),
+        farmName: worker.farmName,
+        ratings: worker.ratings,
+      },
+    });
+  };
+
+  const handleRateWorker = (worker: Worker) => {
+    const workerFullName = getWorkerFullName(worker);
+
+    navigation.navigate("RateWorker", {
+      workerId: worker.id,
+      workerName: workerFullName,
+      workerEmail: worker.user?.email,
+      workerProfile: {
+        id: worker.id,
+        user: worker.user,
+        skills: worker.skills || [],
+        availability: worker.availability,
+        experience: worker.experience,
+        applicationStatus: worker.applicationStatus,
+        location: getLocationText(worker),
+        farmName: worker.farmName,
+        jobOffer: worker.jobOffer,
+        ratings: worker.ratings,
+      },
+    });
   };
 
   const loadUnreadMessages = async () => {
     try {
-      // Simular carga de mensajes no leídos por trabajador
       const mockUnread = workers.reduce(
         (acc, worker) => ({
           ...acc,
-          [worker.id]: Math.floor(Math.random() * 5), // Ejemplo: 0-4 mensajes no leídos
+          [worker.id]: Math.floor(Math.random() * 5),
         }),
         {}
       );
@@ -199,12 +459,12 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
     const cityName =
       typeof worker.user.city === "string"
         ? worker.user.city
-        : worker.user.city?.name || "No especificado";
+        : worker.user.city?.name || worker.user.location?.city || "No especificado";
 
     const stateName =
       typeof worker.user.departmentState === "string"
         ? worker.user.departmentState
-        : worker.user.departmentState?.name || worker.user.state?.name || "";
+        : worker.user.departmentState?.name || worker.user.location?.departmentState || "";
 
     return stateName ? `${cityName}, ${stateName}` : cityName;
   };
@@ -214,45 +474,155 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
   };
 
   const getSkillsText = (worker: Worker) => {
-    if (!worker.skills || worker.skills.length === 0) {
+    const skills = worker.skills || worker.workerProfile?.skills || [];
+    if (!skills || skills.length === 0) {
       return "Sin habilidades especificadas";
     }
 
-    if (typeof worker.skills[0] === "string") {
-      return (
-        worker.skills.slice(0, 3).join(", ") +
-        (worker.skills.length > 3 ? "..." : "")
-      );
+    if (typeof skills[0] === "string") {
+      return skills.slice(0, 3).join(", ") + (skills.length > 3 ? "..." : "");
     }
 
     return (
-      worker.skills
+      skills
         .slice(0, 3)
-        .map((skill) => skill.name || skill)
+        .map((skill: any) => skill.name || skill)
         .filter(Boolean)
-        .join(", ") + (worker.skills.length > 3 ? "..." : "")
+        .join(", ") + (skills.length > 3 ? "..." : "")
     );
   };
 
-  const renderWorkerItem = ({ item }: { item: Worker }) => {
+  const renderRatingStars = (rating?: number, size = 16) => {
+    if (!rating) return null;
+    
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 !== 0;
+    
+    for (let i = 0; i < fullStars; i++) {
+      stars.push(
+        <Icon key={`full-${i}`} name="star" size={size} color={SECONDARY_COLOR} />
+      );
+    }
+    
+    if (hasHalfStar) {
+      stars.push(
+        <Icon key="half" name="star-half" size={size} color={SECONDARY_COLOR} />
+      );
+    }
+    
+    const emptyStars = 5 - Math.ceil(rating);
+    for (let i = 0; i < emptyStars; i++) {
+      stars.push(
+        <Icon key={`empty-${i}`} name="star-border" size={size} color="#DDD" />
+      );
+    }
+    
+    return <View style={styles.starsContainer}>{stars}</View>;
+  };
+
+  const renderTabBar = () => (
+    <View style={styles.tabContainer}>
+      {tabs.map((tab) => {
+        const isActive = activeTab === tab.key;
+        const count = tab.key === 'all' ? workers.length : 
+                     tab.key === 'rated' ? workers.filter(w => w.ratings?.isRated || ratedWorkers[w.id]).length :
+                     workers.filter(w => !(w.ratings?.isRated || ratedWorkers[w.id])).length;
+        
+        return (
+          <TouchableOpacity
+            key={tab.key}
+            style={[styles.tab, isActive && styles.activeTab]}
+            onPress={() => setActiveTab(tab.key as FilterTab)}
+          >
+            <Icon 
+              name={tab.icon} 
+              size={20} 
+              color={isActive ? PRIMARY_COLOR : '#666'} 
+            />
+            <Text style={[styles.tabText, isActive && styles.activeTabText]}>
+              {tab.title}
+            </Text>
+            <View style={[styles.tabBadge, isActive && styles.activeTabBadge]}>
+              <Text style={[styles.tabBadgeText, isActive && styles.activeTabBadgeText]}>
+                {count}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
+
+
+  const renderWorkerItem = ({ item, index }: { item: Worker; index: number }) => {
     const unreadCount = unreadMessages[item.id] || 0;
+    const isRated = item.ratings?.isRated || ratedWorkers[item.id] || false;
+    const averageRating = item.ratings?.averageRating;
 
     return (
-      <View style={styles.workerCard}>
-        <View style={styles.workerImageContainer}>
-          <View style={styles.workerAvatar}>
-            <Icon name="person" size={30} color="#fff" />
+      <Animated.View
+        style={[
+          styles.workerCard,
+          {
+            opacity: slideAnim,
+            transform: [{
+              translateX: slideAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [50, 0],
+              }),
+            }],
+          }
+        ]}
+      >
+        <View style={styles.workerHeader}>
+          <View style={styles.workerImageContainer}>
+            <View style={[styles.workerAvatar, { backgroundColor: isRated ? SECONDARY_COLOR : PRIMARY_COLOR }]}>
+              <Icon name="person" size={32} color="#fff" />
+            </View>
+            {isRated && (
+              <View style={styles.ratedBadge}>
+                <Icon name="star" size={16} color="#fff" />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.workerMainInfo}>
+            <Text style={styles.workerName}>{getWorkerFullName(item)}</Text>
+            
+            {/* Rating Display */}
+            {averageRating && (
+              <View style={styles.ratingContainer}>
+                {renderRatingStars(averageRating, 14)}
+                <Text style={styles.ratingText}>
+                  {averageRating.toFixed(1)} ({(item.ratings?.totalReviews || 0) + (item.ratings?.totalQualifications || 0)} eval.)
+                </Text>
+              </View>
+            )}
+            
+            {/* Farm Information */}
+            {item.farmName && (
+              <View style={styles.farmContainer}>
+                <Icon name="agriculture" size={16} color={SECONDARY_COLOR} />
+                <Text style={styles.farmName}>{item.farmName}</Text>
+              </View>
+            )}
+
+            <View style={styles.workerDetail}>
+              <Icon name="location-on" size={16} color="#666" />
+              <Text style={styles.workerDetailText}>{getLocationText(item)}</Text>
+            </View>
+          </View>
+
+          <View style={styles.statusContainer}>
+            <View style={[styles.statusBadge, { backgroundColor: SUCCESS_COLOR }]}>
+              <Text style={styles.statusText}>Activo</Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.workerInfo}>
-          <Text style={styles.workerName}>{getWorkerFullName(item)}</Text>
-
-          <View style={styles.workerDetail}>
-            <Icon name="location-on" size={16} color="#666" />
-            <Text style={styles.workerDetailText}>{getLocationText(item)}</Text>
-          </View>
-
+        <View style={styles.workerDetails}>
           {item.user.email && (
             <View style={styles.workerDetail}>
               <Icon name="email" size={16} color="#666" />
@@ -285,31 +655,29 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
             <Icon
               name={item.availability ? "check-circle" : "cancel"}
               size={16}
-              color={item.availability ? "#4CAF50" : "#F44336"}
+              color={item.availability ? SUCCESS_COLOR : "#F44336"}
             />
             <Text
               style={[
                 styles.workerDetailText,
-                { color: item.availability ? "#4CAF50" : "#F44336" },
+                { color: item.availability ? SUCCESS_COLOR : "#F44336" },
               ]}>
               {item.availability ? "Disponible" : "No disponible"}
             </Text>
           </View>
 
-          <View style={styles.statusContainer}>
-            <View
-              style={[
-                styles.statusBadge,
-                { backgroundColor: getStatusColor(item.applicationStatus) },
-              ]}>
-              <Text style={styles.statusText}>
-                {getStatusText(item.applicationStatus)}
+          {/* Job Offer Information */}
+          {item.jobOffer && (
+            <View style={styles.jobOfferContainer}>
+              <Text style={styles.jobOfferTitle}>Trabajo: {item.jobOffer.title}</Text>
+              <Text style={styles.jobOfferDetails}>
+                {item.jobOffer.cropType} - {item.jobOffer.phase}
               </Text>
             </View>
-          </View>
+          )}
         </View>
 
-        <View style={styles.actionButtons}>
+        <View style={styles.actionButtonsContainer}>
           <TouchableOpacity
             style={styles.contactButton}
             onPress={() => handleContactWorker(item)}>
@@ -324,69 +692,90 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.detailButton}
-            onPress={() =>
-              navigation.navigate("WorkerProfileApplication", {
-                workerId: item.id,
-              })
-            }>
-            <Icon name="info" size={20} color={PRIMARY_COLOR} />
+            style={[
+              styles.rateButton,
+              isRated && styles.ratedButton,
+            ]}
+            disabled={isRated}
+            onPress={() => handleRateWorker(item)}>
+            <Icon 
+              name={isRated ? "star" : "star-border"} 
+              size={20} 
+              color="#fff" 
+            />
           </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
     );
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Aceptada":
-      case "Completado":
-        return "#4CAF50";
-      case "Pendiente":
-      case "Solicitado":
-      case "En_revision":
-        return "#FFC107";
-      case "Rechazada":
-      case "Rechazado":
-        return "#F44336";
-      default:
-        return "#757575";
-    }
-  };
+  const renderLoadMoreButton = () => {
+    if (!pagination.hasNext) return null;
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case "Aceptada":
-      case "Completado":
-        return "Activo";
-      case "Pendiente":
-      case "Solicitado":
-        return "Pendiente";
-      case "En_revision":
-        return "En Revisión";
-      case "Rechazada":
-      case "Rechazado":
-        return "Inactivo";
-      default:
-        return status || "Desconocido";
-    }
-  };
-
-  const renderEmptyComponent = () => (
-    <View style={styles.emptyContainer}>
-      <Icon name="people-outline" size={80} color="#ccc" />
-      <Text style={styles.emptyText}>No tienes trabajadores asociados</Text>
-      <Text style={styles.emptySubText}>
-        Los trabajadores aparecerán aquí cuando apliquen a tus ofertas de
-        trabajo
-      </Text>
+    return (
       <TouchableOpacity
-        style={styles.emptyButton}
-        onPress={() => navigation.navigate("JobOffers")}>
-        <Text style={styles.emptyButtonText}>Ver Ofertas de Trabajo</Text>
+        style={styles.loadMoreButton}
+        onPress={loadMoreWorkers}
+        disabled={loadingMore}>
+        {loadingMore ? (
+          <ActivityIndicator size="small" color={PRIMARY_COLOR} />
+        ) : (
+          <>
+            <Icon name="expand-more" size={20} color={PRIMARY_COLOR} />
+            <Text style={styles.loadMoreText}>
+              Cargar más ({pagination.totalWorkers - workers.length} restantes)
+            </Text>
+          </>
+        )}
       </TouchableOpacity>
-    </View>
-  );
+    );
+  };
+
+  const renderEmptyComponent = () => {
+    const getEmptyMessage = () => {
+      switch (activeTab) {
+        case 'rated':
+          return {
+            icon: 'star-border',
+            title: 'No hay trabajadores evaluados',
+            subtitle: 'Los trabajadores evaluados aparecerán aquí.',
+          };
+        case 'unrated':
+          return {
+            icon: 'people-outline',
+            title: 'Todos los trabajadores han sido evaluados',
+            subtitle: 'Excelente gestión de tu equipo de trabajo.',
+          };
+        default:
+          return {
+            icon: 'people-outline',
+            title: 'No tienes trabajadores asociados',
+            subtitle: 'Los trabajadores aparecerán aquí cuando apliquen a tus ofertas de trabajo.',
+          };
+      }
+    };
+
+    const emptyData = getEmptyMessage();
+
+    return (
+      <View style={styles.emptyContainer}>
+        <Icon name={emptyData.icon} size={80} color="#ccc" />
+        <Text style={styles.emptyText}>{emptyData.title}</Text>
+        <Text style={styles.emptySubText}>
+          {emptyData.subtitle}
+          {activeTab === 'all' && stats.totalJobOffers > 0 &&
+            ` Tienes ${stats.totalJobOffers} ofertas publicadas.`}
+        </Text>
+        {activeTab === 'all' && (
+          <TouchableOpacity
+            style={styles.emptyButton}
+            onPress={() => navigation.navigate("JobOffers")}>
+            <Text style={styles.emptyButtonText}>Ver Ofertas de Trabajo</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
 
   return (
     <ScreenLayout navigation={navigation}>
@@ -400,17 +789,13 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Empleados</Text>
             <View style={styles.headerStats}>
-              <Text style={styles.headerStatsText}>{workers.length} total</Text>
-              {totalUnreadMessages > 0 && (
-                <View style={styles.headerUnreadBadge}>
-                  <Text style={styles.headerUnreadText}>
-                    {totalUnreadMessages} sin leer
-                  </Text>
-                </View>
-              )}
+              <Text style={styles.headerStatsText}>
+                {filteredWorkers.length} de {workers.length}
+              </Text>
             </View>
           </View>
         </View>
+        {renderTabBar()}
 
         {loading && !refreshing ? (
           <View style={styles.loadingContainer}>
@@ -429,11 +814,12 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
           </View>
         ) : (
           <FlatList
-            data={workers}
+            data={filteredWorkers}
             renderItem={renderWorkerItem}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={renderEmptyComponent}
+            ListFooterComponent={renderLoadMoreButton}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -454,54 +840,44 @@ const WorkerListScreen: React.FC<WorkerListScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: LIGHT_GRAY,
   },
   header: {
     backgroundColor: PRIMARY_COLOR,
     paddingTop: Platform.OS === "ios" ? 50 : 20,
     paddingBottom: 20,
     paddingHorizontal: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
+    ...CARD_SHADOW,
   },
   headerContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
     color: "#fff",
     flex: 1,
     textAlign: "center",
-    marginLeft: -36,
+    marginLeft: -40,
   },
   headerStats: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
   },
   headerStatsText: {
     color: "#fff",
@@ -510,50 +886,141 @@ const styles = StyleSheet.create({
   },
   headerUnreadBadge: {
     backgroundColor: "#FF3B30",
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   headerUnreadText: {
     color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  statsContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: "#fff",
+    marginBottom: 16,
+    justifyContent: "space-between",
+    ...CARD_SHADOW,
+  },
+  statCard: {
+    alignItems: "center",
+    flex: 1,
+  },
+  statIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: LIGHT_GRAY,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#333",
+    marginBottom: 4,
+  },
+  statLabel: {
     fontSize: 12,
+    color: "#666",
+    textAlign: "center",
     fontWeight: "600",
+    lineHeight: 16,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 16,
+    padding: 4,
+    ...CARD_SHADOW,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    gap: 6,
+  },
+  activeTab: {
+    backgroundColor: LIGHT_GRAY,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#666",
+  },
+  activeTabText: {
+    color: PRIMARY_COLOR,
+  },
+  tabBadge: {
+    backgroundColor: "#E0E0E0",
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 20,
+  },
+  activeTabBadge: {
+    backgroundColor: PRIMARY_COLOR,
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#666",
+    textAlign: "center",
+  },
+  activeTabBadgeText: {
+    color: "#fff",
   },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 20,
     paddingBottom: 120,
   },
   workerCard: {
     backgroundColor: "#fff",
-    borderRadius: 16,
+    borderRadius: 20,
     marginBottom: 16,
-    padding: 16,
+    padding: 20,
+    ...CARD_SHADOW,
+  },
+  workerHeader: {
     flexDirection: "row",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    alignItems: "flex-start",
+    marginBottom: 16,
   },
   workerImageContainer: {
     marginRight: 16,
+    position: "relative",
   },
   workerAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: PRIMARY_COLOR,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
   },
-  workerInfo: {
+  ratedBadge: {
+    position: "absolute",
+    bottom: -4,
+    right: -4,
+    backgroundColor: SECONDARY_COLOR,
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  workerMainInfo: {
     flex: 1,
   },
   workerName: {
@@ -562,55 +1029,155 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 8,
   },
+  ratingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  starsContainer: {
+    flexDirection: "row",
+    marginRight: 8,
+  },
+  ratingText: {
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "500",
+  },
+  farmContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: `${SECONDARY_COLOR}15`,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 8,
+    alignSelf: "flex-start",
+  },
+  farmName: {
+    fontSize: 13,
+    color: SECONDARY_COLOR,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+  workerDetails: {
+    marginBottom: 16,
+  },
   workerDetail: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   workerDetailText: {
     fontSize: 14,
     color: "#666",
-    marginLeft: 8,
+    marginLeft: 10,
     flex: 1,
     fontWeight: "500",
   },
-  statusContainer: {
-    flexDirection: "row",
+  jobOfferContainer: {
+    backgroundColor: `${PRIMARY_COLOR}08`,
+    padding: 12,
+    borderRadius: 12,
     marginTop: 8,
   },
+  jobOfferTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: PRIMARY_COLOR,
+    marginBottom: 4,
+  },
+  jobOfferDetails: {
+    fontSize: 12,
+    color: "#666",
+  },
+  statusContainer: {
+    alignItems: "flex-end",
+  },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   statusText: {
     fontSize: 12,
     color: "#fff",
-    fontWeight: "600",
+    fontWeight: "700",
   },
-  actionButtons: {
-    justifyContent: "center",
+  actionButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
+    gap: 12,
   },
   contactButton: {
     backgroundColor: PRIMARY_COLOR,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
+    flex: 1,
   },
-  detailButton: {
-    backgroundColor: "#f0f0f0",
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  rateButton: {
+    backgroundColor: SECONDARY_COLOR,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
+    flex: 1,
+  },
+  ratedButton: {
+    backgroundColor: SUCCESS_COLOR,
+  },
+  detailButton: {
+    backgroundColor: LIGHT_GRAY,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
     borderColor: PRIMARY_COLOR,
+    flex: 1,
+  },
+  unreadBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    backgroundColor: "#FF3B30",
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  unreadText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  loadMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: PRIMARY_COLOR,
+    ...CARD_SHADOW,
+  },
+  loadMoreText: {
+    color: PRIMARY_COLOR,
+    fontSize: 16,
+    fontWeight: "600",
+    marginLeft: 8,
   },
   emptyContainer: {
     alignItems: "center",
@@ -619,31 +1186,32 @@ const styles = StyleSheet.create({
     marginTop: 60,
   },
   emptyText: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
     color: "#666",
-    marginTop: 16,
+    marginTop: 20,
     textAlign: "center",
   },
   emptySubText: {
-    fontSize: 14,
+    fontSize: 15,
     color: "#999",
     textAlign: "center",
-    marginTop: 8,
+    marginTop: 12,
     paddingHorizontal: 20,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   emptyButton: {
     backgroundColor: PRIMARY_COLOR,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 20,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 16,
+    marginTop: 24,
+    ...CARD_SHADOW,
   },
   emptyButtonText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   loadingContainer: {
     flex: 1,
@@ -655,6 +1223,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     marginTop: 16,
+    fontWeight: "500",
   },
   errorContainer: {
     flex: 1,
@@ -667,49 +1236,21 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     marginTop: 16,
+    fontWeight: "500",
   },
   retryButton: {
     marginTop: 24,
     backgroundColor: PRIMARY_COLOR,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 16,
+    ...CARD_SHADOW,
   },
   retryButtonText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
-  },
-  unreadBadge: {
-    position: "absolute",
-    top: -6,
-    right: -6,
-    backgroundColor: "#FF3B30",
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-  },
-  unreadText: {
-    color: "#FFFFFF",
-    fontSize: 12,
     fontWeight: "700",
   },
 });
-
-const getWorkerSkills = (worker) => {
-  if (!worker.skills || worker.skills.length === 0) {
-    return [];
-  }
-
-  if (typeof worker.skills[0] === "string") {
-    return worker.skills;
-  }
-
-  return worker.skills.map((skill) => skill.name || skill).filter(Boolean);
-};
 
 export default WorkerListScreen;

@@ -16,11 +16,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import ScreenLayoutWorker from "../../components/ScreenLayoutWorker";
 import { useAuth } from "../../context/AuthContext";
-import { getWorkerApplications } from "../../services/workerService";
+import { getMyApplications } from "../../services/workerService";
 import { cancelApplication } from "../../services/applicationService";
-import CustomTabBarWorker from "../../components/CustomTabBarWorker";
-
-const { width } = Dimensions.get("window");
 
 // Paleta de colores moderna
 const COLORS = {
@@ -46,9 +43,11 @@ export default function WorkerApplicationsScreen({ navigation }) {
   const [selectedApplication, setSelectedApplication] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [activeTab, setActiveTab] = useState("active"); // "active" o "history"
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState("todos");
+  const [showFilters, setShowFilters] = useState(false);
   const { user } = useAuth();
 
-  // 🔥 NUEVO - Configuración mejorada de estados
+  // 🔥 ACTUALIZADO - Estados basados en la respuesta real del backend
   const applicationStatuses = [
     {
       id: "Solicitado",
@@ -72,6 +71,16 @@ export default function WorkerApplicationsScreen({ navigation }) {
     },
     {
       id: "Aceptado",
+      label: "Aceptada",
+      icon: "checkmark-circle",
+      color: COLORS.success,
+      bgColor: "#D1FAE5",
+      textColor: "#065F46",
+      gradient: ["#D1FAE5", "#A7F3D0"],
+      category: "active"
+    },
+    {
+      id: "Aceptada", // 🔥 NUEVO - Estado adicional del backend
       label: "Aceptada",
       icon: "checkmark-circle",
       color: COLORS.success,
@@ -112,34 +121,25 @@ export default function WorkerApplicationsScreen({ navigation }) {
     },
   ];
 
-  // Función para obtener el ID del trabajador
-  const getWorkerId = async () => {
-    try {
-      if (!user?.workerProfile?.id) {
-        throw new Error("El usuario no tiene perfil de trabajador");
-      }
-      return user.workerProfile.id;
-    } catch (error) {
-      console.error("Error obteniendo ID del trabajador:", error);
-      throw error;
-    }
-  };
-
-  // Cargar aplicaciones del trabajador
+  // 🔥 ACTUALIZADO - Cargar aplicaciones usando la nueva API
   const loadApplications = async () => {
     try {
       setLoading(true);
-      const workerId = await getWorkerId();
-      const response = await getWorkerApplications(workerId);
-
-      const applicationsData = Array.isArray(response)
-        ? response
-        : response?.applications || response?.data || [];
-
+      
+      console.log("🔄 Loading applications...");
+      const response = await getMyApplications();
+      
+      console.log("📋 Raw API response:", response);
+      
+      // La respuesta tiene la estructura: { total: X, applications: [...] }
+      const applicationsData = response?.applications || [];
+      
       console.log("📋 Applications loaded:", applicationsData.length);
+      console.log("📋 First application:", applicationsData[0]);
+      
       setApplications(applicationsData);
     } catch (error) {
-      console.error("Error cargando aplicaciones:", error);
+      console.error("❌ Error cargando aplicaciones:", error);
       Alert.alert("Error", "No se pudieron cargar las postulaciones");
       setApplications([]);
     } finally {
@@ -147,81 +147,217 @@ export default function WorkerApplicationsScreen({ navigation }) {
     }
   };
 
-  // 🔥 NUEVO - Separar aplicaciones por categoría
-  const activeApplications = applications.filter(app => {
-    const status = app.status?.name;
-    return ['Solicitado', 'En_revision', 'Aceptado', 'Completado'].includes(status);
-  });
+  // 🔥 ACTUALIZADO - Obtener estados únicos de las aplicaciones
+  const getAvailableStatuses = () => {
+    const statuses = applications.map(app => app.status?.name).filter(Boolean);
+    const uniqueStatuses = [...new Set(statuses)];
+    
+    console.log("📊 Available statuses:", uniqueStatuses);
+    
+    return uniqueStatuses.map(statusName => {
+      const config = applicationStatuses.find(s => s.id === statusName) || {
+        id: statusName,
+        label: statusName,
+        icon: "help-circle",
+        color: COLORS.textSecondary,
+        category: "active"
+      };
+      return config;
+    });
+  };
 
-  const historyApplications = applications.filter(app => {
-    const status = app.status?.name;
-    return ['Cancelada', 'Rechazada'].includes(status);
-  });
+  // 🔥 ACTUALIZADO - Función de filtrado mejorada
+  const getFilteredApplications = () => {
+    let filtered = applications;
 
-  const currentApplications = activeTab === "active" ? activeApplications : historyApplications;
+    // Filtrar por categoría (active/history)
+    if (activeTab === "active") {
+      filtered = filtered.filter(app => {
+        const status = app.status?.name;
+        return ['Solicitado', 'En_revision', 'Aceptado', 'Aceptada', 'Completado'].includes(status);
+      });
+    } else {
+      filtered = filtered.filter(app => {
+        const status = app.status?.name;
+        return ['Cancelada', 'Rechazada'].includes(status);
+      });
+    }
 
-  // 🔥 NUEVO - Componente de tabs mejorado
-  const TabSelector = () => (
-    <View style={styles.tabContainer}>
-      <TouchableOpacity
-        style={[
-          styles.tab,
-          activeTab === "active" && styles.activeTab
-        ]}
-        onPress={() => setActiveTab("active")}
-      >
-        <Ionicons 
-          name="briefcase" 
-          size={20} 
-          color={activeTab === "active" ? "#FFFFFF" : COLORS.textSecondary} 
-        />
-        <Text style={[
-          styles.tabText,
-          activeTab === "active" && styles.activeTabText
-        ]}>
-          Activas
-        </Text>
-        <View style={styles.tabBadge}>
+    // Filtrar por estado específico
+    if (selectedStatusFilter !== "todos") {
+      filtered = filtered.filter(app => app.status?.name === selectedStatusFilter);
+    }
+
+    console.log(`📊 Filtered applications (${activeTab}, ${selectedStatusFilter}):`, filtered.length);
+    return filtered;
+  };
+
+  const currentApplications = getFilteredApplications();
+
+  // 🔥 ACTUALIZADO - Componente de filtros de estado
+  const StatusFilters = () => {
+    const availableStatuses = getAvailableStatuses();
+    const statusesForCurrentTab = availableStatuses.filter(status => {
+      if (activeTab === "active") {
+        return ['Solicitado', 'En_revision', 'Aceptado', 'Aceptada', 'Completado'].includes(status.id);
+      } else {
+        return ['Cancelada', 'Rechazada'].includes(status.id);
+      }
+    });
+
+    if (statusesForCurrentTab.length === 0) return null;
+
+    return (
+      <View style={styles.filtersContainer}>
+        <TouchableOpacity
+          style={styles.filterToggle}
+          onPress={() => setShowFilters(!showFilters)}
+        >
+          <Ionicons name="filter" size={16} color={COLORS.primary} />
+          <Text style={styles.filterToggleText}>Filtrar por estado</Text>
+          <Ionicons 
+            name={showFilters ? "chevron-up" : "chevron-down"} 
+            size={16} 
+            color={COLORS.primary} 
+          />
+        </TouchableOpacity>
+
+        {showFilters && (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.statusFiltersScroll}
+            contentContainerStyle={styles.statusFiltersContainer}
+          >
+            <TouchableOpacity
+              style={[
+                styles.statusFilterChip,
+                selectedStatusFilter === "todos" && styles.statusFilterChipActive
+              ]}
+              onPress={() => setSelectedStatusFilter("todos")}
+            >
+              <Ionicons 
+                name="apps" 
+                size={14} 
+                color={selectedStatusFilter === "todos" ? "#FFFFFF" : COLORS.textSecondary} 
+              />
+              <Text style={[
+                styles.statusFilterChipText,
+                selectedStatusFilter === "todos" && styles.statusFilterChipTextActive
+              ]}>
+                Todos
+              </Text>
+            </TouchableOpacity>
+
+            {statusesForCurrentTab.map((statusConfig) => (
+              <TouchableOpacity
+                key={statusConfig.id}
+                style={[
+                  styles.statusFilterChip,
+                  selectedStatusFilter === statusConfig.id && styles.statusFilterChipActive,
+                  selectedStatusFilter === statusConfig.id && { backgroundColor: statusConfig.color }
+                ]}
+                onPress={() => setSelectedStatusFilter(statusConfig.id)}
+              >
+                <Ionicons 
+                  name={statusConfig.icon as keyof typeof Ionicons.glyphMap} 
+                  size={14} 
+                  color={selectedStatusFilter === statusConfig.id ? "#FFFFFF" : statusConfig.color} 
+                />
+                <Text style={[
+                  styles.statusFilterChipText,
+                  selectedStatusFilter === statusConfig.id && styles.statusFilterChipTextActive
+                ]}>
+                  {statusConfig.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+    );
+  };
+
+  // 🔥 ACTUALIZADO - Componente de tabs mejorado
+  const TabSelector = () => {
+    const activeApplications = applications.filter(app => {
+      const status = app.status?.name;
+      return ['Solicitado', 'En_revision', 'Aceptado', 'Aceptada', 'Completado'].includes(status);
+    });
+
+    const historyApplications = applications.filter(app => {
+      const status = app.status?.name;
+      return ['Cancelada', 'Rechazada'].includes(status);
+    });
+
+    return (
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === "active" && styles.activeTab
+          ]}
+          onPress={() => {
+            setActiveTab("active");
+            setSelectedStatusFilter("todos");
+          }}
+        >
+          <Ionicons 
+            name="briefcase" 
+            size={20} 
+            color={activeTab === "active" ? "#FFFFFF" : COLORS.textSecondary} 
+          />
           <Text style={[
-            styles.tabBadgeText,
-            activeTab === "active" && styles.activeTabBadgeText
+            styles.tabText,
+            activeTab === "active" && styles.activeTabText
           ]}>
-            {activeApplications.length}
+            Activas
           </Text>
-        </View>
-      </TouchableOpacity>
+          <View style={styles.tabBadge}>
+            <Text style={[
+              styles.tabBadgeText,
+              activeTab === "active" && styles.activeTabBadgeText
+            ]}>
+              {activeApplications.length}
+            </Text>
+          </View>
+        </TouchableOpacity>
 
-      <TouchableOpacity
-        style={[
-          styles.tab,
-          activeTab === "history" && styles.activeTab
-        ]}
-        onPress={() => setActiveTab("history")}
-      >
-        <Ionicons 
-          name="archive" 
-          size={20} 
-          color={activeTab === "history" ? "#FFFFFF" : COLORS.textSecondary} 
-        />
-        <Text style={[
-          styles.tabText,
-          activeTab === "history" && styles.activeTabText
-        ]}>
-          Historial
-        </Text>
-        <View style={styles.tabBadge}>
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === "history" && styles.activeTab
+          ]}
+          onPress={() => {
+            setActiveTab("history");
+            setSelectedStatusFilter("todos");
+          }}
+        >
+          <Ionicons 
+            name="archive" 
+            size={20} 
+            color={activeTab === "history" ? "#FFFFFF" : COLORS.textSecondary} 
+          />
           <Text style={[
-            styles.tabBadgeText,
-            activeTab === "history" && styles.activeTabBadgeText
+            styles.tabText,
+            activeTab === "history" && styles.activeTabText
           ]}>
-            {historyApplications.length}
+            Historial
           </Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
+          <View style={styles.tabBadge}>
+            <Text style={[
+              styles.tabBadgeText,
+              activeTab === "history" && styles.activeTabBadgeText
+            ]}>
+              {historyApplications.length}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
-  // 🔥 MEJORADO - Handler para cancelar aplicación
+  // Handler para cancelar aplicación
   const handleCancelApplication = (applicationId) => {
     Alert.alert(
       "Cancelar Postulación",
@@ -299,7 +435,7 @@ export default function WorkerApplicationsScreen({ navigation }) {
     loadApplications();
   }, []);
 
-  // 🔥 NUEVO - Función para obtener configuración del estado
+  // 🔥 ACTUALIZADO - Función para obtener configuración del estado
   const getStatusConfig = (statusName) => {
     return applicationStatuses.find((s) => s.id === statusName) || {
       id: statusName,
@@ -313,7 +449,7 @@ export default function WorkerApplicationsScreen({ navigation }) {
     };
   };
 
-  // 🔥 MEJORADO - Componente de tarjeta de aplicación con efectos visuales
+  // 🔥 ACTUALIZADO - Componente de tarjeta de aplicación
   const ApplicationCard = ({ item, index }) => {
     const statusConfig = getStatusConfig(item.status?.name);
     const canCancel = ["Solicitado", "En_revision"].includes(item.status?.name);
@@ -337,7 +473,6 @@ export default function WorkerApplicationsScreen({ navigation }) {
           onPress={() => viewApplicationDetails(item)}
           activeOpacity={0.7}
         >
-          {/* 🔥 NUEVO - Indicador de estado lateral */}
           <View 
             style={[
               styles.statusIndicator, 
@@ -352,11 +487,10 @@ export default function WorkerApplicationsScreen({ navigation }) {
                   {item.jobOffer?.title || "Trabajo"}
                 </Text>
                 <Text style={styles.employerName}>
-                  {item.jobOffer?.employer?.user?.name || "Empleador"}
+                  {item.jobOffer?.employer?.user?.name} {item.jobOffer?.employer?.user?.lastname || ""}
                 </Text>
               </View>
               
-              {/* 🔥 MEJORADO - Badge de estado con gradiente */}
               <View
                 style={[
                   styles.statusBadge,
@@ -379,14 +513,13 @@ export default function WorkerApplicationsScreen({ navigation }) {
               </View>
             </View>
 
-            {/* 🔥 MEJORADO - Información más organizada */}
             <View style={styles.applicationDetails}>
               <View style={styles.detailRow}>
                 <View style={styles.detailItem}>
                   <Ionicons name="location" size={16} color={COLORS.textSecondary} />
                   <Text style={styles.detailText} numberOfLines={1}>
-                    {item.jobOffer?.displayLocation?.city || item.jobOffer?.city || "N/A"}, {" "}
-                    {item.jobOffer?.displayLocation?.department || item.jobOffer?.state || "N/A"}
+                    {item.jobOffer?.location?.city || "N/A"}, {" "}
+                    {item.jobOffer?.location?.state || "N/A"}
                   </Text>
                 </View>
                 
@@ -448,7 +581,7 @@ export default function WorkerApplicationsScreen({ navigation }) {
     );
   };
 
-  // 🔥 MEJORADO - Modal de detalles
+  // 🔥 ACTUALIZADO - Modal de detalles
   const ApplicationDetailModal = () => {
     if (!selectedApplication) return null;
 
@@ -470,7 +603,7 @@ export default function WorkerApplicationsScreen({ navigation }) {
             </View>
 
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              {/* Estado actual con mejor diseño */}
+              {/* Estado actual */}
               <View style={styles.statusSection}>
                 <View
                   style={[
@@ -502,7 +635,7 @@ export default function WorkerApplicationsScreen({ navigation }) {
                   {selectedApplication.jobOffer?.title}
                 </Text>
                 <Text style={styles.employerNameLarge}>
-                  {selectedApplication.jobOffer?.employer?.user?.name}
+                  {selectedApplication.jobOffer?.employer?.user?.name} {selectedApplication.jobOffer?.employer?.user?.lastname || ""}
                 </Text>
 
                 <View style={styles.jobDetailsGrid}>
@@ -514,8 +647,11 @@ export default function WorkerApplicationsScreen({ navigation }) {
                     />
                     <Text style={styles.jobDetailLabel}>Ubicación</Text>
                     <Text style={styles.jobDetailValue}>
-                      {selectedApplication.jobOffer?.displayLocation?.city || selectedApplication.jobOffer?.city},{" "}
-                      {selectedApplication.jobOffer?.displayLocation?.department || selectedApplication.jobOffer?.state}
+                      {selectedApplication.jobOffer?.location?.city},{" "}
+                      {selectedApplication.jobOffer?.location?.state}
+                      {selectedApplication.jobOffer?.location?.village && 
+                        `, ${selectedApplication.jobOffer.location.village}`
+                      }
                     </Text>
                   </View>
 
@@ -547,17 +683,26 @@ export default function WorkerApplicationsScreen({ navigation }) {
                     <Ionicons name="leaf" size={18} color={COLORS.success} />
                     <Text style={styles.jobDetailLabel}>Cultivo</Text>
                     <Text style={styles.jobDetailValue}>
-                      {selectedApplication.jobOffer?.cropType?.name ||
-                        "General"}
+                      {selectedApplication.jobOffer?.cropType?.name || "General"}
                     </Text>
                   </View>
+
+                  {selectedApplication.jobOffer?.phase?.name && (
+                    <View style={styles.jobDetailItem}>
+                      <Ionicons name="trending-up" size={18} color={COLORS.info} />
+                      <Text style={styles.jobDetailLabel}>Fase</Text>
+                      <Text style={styles.jobDetailValue}>
+                        {selectedApplication.jobOffer.phase.name}
+                      </Text>
+                    </View>
+                  )}
                 </View>
 
-                {selectedApplication.jobOffer?.description && (
+                {selectedApplication.jobOffer?.requirements && (
                   <View style={styles.descriptionContainer}>
-                    <Text style={styles.descriptionLabel}>Descripción</Text>
+                    <Text style={styles.descriptionLabel}>Requisitos</Text>
                     <Text style={styles.descriptionText}>
-                      {selectedApplication.jobOffer.description}
+                      {selectedApplication.jobOffer.requirements}
                     </Text>
                   </View>
                 )}
@@ -605,7 +750,7 @@ export default function WorkerApplicationsScreen({ navigation }) {
               </View>
 
               {/* Información de contacto del empleador */}
-              {selectedApplication.status?.name === "Aceptado" && (
+              {(selectedApplication.status?.name === "Aceptado" || selectedApplication.status?.name === "Aceptada") && (
                 <View style={styles.detailSection}>
                   <Text style={styles.sectionTitle}>
                     Información de Contacto
@@ -618,7 +763,7 @@ export default function WorkerApplicationsScreen({ navigation }) {
                         color={COLORS.primary}
                       />
                       <Text style={styles.contactText}>
-                        {selectedApplication.jobOffer?.employer?.user?.name}
+                        {selectedApplication.jobOffer?.employer?.user?.name} {selectedApplication.jobOffer?.employer?.user?.lastname || ""}
                       </Text>
                     </View>
                     {selectedApplication.jobOffer?.employer?.user?.email && (
@@ -711,8 +856,11 @@ export default function WorkerApplicationsScreen({ navigation }) {
           </Text>
         </View>
 
-        {/* 🔥 NUEVO - Selector de tabs */}
+        {/* Selector de tabs */}
         <TabSelector />
+
+        {/* Filtros de estado */}
+        <StatusFilters />
 
         <FlatList
           data={currentApplications}
@@ -738,16 +886,22 @@ export default function WorkerApplicationsScreen({ navigation }) {
                 color={COLORS.textLight}
               />
               <Text style={styles.emptyStateText}>
-                {activeTab === "active"
-                  ? "No tienes postulaciones activas"
-                  : "No hay postulaciones en el historial"}
+                {selectedStatusFilter !== "todos" 
+                  ? `No hay postulaciones con estado "${getStatusConfig(selectedStatusFilter).label}"`
+                  : activeTab === "active"
+                    ? "No tienes postulaciones activas"
+                    : "No hay postulaciones en el historial"
+                }
               </Text>
               <Text style={styles.emptyStateSubtext}>
-                {activeTab === "active"
-                  ? "Busca ofertas de trabajo y postúlate"
-                  : "Las postulaciones canceladas y rechazadas aparecerán aquí"}
+                {selectedStatusFilter !== "todos"
+                  ? "Cambia el filtro para ver otras postulaciones"
+                  : activeTab === "active"
+                    ? "Busca ofertas de trabajo y postúlate"
+                    : "Las postulaciones canceladas y rechazadas aparecerán aquí"
+                }
               </Text>
-              {activeTab === "active" && (
+              {activeTab === "active" && selectedStatusFilter === "todos" && (
                 <TouchableOpacity
                   style={styles.searchJobsButton}
                   onPress={() => navigation.navigate("WorkerJobs")}>
@@ -799,7 +953,7 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   
-  // 🔥 NUEVO - Estilos para tabs
+  // Estilos para tabs
   tabContainer: {
     flexDirection: "row",
     backgroundColor: COLORS.surface,
@@ -852,11 +1006,64 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 
+  // Estilos para filtros
+  filtersContainer: {
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  filterToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  filterToggleText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: "500",
+    flex: 1,
+  },
+  statusFiltersScroll: {
+    maxHeight: 60,
+  },
+  statusFiltersContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    gap: 8,
+  },
+  statusFilterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginRight: 8,
+    gap: 6,
+  },
+  statusFilterChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  statusFilterChipText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: "500",
+  },
+  statusFilterChipTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+
   applicationsList: {
     padding: 20,
   },
   
-  // 🔥 MEJORADO - Estilos de tarjeta
+  // Estilos de tarjeta
   applicationCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 16,
@@ -922,7 +1129,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   
-  // 🔥 MEJORADO - Detalles de aplicación
+  // Detalles de aplicación
   applicationDetails: {
     marginBottom: 16,
   },
@@ -1024,7 +1231,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  // 🔥 MEJORADO - Estilos del modal
+  // Estilos del modal
   modalContainer: {
     flex: 1,
     justifyContent: "flex-end",
