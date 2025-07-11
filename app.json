@@ -13,6 +13,18 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Esta app necesita acceso a tu ubicación para mostrarte ofertas de trabajo cercanas.",
+          "locationAlwaysPermission": "Esta app necesita acceso a tu ubicación para funciones de localización.",
+          "locationWhenInUsePermission": "Esta app necesita acceso a tu ubicación cuando la uses para mostrarte ofertas cercanas.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.yanethm.jornaleando",
@@ -26,7 +38,9 @@
               "NSExceptionMinimumTLSVersion": "TLSv1.0"
             }
           }
-        }
+        },
+        "NSLocationWhenInUseUsageDescription": "Esta app necesita acceso a tu ubicación para mostrarte ofertas de trabajo cercanas.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Esta app necesita acceso a tu ubicación para funciones de localización."
       }
     },
     "android": {
@@ -35,6 +49,10 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
       "edgeToEdgeEnabled": true,
       "package": "com.yanethm.jornaleando",
       "usesCleartextTraffic": true
