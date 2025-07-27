@@ -4,6 +4,7 @@ import React, {
   useRef,
   useCallback,
   useMemo,
+  memo,
 } from "react";
 import {
   View,
@@ -19,8 +20,13 @@ import {
   TextInput,
   Modal,
   StatusBar,
+  ActivityIndicator,
+  Alert,
+  BackHandler,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useFocusEffect } from "@react-navigation/native";
 import CustomHeaderNoAuth from "../../components/CustomHeaderNoAuth";
 import { getAvailableJobOffersNoAuth } from "../../services/jobOffers";
 import { getCropType } from "../../services/cropTypeService";
@@ -28,19 +34,22 @@ import { RootStackParamList } from "../../navigation/types";
 import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 
-// Importar imágenes
-import sachaInchiImage from "../../../assets/onboarding/slide3.png";
-import cacaoImage from "../../../assets/onboarding/slide1.png";
-import mielImage from "../../../assets/onboarding/slide2.jpg";
-import cafeImage from "../../../assets/onboarding/slide1.png";
-import defaultImage from "../../../assets/onboarding/slide1.png";
+// Importar imágenes usando require() para mejor compatibilidad
+const CROP_IMAGES = {
+  sachaInchi: require("../../../assets/onboarding/slide3.png"),
+  cacao: require("../../../assets/onboarding/slide1.png"), 
+  miel: require("../../../assets/onboarding/slide2.png"),
+  default: require("../../../assets/onboarding/slide1.png"),
+};
 
-// Constants - CORREGIDAS
+// Constants
 const { width, height } = Dimensions.get("window");
-const CARD_WIDTH = width - 40;  // Cambiado de width * 0.85
-const CARD_SPACING = 20;        // Cambiado de 16
+const CARD_WIDTH = width - 40;
+const CARD_SPACING = 20;
+const FEATURED_HEIGHT = 380;
+const AUTO_SCROLL_INTERVAL = 5000;
 
-// 🎨 NUEVA PALETA DE COLORES
+// 🎨 PALETA DE COLORES MEJORADA
 const COLORS = {
   gray50: "#FAFAFA",
   gray100: "#F5F5F5",
@@ -53,10 +62,9 @@ const COLORS = {
   gray800: "#424242",
   gray900: "#212121",
 
-  // Nueva paleta principal
-  primary: "#274F66", // Azul oscuro principal
-  accent: "#3A7DC1", // Azul medio para acentos
-  success: "#B5883E", // Dorado para éxitos/salarios
+  primary: "#274F66",
+  accent: "#3A7DC1",
+  success: "#B5883E",
   warning: "#FF9500",
   error: "#FF3B30",
 
@@ -84,60 +92,40 @@ const TYPOGRAPHY = {
   caption2: { fontSize: 11, fontWeight: "600" as const, lineHeight: 13 },
 } as const;
 
-// 🎨 CONFIGURACIÓN DE CULTIVOS CON NUEVA PALETA
 const CROP_CONFIG = {
-  "sacha inchi": {
-    color: "#274F66", // Azul oscuro principal
+  "Sacha Inchi": {
+    color: "#274F66",
     emoji: "🌱",
     title: "Sacha Inchi",
     description: "Superalimento amazónico",
     gradient: ["#274F66", "#3A7DC1"],
   },
-  cacao: {
-    color: "#B5883E", // Dorado
+  "Cacao": {
+    color: "#B5883E",
     emoji: "🍫",
     title: "Cacao",
     description: "Cultivo tradicional",
     gradient: ["#B5883E", "#D4A574"],
   },
-  café: {
-    color: "#3A7DC1", // Azul medio
+  "Café": {
+    color: "#3A7DC1",
     emoji: "☕",
     title: "Café",
     description: "Granos premium",
     gradient: ["#3A7DC1", "#5B9BD5"],
   },
-  coffee: {
-    color: "#3A7DC1", // Azul medio
-    emoji: "☕",
-    title: "Coffee",
-    description: "Premium beans",
-    gradient: ["#3A7DC1", "#5B9BD5"],
-  },
-  miel: {
-    color: "#B5883E", // Dorado
-    emoji: "🍯",
-    title: "Miel",
-    description: "Miel pura",
-    gradient: ["#B5883E", "#F4D03F"],
-  },
-  honey: {
-    color: "#B5883E", // Dorado
-    emoji: "🍯",
-    title: "Honey",
-    description: "Pure honey",
-    gradient: ["#B5883E", "#F4D03F"],
-  },
+  // ADD THIS DEFAULT PROPERTY
   default: {
-    color: "#274F66", // Azul oscuro como default
-    emoji: "🌱",
+    color: "#274F66",
+    emoji: "🌾",
     title: "Cultivo",
-    description: "Agricultura sostenible",
+    description: "Producto agrícola",
     gradient: ["#274F66", "#3A7DC1"],
-  },
+  }
 } as const;
 
-// City distances from Bogotá (in km)
+
+// Distancias de ciudades desde Bogotá (en km)
 const CITY_DISTANCES = {
   Bogotá: 0,
   Medellín: 240,
@@ -177,7 +165,7 @@ const CITY_DISTANCES = {
 
 const COUNTRIES = ["Colombia", "Venezuela"] as const;
 
-// Types
+// 📱 INTERFACES
 type PublicHomeNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
   "PublicHome"
@@ -256,17 +244,17 @@ interface CropType {
   description?: string;
 }
 
-// Utility functions
-const getCropConfig = (cropName: string) => {
-  if (!cropName) return CROP_CONFIG.default;
-  const cropLower = cropName.toLowerCase();
-  for (const [key, config] of Object.entries(CROP_CONFIG)) {
-    if (cropLower.includes(key)) {
-      return config;
-    }
-  }
-  return CROP_CONFIG.default;
-};
+interface LoadingState {
+  offers: boolean;
+  categories: boolean;
+  modal: boolean;
+}
+
+interface ErrorState {
+  offers: string | null;
+  categories: string | null;
+  general: string | null;
+}
 
 const getDistance = (city: string): number => {
   if (!city) return 999;
@@ -306,37 +294,55 @@ const getEmployerName = (employer: any) => {
   return employer?.organization || "Empleador";
 };
 
-const getCropImage = (cropName: string): any => {
-  if (!cropName) return defaultImage;
-  const cropNameLower = cropName.toLowerCase();
 
-  if (cropNameLower.includes("sacha") || cropNameLower.includes("inchi")) {
-    return sachaInchiImage;
+const getCropConfig = (cropName: string) => {
+  if (!cropName) return CROP_CONFIG.default;
+  
+  const cropLower = cropName.toLowerCase().trim();
+  
+  // Buscar coincidencia exacta primero
+  const exactMatch = Object.entries(CROP_CONFIG).find(([key]) => 
+    key !== 'default' && cropLower === key.toLowerCase()
+  );
+  
+  if (exactMatch) return exactMatch[1];
+  
+  // Si no hay coincidencia exacta, buscar parcial
+  for (const [key, config] of Object.entries(CROP_CONFIG)) {
+    if (key !== 'default' && cropLower.includes(key.toLowerCase())) {
+      return config;
+    }
   }
-  if (cropNameLower.includes("cacao")) {
-    return cacaoImage;
-  }
-  if (cropNameLower.includes("miel") || cropNameLower.includes("honey")) {
-    return mielImage;
-  }
-  if (cropNameLower.includes("café") || cropNameLower.includes("coffee")) {
-    return cafeImage;
-  }
-
-  return defaultImage;
+  
+  // Always return the default config as fallback
+  return CROP_CONFIG.default;
 };
 
-const getLocationText = (offer: JobOfferData): string => {
-  const { displayLocation } = offer;
-  if (!displayLocation) return "Ubicación no disponible";
+// 🔧 IMPROVED getCropImage function with better error handling
+const getCropImage = (cropName: string): any => {
+  if (!cropName) return CROP_IMAGES.default;
+  
+  try {
+    const cropNameLower = cropName.toLowerCase();
 
-  const parts = [
-    displayLocation.city,
-    displayLocation.state || displayLocation.department,
-    displayLocation.country,
-  ].filter(Boolean);
+    if (cropNameLower.includes("sacha") || cropNameLower.includes("inchi")) {
+      return CROP_IMAGES.sachaInchi;
+    }
+    if (cropNameLower.includes("cacao")) {
+      return CROP_IMAGES.cacao;
+    }
+    if (cropNameLower.includes("miel") || cropNameLower.includes("honey")) {
+      return CROP_IMAGES.miel;
+    }
+    if (cropNameLower.includes("café") || cropNameLower.includes("coffee")) {
+      return CROP_IMAGES.cafe; // Now this property exists
+    }
 
-  return parts.join(", ");
+    return CROP_IMAGES.default;
+  } catch (error) {
+    console.warn("Error loading crop image:", error);
+    return CROP_IMAGES.default;
+  }
 };
 
 const formatTimeAgo = (dateString: string) => {
@@ -348,13 +354,11 @@ const formatTimeAgo = (dateString: string) => {
 
   if (diffInSeconds < 60) return "Hace unos segundos";
   if (diffInSeconds < 3600) return `Hace ${Math.floor(diffInSeconds / 60)} min`;
-  if (diffInSeconds < 86400)
-    return `Hace ${Math.floor(diffInSeconds / 3600)} h`;
-  if (diffInSeconds < 2592000)
-    return `Hace ${Math.floor(diffInSeconds / 86400)} días`;
+  if (diffInSeconds < 86400) return `Hace ${Math.floor(diffInSeconds / 3600)} h`;
+  if (diffInSeconds < 2592000) return `Hace ${Math.floor(diffInSeconds / 86400)} días`;
 
   return date.toLocaleDateString("es-CO", { day: "numeric", month: "short" });
-};
+}; 
 
 const calculateNearbyScore = (offer: JobOfferData): number => {
   let score = 0;
@@ -382,33 +386,201 @@ const calculateNearbyScore = (offer: JobOfferData): number => {
   return score;
 };
 
-// Main Component - CORREGIDO
+// 🔄 ERROR HANDLING UTILITIES
+const handleAsyncError = (error: any, context: string) => {
+  console.error(`Error in ${context}:`, error);
+  const message =
+    error?.response?.data?.message || error?.message || `Error en ${context}`;
+  return message;
+};
+
+// 🎭 COMPONENTE DE IMAGEN OPTIMIZADA
+const OptimizedImage = memo(({ source, style, accessible = false }: { 
+  source: any; 
+  style: any; 
+  accessible?: boolean;
+}) => {
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  return (
+    <View style={style}>
+      <Image
+        source={source}
+        style={[style, { opacity: imageLoaded && !imageError ? 1 : 0 }]}
+        accessible={accessible}
+        resizeMode="cover"
+        onLoad={() => setImageLoaded(true)}
+        onError={() => {
+          console.warn("Error loading image:", source);
+          setImageError(true);
+          setImageLoaded(true);
+        }}
+        // Optimizaciones de rendimiento
+        fadeDuration={300}
+        loadingIndicatorSource={undefined}
+      />
+      
+      {/* Placeholder mientras carga */}
+      {(!imageLoaded || imageError) && (
+        <View style={[
+          style, 
+          {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: COLORS.gray200,
+            justifyContent: 'center',
+            alignItems: 'center'
+          }
+        ]}>
+          {!imageError ? (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          ) : (
+            <Ionicons name="image-outline" size={32} color={COLORS.gray400} />
+          )}
+        </View>
+      )}
+    </View>
+  );
+});
+
+// 🎭 COMPONENTES AUXILIARES MEMOIZADOS
+const LoadingSpinner = memo(() => (
+  <View
+    style={styles.loadingContainer}
+    accessible={true}
+    accessibilityLabel="Cargando contenido">
+    <ActivityIndicator size="large" color={COLORS.primary} />
+    <Text style={styles.loadingText}>Cargando ofertas...</Text>
+  </View>
+));
+
+const EmptyState = memo(
+  ({
+    title,
+    description,
+    actionText,
+    onAction,
+  }: {
+    title: string;
+    description: string;
+    actionText?: string;
+    onAction?: () => void;
+  }) => (
+    <View style={styles.emptyState} accessible={true}>
+      <Ionicons name="search-outline" size={48} color={COLORS.textTertiary} />
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyDescription}>{description}</Text>
+      {actionText && onAction && (
+        <TouchableOpacity
+          style={styles.emptyAction}
+          onPress={onAction}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={actionText}>
+          <Text style={styles.emptyActionText}>{actionText}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  )
+);
+
+const ErrorBoundary = memo(
+  ({ error, onRetry }: { error: string; onRetry: () => void }) => (
+    <View style={styles.errorContainer} accessible={true}>
+      <Ionicons name="alert-circle-outline" size={48} color={COLORS.error} />
+      <Text style={styles.errorTitle}>Oops, algo salió mal</Text>
+      <Text style={styles.errorText}>{error}</Text>
+      <TouchableOpacity
+        style={styles.retryButton}
+        onPress={onRetry}
+        accessible={true}
+        accessibilityRole="button"
+        accessibilityLabel="Reintentar carga">
+        <Text style={styles.retryButtonText}>Reintentar</Text>
+      </TouchableOpacity>
+    </View>
+  )
+);
+
+// 🏠 COMPONENTE PRINCIPAL
 const PublicHome: React.FC<PublicHomeProps> = ({ navigation }) => {
-  // State
+  // 📊 ESTADO CONSOLIDADO
   const [jobOffers, setJobOffers] = useState<JobOfferData[]>([]);
   const [filteredOffers, setFilteredOffers] = useState<JobOfferData[]>([]);
   const [categories, setCategories] = useState<JobCategory[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"available" | "nearby">("available");
+  const [loading, setLoading] = useState<LoadingState>({
+    offers: true,
+    categories: true,
+    modal: false,
+  });
+  const [errors, setErrors] = useState<ErrorState>({
+    offers: null,
+    categories: null,
+    general: null,
+  });
+  const [activeTab, setActiveTab] = useState<"available" | "nearby">(
+    "available"
+  );
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // NUEVOS ESTADOS PARA EL MODAL DE CATEGORÍAS
+  // MODAL STATES
   const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<JobCategory | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<JobCategory | null>(
+    null
+  );
   const [categoryOffers, setCategoryOffers] = useState<JobOfferData[]>([]);
-  const [modalSortBy, setModalSortBy] = useState<"recent" | "salary" | "distance">("recent");
+  const [modalSortBy, setModalSortBy] = useState<
+    "recent" | "salary" | "distance"
+  >("recent");
 
-  // Refs for animations
+  // 🎭 ANIMACIONES
   const scrollX = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const modalSlideAnim = useRef(new Animated.Value(height)).current;
   const [currentSlide, setCurrentSlide] = useState(0);
   const flatListRef = useRef<FlatList>(null);
+  const autoScrollRef = useRef<NodeJS.Timeout>();
 
-  // Memoized values - MOVIDOS ANTES de las funciones que los usan
+  // 🔄 CLEANUP
+  useEffect(() => {
+    return () => {
+      if (autoScrollRef.current) {
+        clearInterval(autoScrollRef.current);
+      }
+    };
+  }, []);
+
+  // 📱 BACK HANDLER
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (showCategoryModal) {
+          closeCategoryModal();
+          return true;
+        }
+        if (showFilters) {
+          setShowFilters(false);
+          return true;
+        }
+        return false;
+      };
+
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        onBackPress
+      );
+      return () => subscription.remove();
+    }, [showCategoryModal, showFilters])
+  );
+
+  // 🎯 MEMOIZED VALUES
   const featuredOffers = useMemo(() => {
     return [...filteredOffers]
       .sort((a, b) => {
@@ -436,10 +608,9 @@ const PublicHome: React.FC<PublicHomeProps> = ({ navigation }) => {
       .slice(0, Math.min(nearby.length, 15));
   }, [filteredOffers, selectedCountry]);
 
-  // MEMOIZED SORTED CATEGORY OFFERS
   const sortedCategoryOffers = useMemo(() => {
     let sorted = [...categoryOffers];
-    
+
     switch (modalSortBy) {
       case "recent":
         sorted.sort((a, b) => {
@@ -459,97 +630,70 @@ const PublicHome: React.FC<PublicHomeProps> = ({ navigation }) => {
         });
         break;
     }
-    
+
     return sorted;
   }, [categoryOffers, modalSortBy]);
 
-  // NUEVA FUNCIÓN PARA CALCULAR ESTADÍSTICAS DE CATEGORÍAS
-  const calculateCategoryStats = useCallback((categoryName: string, offers: JobOfferData[]) => {
-    const categoryOffers = offers.filter(
-      (offer) => offer.cropType?.name.toLowerCase() === categoryName.toLowerCase()
-    );
+  const displayOffers = useMemo(
+    () => (activeTab === "nearby" ? nearbyOffers : filteredOffers),
+    [activeTab, nearbyOffers, filteredOffers]
+  );
 
-    if (categoryOffers.length === 0) {
+  // 📊 ESTADÍSTICAS DE CATEGORÍAS
+  const calculateCategoryStats = useCallback(
+    (categoryName: string, offers: JobOfferData[]) => {
+      const categoryOffers = offers.filter(
+        (offer) =>
+          offer.cropType?.name.toLowerCase() === categoryName.toLowerCase()
+      );
+
+      if (categoryOffers.length === 0) {
+        return {
+          averageSalary: 0,
+          cities: [],
+          totalWorkers: 0,
+          recentOffers: 0,
+        };
+      }
+
+      const validSalaries = categoryOffers.filter((offer) => offer.salary > 0);
+      const averageSalary =
+        validSalaries.length > 0
+          ? validSalaries.reduce((sum, offer) => sum + offer.salary, 0) /
+            validSalaries.length
+          : 0;
+
+      const cities = [
+        ...new Set(
+          categoryOffers
+            .map((offer) => offer.displayLocation?.city)
+            .filter(Boolean)
+        ),
+      ];
+
+      const totalWorkers = categoryOffers.reduce(
+        (sum, offer) => sum + (offer.workersNeeded || 1),
+        0
+      );
+
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      const recentOffers = categoryOffers.filter((offer) => {
+        const offerDate = new Date(offer.createdAt || offer.startDate);
+        return offerDate >= oneWeekAgo;
+      }).length;
+
       return {
-        averageSalary: 0,
-        cities: [],
-        totalWorkers: 0,
-        recentOffers: 0,
+        averageSalary,
+        cities: cities.slice(0, 3),
+        totalWorkers,
+        recentOffers,
       };
-    }
+    },
+    []
+  );
 
-    const validSalaries = categoryOffers.filter(offer => offer.salary > 0);
-    const averageSalary = validSalaries.length > 0 
-      ? validSalaries.reduce((sum, offer) => sum + offer.salary, 0) / validSalaries.length 
-      : 0;
-
-    const cities = [...new Set(categoryOffers.map(offer => offer.displayLocation?.city).filter(Boolean))];
-    
-    const totalWorkers = categoryOffers.reduce((sum, offer) => sum + (offer.workersNeeded || 1), 0);
-    
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const recentOffers = categoryOffers.filter(offer => {
-      const offerDate = new Date(offer.createdAt || offer.startDate);
-      return offerDate >= oneWeekAgo;
-    }).length;
-
-    return {
-      averageSalary,
-      cities: cities.slice(0, 3), // Top 3 ciudades
-      totalWorkers,
-      recentOffers,
-    };
-  }, []);
-
-  // NUEVA FUNCIÓN PARA MANEJAR LA SELECCIÓN DE CATEGORÍA CON ANIMACIÓN
-  const handleCategoryPress = useCallback((category: JobCategory) => {
-    const hasOffers = parseInt(category.count) > 0;
-    if (!hasOffers) return;
-
-    // Filtrar ofertas por categoría
-    const categoryJobOffers = jobOffers.filter(
-      (offer) => offer.cropType?.name.toLowerCase() === category.name.toLowerCase()
-    );
-
-    setSelectedCategory(category);
-    setCategoryOffers(categoryJobOffers);
-    setModalSortBy("recent");
-    setShowCategoryModal(true);
-
-    // Animar entrada del modal
-    Animated.spring(modalSlideAnim, {
-      toValue: 0,
-      useNativeDriver: true,
-      tension: 100,
-      friction: 8,
-    }).start();
-  }, [jobOffers, modalSlideAnim]);
-
-  // FUNCIÓN PARA CERRAR EL MODAL CON ANIMACIÓN
-  const closeCategoryModal = useCallback(() => {
-    Animated.timing(modalSlideAnim, {
-      toValue: height,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      setShowCategoryModal(false);
-      setSelectedCategory(null);
-      setCategoryOffers([]);
-    });
-  }, [modalSlideAnim]);
-
-  // Función para manejar el cambio de slide - CORREGIDA
-  const onSlideChange = useCallback((event: any) => {
-    if (!featuredOffers || featuredOffers.length === 0) return;
-    
-    const slide = Math.ceil(event.nativeEvent.contentOffset.x / (CARD_WIDTH + CARD_SPACING));
-    if (slide !== currentSlide && slide >= 0 && slide < featuredOffers.length) {
-      setCurrentSlide(slide);
-    }
-  }, [currentSlide, featuredOffers]);
-
-  // Callbacks
+  // 🎭 ANIMACIONES Y HANDLERS
   const animateEntry = useCallback(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -565,8 +709,65 @@ const PublicHome: React.FC<PublicHomeProps> = ({ navigation }) => {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
+  const onSlideChange = useCallback(
+    (event: any) => {
+      if (!featuredOffers || featuredOffers.length === 0) return;
+
+      const slide = Math.ceil(
+        event.nativeEvent.contentOffset.x / (CARD_WIDTH + CARD_SPACING)
+      );
+      if (
+        slide !== currentSlide &&
+        slide >= 0 &&
+        slide < featuredOffers.length
+      ) {
+        setCurrentSlide(slide);
+      }
+    },
+    [currentSlide, featuredOffers]
+  );
+
+  const handleCategoryPress = useCallback(
+    (category: JobCategory) => {
+      const hasOffers = parseInt(category.count) > 0;
+      if (!hasOffers) return;
+
+      const categoryJobOffers = jobOffers.filter(
+        (offer) =>
+          offer.cropType?.name.toLowerCase() === category.name.toLowerCase()
+      );
+
+      setSelectedCategory(category);
+      setCategoryOffers(categoryJobOffers);
+      setModalSortBy("recent");
+      setShowCategoryModal(true);
+
+      Animated.spring(modalSlideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }).start();
+    },
+    [jobOffers, modalSlideAnim]
+  );
+
+  const closeCategoryModal = useCallback(() => {
+    Animated.timing(modalSlideAnim, {
+      toValue: height,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowCategoryModal(false);
+      setSelectedCategory(null);
+      setCategoryOffers([]);
+    });
+  }, [modalSlideAnim]);
+
+  // 📡 DATA LOADING MEJORADO
   const loadJobOffers = useCallback(async (): Promise<JobOfferData[]> => {
     try {
+      setErrors((prev) => ({ ...prev, offers: null }));
       const response = await getAvailableJobOffersNoAuth();
       let offers: JobOfferData[] = [];
 
@@ -579,64 +780,70 @@ const PublicHome: React.FC<PublicHomeProps> = ({ navigation }) => {
       setJobOffers(offers);
       return offers;
     } catch (error) {
-      console.error("Error loading job offers:", error);
+      const errorMessage = handleAsyncError(error, "carga de ofertas");
+      setErrors((prev) => ({ ...prev, offers: errorMessage }));
       setJobOffers([]);
       return [];
     }
   }, []);
 
-  const loadCropTypes = useCallback(async (offers: JobOfferData[]) => {
-    try {
-      const cropTypesResponse = await getCropType();
-      let cropTypes: CropType[] = [];
+  const loadCropTypes = useCallback(
+    async (offers: JobOfferData[]) => {
+      try {
+        setErrors((prev) => ({ ...prev, categories: null }));
+        const cropTypesResponse = await getCropType();
+        let cropTypes: CropType[] = [];
 
-      if (Array.isArray(cropTypesResponse)) {
-        cropTypes = cropTypesResponse;
-      } else if (cropTypesResponse && cropTypesResponse.cropTypes) {
-        cropTypes = cropTypesResponse.cropTypes;
-      } else if (cropTypesResponse && cropTypesResponse.data) {
-        cropTypes = cropTypesResponse.data;
-      }
-
-      // Calculate crop counts locally within this function
-      const counts: { [key: string]: number } = {};
-      offers.forEach((offer) => {
-        if (offer.cropType && offer.cropType.name) {
-          const cropName = offer.cropType.name;
-          counts[cropName] = (counts[cropName] || 0) + 1;
+        if (Array.isArray(cropTypesResponse)) {
+          cropTypes = cropTypesResponse;
+        } else if (cropTypesResponse && cropTypesResponse.cropTypes) {
+          cropTypes = cropTypesResponse.cropTypes;
+        } else if (cropTypesResponse && cropTypesResponse.data) {
+          cropTypes = cropTypesResponse.data;
         }
-      });
 
-      const dynamicCategories: JobCategory[] = cropTypes.map((cropType) => {
-        const config = getCropConfig(cropType.name);
-        const stats = calculateCategoryStats(cropType.name, offers);
-        return {
-          id: cropType.id,
-          name: cropType.name,
-          image: getCropImage(cropType.name),
-          count: counts[cropType.name] > 0 ? `${counts[cropType.name]}` : "0",
-          gradient: config.gradient,
-          config: config,
-          stats,
-        };
-      });
+        const counts: { [key: string]: number } = {};
+        offers.forEach((offer) => {
+          if (offer.cropType && offer.cropType.name) {
+            const cropName = offer.cropType.name;
+            counts[cropName] = (counts[cropName] || 0) + 1;
+          }
+        });
 
-      setCategories(dynamicCategories);
-    } catch (error) {
-      console.error("Error loading crop types:", error);
-      setCategories([]);
-    }
-  }, [calculateCategoryStats]);
+        const dynamicCategories: JobCategory[] = cropTypes.map((cropType) => {
+          const config = getCropConfig(cropType.name);
+          const stats = calculateCategoryStats(cropType.name, offers);
+          return {
+            id: cropType.id,
+            name: cropType.name,
+            image: getCropImage(cropType.name),
+            count: counts[cropType.name] > 0 ? `${counts[cropType.name]}` : "0",
+            gradient: config.gradient,
+            config: config,
+            stats,
+          };
+        });
+
+        setCategories(dynamicCategories);
+      } catch (error) {
+        const errorMessage = handleAsyncError(error, "carga de categorías");
+        setErrors((prev) => ({ ...prev, categories: errorMessage }));
+        setCategories([]);
+      }
+    },
+    [calculateCategoryStats]
+  );
 
   const filterOffers = useCallback(() => {
     let filtered = [...jobOffers];
 
     if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (offer) =>
-          offer.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          offer.cropType?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          offer.displayLocation?.city.toLowerCase().includes(searchQuery.toLowerCase())
+          offer.title.toLowerCase().includes(query) ||
+          offer.cropType?.name.toLowerCase().includes(query) ||
+          offer.displayLocation?.city.toLowerCase().includes(query)
       );
     }
 
@@ -645,206 +852,216 @@ const PublicHome: React.FC<PublicHomeProps> = ({ navigation }) => {
 
   const loadInitialData = useCallback(async () => {
     try {
-      setLoading(true);
+      setLoading({ offers: true, categories: true, modal: false });
+      setErrors({ offers: null, categories: null, general: null });
+
       const offers = await loadJobOffers();
       await loadCropTypes(offers);
     } catch (error) {
-      console.error("Error loading initial data:", error);
+      const errorMessage = handleAsyncError(error, "carga inicial");
+      setErrors((prev) => ({ ...prev, general: errorMessage }));
     } finally {
-      setLoading(false);
+      setLoading({ offers: false, categories: false, modal: false });
     }
   }, [loadJobOffers, loadCropTypes]);
 
-  // Effects
+  const retryLoad = useCallback(() => {
+    loadInitialData();
+  }, [loadInitialData]);
+
+  // 🔄 EFFECTS
   useEffect(() => {
     loadInitialData();
     animateEntry();
-  }, [loadInitialData, animateEntry]);
+  }, []);
 
   useEffect(() => {
     filterOffers();
   }, [filterOffers]);
 
-  // Auto-scroll effect - CORREGIDO
+  // Auto-scroll effect mejorado
   useEffect(() => {
     if (featuredOffers && featuredOffers.length > 1) {
-      const timer = setInterval(() => {
+      autoScrollRef.current = setInterval(() => {
         const nextIndex = (currentSlide + 1) % featuredOffers.length;
-        flatListRef.current?.scrollToOffset({ 
+        flatListRef.current?.scrollToOffset({
           offset: nextIndex * (CARD_WIDTH + CARD_SPACING),
-          animated: true 
+          animated: true,
         });
-      }, 5000);
-  
-      return () => clearInterval(timer);
+      }, AUTO_SCROLL_INTERVAL);
+
+      return () => {
+        if (autoScrollRef.current) {
+          clearInterval(autoScrollRef.current);
+        }
+      };
     }
   }, [currentSlide, featuredOffers]);
 
-  // Reset modal animation when modal is closed
   useEffect(() => {
     if (!showCategoryModal) {
       modalSlideAnim.setValue(height);
     }
   }, [showCategoryModal, modalSlideAnim]);
 
-  // Función para renderizar dots de paginación - CORREGIDA
-  const renderPaginationDots = () => (
-    <View style={styles.paginationContainer}>
-      {featuredOffers && featuredOffers.map((_, index) => (
-        <TouchableOpacity
-          key={index}
-          style={[
-            styles.paginationDot,
-            index === currentSlide && styles.paginationDotActive,
-          ]}
-          onPress={() => {
-            flatListRef.current?.scrollToOffset({ 
-              offset: index * (CARD_WIDTH + CARD_SPACING),
-              animated: true 
-            });
-            setCurrentSlide(index);
-          }}
-        />
-      ))}
-    </View>
+  // 🎨 RENDER FUNCTIONS
+  const renderPaginationDots = useCallback(
+    () => (
+      <View style={styles.paginationContainer}>
+        {featuredOffers &&
+          featuredOffers.map((_, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.paginationDot,
+                index === currentSlide && styles.paginationDotActive,
+              ]}
+              onPress={() => {
+                flatListRef.current?.scrollToOffset({
+                  offset: index * (CARD_WIDTH + CARD_SPACING),
+                  animated: true,
+                });
+                setCurrentSlide(index);
+              }}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel={`Ir a la oferta ${index + 1} de ${
+                featuredOffers.length
+              }`}
+            />
+          ))}
+      </View>
+    ),
+    [featuredOffers, currentSlide]
   );
 
-  // 🎨 COMPONENTE BENEFITS INDICATOR CON NUEVOS COLORES
-  const BenefitsIndicator = ({
-    includesFood,
-    includesLodging,
-    style = "compact",
-  }) => {
-    if (style === "compact") {
-      return (
-        <View style={styles.benefitsCompact}>
-          {includesFood && (
-            <View style={[styles.benefitIcon, { backgroundColor: "#B5883E" }]}>
-              <Ionicons name="restaurant" size={12} color="#FFFFFF" />
-            </View>
-          )}
-          {includesLodging && (
-            <View style={[styles.benefitIcon, { backgroundColor: "#3A7DC1" }]}>
-              <Ionicons name="home" size={12} color="#FFFFFF" />
-            </View>
-          )}
-        </View>
-      );
-    }
-
-    if (style === "detailed") {
-      return (
-        <View style={styles.benefitsDetailed}>
-          <View style={styles.benefitRow}>
-            <Ionicons
-              name="restaurant"
-              size={16}
-              color={includesFood ? "#B5883E" : COLORS.gray400}
-            />
+  const renderFloatingNavigation = useCallback(
+    () => (
+      <View style={styles.simpleNavigationContainer}>
+        <View style={styles.simpleNavigationTabs}>
+          <TouchableOpacity
+            style={[
+              styles.simpleNavTab,
+              activeTab === "available" && styles.simpleNavTabActive,
+            ]}
+            onPress={() => {
+              setActiveTab("available");
+              setSelectedCountry("");
+            }}
+            accessible={true}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === "available" }}>
             <Text
               style={[
-                styles.benefitText,
-                { color: includesFood ? "#B5883E" : COLORS.gray400 },
+                styles.simpleNavTabText,
+                activeTab === "available" && styles.simpleNavTabTextActive,
               ]}>
-              Alimentación {includesFood ? "incluida" : "no incluida"}
+              Ofertas disponibles
             </Text>
-          </View>
+          </TouchableOpacity>
 
-          <View style={styles.benefitRow}>
-            <Ionicons
-              name="home"
-              size={16}
-              color={includesLodging ? "#3A7DC1" : COLORS.gray400}
-            />
+          <TouchableOpacity
+            style={[
+              styles.simpleNavTab,
+              activeTab === "nearby" && styles.simpleNavTabActive,
+            ]}
+            onPress={() => setActiveTab("nearby")}
+            accessible={true}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === "nearby" }}>
             <Text
               style={[
-                styles.benefitText,
-                { color: includesLodging ? "#3A7DC1" : COLORS.gray400 },
+                styles.simpleNavTabText,
+                activeTab === "nearby" && styles.simpleNavTabTextActive,
               ]}>
-              Alojamiento {includesLodging ? "incluido" : "no incluido"}
+              Ofertas cercanas
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
-      );
-    }
+      </View>
+    ),
+    [activeTab]
+  );
 
-    // Style "badges"
+  // 🎨 NUEVO COMPONENTE DE CATEGORÍAS COMPACTAS
+  const renderCompactCategories = useCallback(() => {
+    const visibleCategories = categories.filter(cat => parseInt(cat.count) > 0);
+    
     return (
-      <View style={styles.benefitsBadges}>
-        {includesFood && (
-          <View style={[styles.benefitBadge, { backgroundColor: "#B5883E" }]}>
-            <Ionicons name="restaurant" size={14} color="#FFFFFF" />
-            <Text style={styles.benefitBadgeText}>Comida</Text>
-          </View>
-        )}
-        {includesLodging && (
-          <View style={[styles.benefitBadge, { backgroundColor: "#3A7DC1" }]}>
-            <Ionicons name="home" size={14} color="#FFFFFF" />
-            <Text style={styles.benefitBadgeText}>Alojamiento</Text>
-          </View>
-        )}
+      <View style={styles.compactCategoriesSection}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Explora por categoría</Text>
+          <Text style={styles.sectionSubtitle}>
+            Encuentra oportunidades en tu área de interés
+          </Text>
+        </View>
 
-        {!includesFood && !includesLodging && (
-          <View
-            style={[styles.benefitBadge, { backgroundColor: COLORS.gray400 }]}>
-            <Ionicons name="close-circle" size={14} color="#FFFFFF" />
-            <Text style={styles.benefitBadgeText}>Sin beneficios</Text>
-          </View>
-        )}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.compactCategoriesScrollContainer}
+          style={styles.compactCategoriesScroll}>
+          {visibleCategories.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              style={styles.compactCategoryChip}
+              onPress={() => handleCategoryPress(category)}
+              activeOpacity={0.8}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel={`Categoría ${category.config.title} con ${category.count} ofertas`}>
+              
+              <LinearGradient
+                colors={category.config.gradient}
+                style={styles.compactCategoryGradient}
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 1}}>
+                
+                <View style={styles.compactCategoryContent}>
+                  <View style={styles.compactCategoryIconContainer}>
+                    <Text style={styles.compactCategoryEmoji}>
+                      {category.config.emoji}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.compactCategoryTextContainer}>
+                    <Text style={styles.compactCategoryTitle}>
+                      {category.config.title}
+                    </Text>
+                    <Text style={styles.compactCategoryCount}>
+                      {category.count} ofertas
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.compactCategoryArrow}>
+                    <Ionicons 
+                      name="chevron-forward" 
+                      size={16} 
+                      color="rgba(255,255,255,0.8)" 
+                    />
+                  </View>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
     );
-  };
+  }, [categories, handleCategoryPress]);
 
-  // Render functions
-  const renderFloatingNavigation = () => (
-    <View style={styles.simpleNavigationContainer}>
-      <View style={styles.simpleNavigationTabs}>
+  // 🎨 NUEVO COMPONENTE DE CARDS MEJORADOS
+  const renderVisualJobCard = useCallback(
+    (item: JobOfferData, index: number) => {
+      const cropConfig = getCropConfig(item.cropType?.name || "");
+      const distance = getDistance(item.displayLocation?.city || "");
+      const isNearbyTab = activeTab === "nearby";
+      const employerName = getEmployerName(item.employer);
+      const initials = getInitials(employerName);
+
+      return (
         <TouchableOpacity
-          style={[
-            styles.simpleNavTab,
-            activeTab === "available" && styles.simpleNavTabActive,
-          ]}
-          onPress={() => {
-            setActiveTab("available");
-            setSelectedCountry("");
-          }}>
-          <Text
-            style={[
-              styles.simpleNavTabText,
-              activeTab === "available" && styles.simpleNavTabTextActive,
-            ]}>
-            Ofertas disponibles
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.simpleNavTab,
-            activeTab === "nearby" && styles.simpleNavTabActive,
-          ]}
-          onPress={() => setActiveTab("nearby")}>
-          <Text
-            style={[
-              styles.simpleNavTabText,
-              activeTab === "nearby" && styles.simpleNavTabTextActive,
-            ]}>
-            Ofertas cercanas
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderJobCard = (item: JobOfferData, index: number) => {
-    const cropConfig = getCropConfig(item.cropType?.name || "");
-    const distance = getDistance(item.displayLocation?.city || "");
-    const isNearbyTab = activeTab === "nearby";
-    const employerName = getEmployerName(item.employer);
-    const initials = getInitials(employerName);
-
-    return (
-      <View key={item.id} style={styles.modernJobCard}>
-        <TouchableOpacity
+          key={item.id}
+          style={styles.visualJobCard}
           onPress={() =>
             navigation.navigate("WorkerJobOfferDetailNoAuth", {
               jobId: item.id,
@@ -852,815 +1069,317 @@ const PublicHome: React.FC<PublicHomeProps> = ({ navigation }) => {
             })
           }
           activeOpacity={0.95}
-          style={styles.cardTouchable}>
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={`Ver detalles de la oferta: ${item.title}`}>
           
-          {/* Card Container with gradient border */}
-          <View style={styles.cardContainer}>
-            <LinearGradient
-              colors={["#FFFFFF", "#FAFAFA"]}
-              style={styles.cardBackground}>
-              
-              {/* Header con badges mejorados */}
-              <View style={styles.cardHeader}>
-                <View style={styles.timeAndDistance}>
-                  <View style={styles.timeBadge}>
-                    <Ionicons
-                      name="time-outline"
-                      size={12}
-                      color={COLORS.textSecondary}
-                    />
-                    <Text style={styles.timeBadgeText}>
-                      {formatTimeAgo(item.createdAt || item.startDate)}
-                    </Text>
-                  </View>
-
-                  {isNearbyTab && distance < 500 && (
-                    <View style={styles.distanceBadge}>
-                      <Ionicons
-                        name="location-outline"
-                        size={12}
-                        color={COLORS.accent}
-                      />
-                      <Text style={styles.distanceBadgeText}>{distance}km</Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Status indicator */}
-                <View
-                  style={[
-                    styles.statusIndicator,
-                    { backgroundColor: cropConfig.color },
-                  ]}>
-                  <View style={styles.statusDot} />
-                </View>
-              </View>
-
-              {/* Main Content */}
-              <View style={styles.cardMainContent}>
-                {/* Job Title with crop icon */}
-                <View style={styles.titleSection}>
-                  <View
-                    style={[
-                      styles.cropIconContainer,
-                      { backgroundColor: `${cropConfig.color}15` },
-                    ]}>
-                    <Text style={styles.cropEmoji}>{cropConfig.emoji}</Text>
-                  </View>
-                  <View style={styles.titleContainer}>
-                    <Text style={styles.jobTitle} numberOfLines={2}>
-                      {item.title}
-                    </Text>
-                    <View style={styles.cropTypeContainer}>
-                      <Text
-                        style={[styles.cropType, { color: cropConfig.color }]}>
-                        {item.cropType?.name || "N/A"}
-                      </Text>
-                      {item.phase?.name && (
-                        <>
-                          <View style={styles.phaseSeparator} />
-                          <Text style={styles.phaseText}>
-                            {item.phase.name}
-                          </Text>
-                        </>
-                      )}
-                    </View>
-                  </View>
-                </View>
-
-                {/* Location */}
-                <View style={styles.locationSection}>
-                  <View style={styles.locationIcon}>
-                    <Ionicons name="location" size={16} color={COLORS.accent} />
-                  </View>
-                  <Text style={styles.locationText} numberOfLines={1}>
-                    {item.displayLocation?.city}, {item.displayLocation?.state}
-                  </Text>
-                  {item.displayLocation?.country && (
-                    <View style={styles.countryFlag}>
-                      <Text style={styles.countryFlagText}>
-                        {item.displayLocation.country === "Colombia"
-                          ? "🇨🇴"
-                          : "🇻🇪"}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Benefits with improved design */}
-                <View style={styles.benefitsSection}>
-                  <Text style={styles.benefitsLabel}>
-                    Beneficios incluidos:
-                  </Text>
-                  <View style={styles.benefitsContainer}>
-                    <View
-                      style={[
-                        styles.benefitChip,
-                        {
-                          backgroundColor: item.includesFood
-                            ? "#E8F5E8"
-                            : "#F5F5F5",
-                          borderColor: item.includesFood
-                            ? "#4CAF50"
-                            : "#E0E0E0",
-                        },
-                      ]}>
-                      <Ionicons
-                        name={item.includesFood ? "checkmark" : "close"}
-                        size={14}
-                        color={item.includesFood ? "#4CAF50" : "#9E9E9E"}
-                      />
-                      <Text
-                        style={[
-                          styles.benefitChipText,
-                          {
-                            color: item.includesFood ? "#2E7D32" : "#757575",
-                          },
-                        ]}>
-                        Alimentación
-                      </Text>
-                    </View>
-
-                    <View
-                      style={[
-                        styles.benefitChip,
-                        {
-                          backgroundColor: item.includesLodging
-                            ? "#E3F2FD"
-                            : "#F5F5F5",
-                          borderColor: item.includesLodging
-                            ? "#2196F3"
-                            : "#E0E0E0",
-                        },
-                      ]}>
-                      <Ionicons
-                        name={item.includesLodging ? "checkmark" : "close"}
-                        size={14}
-                        color={item.includesLodging ? "#2196F3" : "#9E9E9E"}
-                      />
-                      <Text
-                        style={[
-                          styles.benefitChipText,
-                          {
-                            color: item.includesLodging ? "#1565C0" : "#757575",
-                          },
-                        ]}>
-                        Alojamiento
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              {/* Footer mejorado */}
-              <View style={styles.cardFooter}>
-                <View style={styles.employerSection}>
-                  <View
-                    style={[
-                      styles.employerAvatar,
-                      { backgroundColor: cropConfig.color },
-                    ]}>
-                    <Text style={styles.employerInitials}>{initials}</Text>
-                  </View>
-                  <View style={styles.employerInfo}>
-                    <Text style={styles.employerName} numberOfLines={1}>
-                      {employerName}
-                    </Text>
-                    <View style={styles.farmInfo}>
-                      <Ionicons
-                        name="business-outline"
-                        size={12}
-                        color={COLORS.textSecondary}
-                      />
-                      <Text style={styles.farmName} numberOfLines={1}>
-                        {item.farm?.name || "Finca"}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.salarySection}>
-                  <Text style={styles.salaryAmount}>
-                    {formatSalaryCompact(item.salary)}
-                  </Text>
-                  <Text style={styles.salaryPeriod}>
-                    {item.paymentType === "Por_dia" ? "por día" : "por trabajo"}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Action button floating */}
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  { backgroundColor: cropConfig.color },
-                ]}
-                onPress={() =>
-                  navigation.navigate("WorkerJobOfferDetailNoAuth", {
-                    jobId: item.id,
-                    fromPublic: true,
-                  })
-                }>
-                <Text style={styles.actionButtonText}>Ver detalles</Text>
-                <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
-              </TouchableOpacity>
-
-              {/* Applications count badge */}
-              {item.applicationsCount > 0 && (
-                <View style={styles.applicationsBadge}>
-                  <Ionicons
-                    name="people-outline"
-                    size={12}
-                    color={COLORS.textSecondary}
-                  />
-                  <Text style={styles.applicationsBadgeText}>
-                    {item.applicationsCount} aplicantes
-                  </Text>
-                </View>
-              )}
-            </LinearGradient>
-          </View>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  const renderFeaturedOffer = ({ item }: { item: JobOfferData }) => {
-    const cropConfig = getCropConfig(item.cropType?.name || "");
-    const employerName = getEmployerName(item.employer);
-    const initials = getInitials(employerName);
-    const locationText = getLocationText(item);
-  
-    return (
-      <View style={styles.featuredCard}>
-        <TouchableOpacity
-          onPress={() =>
-            navigation.navigate("WorkerJobOfferDetailNoAuth", {
-              jobId: item.id,
-              fromPublic: true,
-            })
-          }
-          activeOpacity={0.9}>
-          <View style={styles.featuredContainer}>
-            <Image
+          <View style={styles.visualCardContainer}>
+            {/* Imagen de fondo optimizada con overlay */}
+            <OptimizedImage
               source={getCropImage(item.cropType?.name || "")}
-              style={styles.featuredImage}
+              style={styles.visualCardImage}
+              accessible={false}
             />
-  
-            {/* Gradient overlay mejorado - solo en la parte inferior */}
+
             <LinearGradient
               colors={[
-                'transparent',
-                'transparent', 
-                'rgba(0,0,0,0.4)',
-                'rgba(0,0,0,0.8)',
-                'rgba(0,0,0,0.95)'
+                "transparent",
+                "transparent", 
+                "rgba(0,0,0,0.3)",
+                "rgba(0,0,0,0.7)",
+                "rgba(0,0,0,0.9)"
               ]}
-              locations={[0, 0.3, 0.6, 0.8, 1]}
-              style={styles.featuredOverlay}
+              locations={[0, 0.2, 0.5, 0.8, 1]}
+              style={styles.visualCardOverlay}
             />
-  
-            {/* Content overlay reorganizado */}
-            <View style={styles.featuredContent}>
-              {/* Header badges - solo en la parte superior */}
-              <View style={styles.featuredHeader}>
-                <View style={styles.featuredBadges}>
-                  <View style={styles.featuredStatusBadge}>
-                    <Text style={styles.featuredStatusText}>✨ Destacado</Text>
-                  </View>
-                  <View style={styles.featuredTimeBadge}>
-                    <Text style={styles.featuredTimeText}>
-                      {formatTimeAgo(item.createdAt || item.startDate)}
+
+            {/* Contenido superpuesto */}
+            <View style={styles.visualCardContent}>
+              {/* Header con badges */}
+              <View style={styles.visualCardHeader}>
+                <View style={styles.visualCardBadges}>
+                  <View style={[styles.visualCropBadge, { backgroundColor: cropConfig.color }]}>
+                    <Text style={styles.visualCropBadgeText}>
+                      {cropConfig.emoji} {item.cropType?.name}
                     </Text>
                   </View>
-                </View>
-              </View>
-  
-              {/* Espaciador para empujar contenido hacia abajo */}
-              <View style={styles.featuredSpacer} />
-  
-              {/* Todo el contenido principal en la parte inferior */}
-              <View style={styles.featuredBottomContent}>
-                {/* Información rápida arriba del título */}
-                <View style={styles.featuredQuickInfoTop}>
-                  <View style={styles.featuredInfoBadge}>
-                    <Text style={styles.featuredCropType}>{item.cropType?.name}</Text>
-                    <Text style={styles.featuredSeparator}>•</Text>
-                    <Text style={styles.featuredLocation}>{item.displayLocation?.city}</Text>
-                  </View>
-                </View>
-  
-                {/* Título principal */}
-                <View style={styles.featuredTitleSection}>
-                  <Text style={styles.featuredTitle}>{item.title}</Text>
-                </View>
-  
-                {/* Información adicional */}
-                <View style={styles.featuredDetailsGrid}>
-                  <View style={styles.featuredDetailItem}>
-                    <Ionicons name="business-outline" size={14} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.featuredDetailText}>{item.farm?.name || 'Finca'}</Text>
-                  </View>
-                  <View style={styles.featuredDetailItem}>
-                    <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.featuredDetailText}>{item.duration} días</Text>
-                  </View>
-                </View>
-  
-                {/* Footer con empleador y botón */}
-                <View style={styles.featuredFooter}>
-                  <View style={styles.featuredEmployerSection}>
-                    <View style={[styles.featuredEmployerAvatar, { backgroundColor: cropConfig.color }]}>
-                      <Text style={styles.featuredEmployerInitials}>{initials}</Text>
-                    </View>
-                    <View style={styles.featuredEmployerInfo}>
-                      <Text style={styles.featuredEmployerName}>{employerName}</Text>
-                      <Text style={styles.featuredSalary}>
-                        {formatSalaryCompact(item.salary)} {item.paymentType === "Por_dia" ? "/día" : "/trabajo"}
-                      </Text>
-                    </View>
-                  </View>
-  
-                  <TouchableOpacity style={styles.featuredActionButton}>
-                    <Text style={styles.featuredActionText}>Ver oferta</Text>
-                    <Ionicons name="arrow-forward" size={16} color="#000000" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-  
-  // MEJORADO CATEGORY CARD CON MÁS INFORMACIÓN Y MEJOR DISEÑO
-  const renderCategoryCard = (item: JobCategory) => {
-    const hasOffers = parseInt(item.count) > 0;
-    const stats = item.stats;
-
-    return (
-      <TouchableOpacity
-        key={item.id}
-        style={[styles.enhancedCategoryCard, !hasOffers && styles.categoryCardDisabled]}
-        onPress={() => handleCategoryPress(item)}
-        activeOpacity={0.8}>
-        
-        {/* Background Image */}
-        <Image source={item.image} style={styles.categoryBackgroundImage} />
-        
-        {/* Gradient Overlay */}
-        <LinearGradient
-          colors={item.config.gradient || [item.config.color, `${item.config.color}DD`]}
-          style={styles.categoryGradientOverlay}
-        />
-        
-        {/* Content Container */}
-        <View style={styles.categoryCardContent}>
-          {/* Header con emoji y ofertas count */}
-          <View style={styles.categoryCardHeader}>
-            <View style={styles.categoryEmojiContainer}>
-              <Text style={styles.categoryEmoji}>{item.config.emoji}</Text>
-            </View>
-            <View style={styles.categoryOffersCount}>
-              <Text style={styles.categoryOffersCountText}>{item.count}</Text>
-              <Text style={styles.categoryOffersLabel}>ofertas</Text>
-            </View>
-          </View>
-
-          {/* Spacer */}
-          <View style={styles.categorySpacer} />
-
-          {/* Bottom Content */}
-          <View style={styles.categoryBottomContent}>
-            {/* Title */}
-            <Text style={styles.categoryTitle}>{item.config.title}</Text>
-            <Text style={styles.categoryDescription}>{item.config.description}</Text>
-
-            {/* Stats Row */}
-            {hasOffers && stats && (
-              <View style={styles.categoryStatsContainer}>
-                <View style={styles.categoryStats}>
-                  {/* Salary */}
-                  {stats.averageSalary > 0 && (
-                    <View style={styles.categoryStat}>
-                      <Ionicons name="cash-outline" size={12} color="rgba(255,255,255,0.9)" />
-                      <Text style={styles.categoryStatText}>
-                        {formatSalaryCompact(stats.averageSalary)}
-                      </Text>
-                    </View>
-                  )}
                   
-                  {/* Cities */}
-                  {stats.cities.length > 0 && (
-                    <View style={styles.categoryStat}>
-                      <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.9)" />
-                      <Text style={styles.categoryStatText}>
-                        {stats.cities.length} ciudades
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Recent offers */}
-                  {stats.recentOffers > 0 && (
-                    <View style={styles.categoryStat}>
-                      <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.9)" />
-                      <Text style={styles.categoryStatText}>
-                        {stats.recentOffers} nuevas
+                  {isNearbyTab && distance < 500 && (
+                    <View style={styles.visualDistanceBadge}>
+                      <Ionicons name="location" size={12} color="#FFFFFF" />
+                      <Text style={styles.visualDistanceBadgeText}>
+                        {distance}km
                       </Text>
                     </View>
                   )}
                 </View>
 
-                {/* Action indicator */}
-                <View style={styles.categoryAction}>
-                  <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.8)" />
-                </View>
-              </View>
-            )}
-
-            {/* No offers state */}
-            {!hasOffers && (
-              <View style={styles.categoryNoOffers}>
-                <Text style={styles.categoryNoOffersText}>Sin ofertas disponibles</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Trending indicator for categories with recent offers */}
-        {hasOffers && stats && stats.recentOffers > 0 && (
-          <View style={styles.categoryTrendingBadge}>
-            <Ionicons name="trending-up" size={12} color="#FFFFFF" />
-            <Text style={styles.categoryTrendingText}>Tendencia</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
-  const renderFilterModal = () => (
-    <Modal
-      visible={showFilters}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => setShowFilters(false)}>
-      <View style={styles.modalOverlay}>
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          onPress={() => setShowFilters(false)}
-        />
-        <View style={styles.modal}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Seleccionar país</Text>
-            <TouchableOpacity onPress={() => setShowFilters(false)}>
-              <Ionicons name="close" size={24} color={COLORS.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.modalContent}>
-            {COUNTRIES.map((country) => (
-              <TouchableOpacity
-                key={country}
-                style={[
-                  styles.countryOption,
-                  selectedCountry === country && styles.countryOptionSelected,
-                ]}
-                onPress={() =>
-                  setSelectedCountry(country === selectedCountry ? "" : country)
-                }>
-                <Text
-                  style={[
-                    styles.countryOptionText,
-                    selectedCountry === country &&
-                      styles.countryOptionTextSelected,
-                  ]}>
-                  {country}
-                </Text>
-                {selectedCountry === country && (
-                  <Ionicons name="checkmark" size={20} color={COLORS.accent} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={styles.modalButtonSecondary}
-              onPress={() => setSelectedCountry("")}>
-              <Text style={styles.modalButtonSecondaryText}>Limpiar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.modalButtonPrimary}
-              onPress={() => setShowFilters(false)}>
-              <Text style={styles.modalButtonPrimaryText}>Aplicar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // MEJORADO MODAL DE CATEGORÍAS CON MUCHO MEJOR DISEÑO Y FUNCIONALIDAD
-  const renderCategoryModal = () => (
-    <Modal
-      visible={showCategoryModal}
-      transparent={true}
-      animationType="none"
-      onRequestClose={closeCategoryModal}>
-      <View style={styles.enhancedModalOverlay}>
-        <TouchableOpacity 
-          style={styles.enhancedModalBackdrop}
-          activeOpacity={1}
-          onPress={closeCategoryModal}
-        />
-        
-        <Animated.View 
-          style={[
-            styles.enhancedModalContainer,
-            {
-              transform: [{ translateY: modalSlideAnim }]
-            }
-          ]}>
-          
-          {/* Modal Header Mejorado */}
-          <LinearGradient
-            colors={selectedCategory?.config?.gradient || [COLORS.primary, COLORS.accent]}
-            style={styles.enhancedModalHeader}>
-            
-            {/* Background Pattern */}
-            <View style={styles.modalHeaderPattern}>
-              <Ionicons name="leaf-outline" size={120} color="rgba(255,255,255,0.1)" />
-            </View>
-            
-            <View style={styles.modalHeaderContent}>
-              <View style={styles.modalHeaderTop}>
-                <TouchableOpacity 
-                  style={styles.enhancedModalCloseButton}
-                  onPress={closeCategoryModal}>
-                  <Ionicons name="close" size={24} color="#FFFFFF" />
+                <TouchableOpacity style={styles.visualFavoriteButton}>
+                  <Ionicons name="heart-outline" size={20} color="rgba(255,255,255,0.8)" />
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.modalHeaderMain}>
-                <View style={styles.modalHeaderInfo}>
-                  <View style={styles.modalEmojiContainer}>
-                    <Text style={styles.modalEmoji}>
-                      {selectedCategory?.config?.emoji || "🌱"}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.modalTitleContainer}>
-                    <Text style={styles.modalMainTitle}>
-                      {selectedCategory?.config?.title || "Categoría"}
-                    </Text>
-                    <Text style={styles.modalSubtitle}>
-                      {selectedCategory?.config?.description || "Descripción"}
-                    </Text>
-                  </View>
+              {/* Espaciador */}
+              <View style={styles.visualCardSpacer} />
+
+              {/* Contenido principal */}
+              <View style={styles.visualCardMainContent}>
+                <View style={styles.visualLocationContainer}>
+                  <Ionicons name="location" size={14} color="rgba(255,255,255,0.8)" />
+                  <Text style={styles.visualLocationText} numberOfLines={1}>
+                    {item.displayLocation?.city}, {item.displayLocation?.state}
+                  </Text>
+                  <Text style={styles.visualCountryFlag}>
+                    {item.displayLocation?.country === "Colombia" ? "🇨🇴" : "🇻🇪"}
+                  </Text>
                 </View>
 
-                {/* Stats Cards */}
-                <View style={styles.modalStatsGrid}>
-                  <View style={styles.modalStatCard}>
-                    <Text style={styles.modalStatNumber}>{categoryOffers.length}</Text>
-                    <Text style={styles.modalStatLabel}>Ofertas</Text>
-                  </View>
-                  
-                  {selectedCategory?.stats?.averageSalary > 0 && (
-                    <View style={styles.modalStatCard}>
-                      <Text style={styles.modalStatNumber}>
-                        {formatSalaryCompact(selectedCategory.stats.averageSalary)}
-                      </Text>
-                      <Text style={styles.modalStatLabel}>Promedio</Text>
-                    </View>
-                  )}
-                  
-                  {selectedCategory?.stats?.cities.length > 0 && (
-                    <View style={styles.modalStatCard}>
-                      <Text style={styles.modalStatNumber}>
-                        {selectedCategory.stats.cities.length}
-                      </Text>
-                      <Text style={styles.modalStatLabel}>Ciudades</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
-          </LinearGradient>
-
-          {/* Controls Section */}
-          <View style={styles.modalControlsSection}>
-            <View style={styles.modalControlsHeader}>
-              <Text style={styles.modalControlsTitle}>Ordenar por:</Text>
-              <View style={styles.modalSortControls}>
-                {[
-                  { key: "recent", label: "Recientes", icon: "time-outline" },
-                  { key: "salary", label: "Salario", icon: "cash-outline" },
-                  { key: "distance", label: "Distancia", icon: "location-outline" }
-                ].map((sort) => (
-                  <TouchableOpacity
-                    key={sort.key}
-                    style={[
-                      styles.modalSortButton,
-                      modalSortBy === sort.key && styles.modalSortButtonActive
-                    ]}
-                    onPress={() => setModalSortBy(sort.key)}>
-                    <Ionicons 
-                      name={sort.icon} 
-                      size={14} 
-                      color={modalSortBy === sort.key ? "#FFFFFF" : COLORS.textSecondary}
-                    />
-                    <Text style={[
-                      styles.modalSortButtonText,
-                      modalSortBy === sort.key && styles.modalSortButtonTextActive
-                    ]}>
-                      {sort.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </View>
-
-          {/* Lista de ofertas mejorada */}
-          <ScrollView 
-            style={styles.enhancedModalContent}
-            showsVerticalScrollIndicator={false}>
-            {sortedCategoryOffers.length > 0 ? (
-              <View style={styles.enhancedOffersList}>
-                {sortedCategoryOffers.map((offer, index) => (
-                  <View key={offer.id} style={styles.enhancedOfferCard}>
-                    <TouchableOpacity
-                      onPress={() => {
-                        closeCategoryModal();
-                        navigation.navigate("WorkerJobOfferDetailNoAuth", {
-                          jobId: offer.id,
-                          fromPublic: true,
-                        });
-                      }}
-                      style={styles.enhancedOfferTouchable}
-                      activeOpacity={0.7}>
-                      
-                      {/* Card Header */}
-                      <View style={styles.enhancedOfferHeader}>
-                        <View style={styles.enhancedOfferBadges}>
-                          <View style={styles.enhancedOfferTimeBadge}>
-                            <Ionicons name="time-outline" size={10} color={COLORS.textSecondary} />
-                            <Text style={styles.enhancedOfferTimeText}>
-                              {formatTimeAgo(offer.createdAt || offer.startDate)}
-                            </Text>
-                          </View>
-                          
-                          {offer.displayLocation?.city && (
-                            <View style={styles.enhancedOfferLocationBadge}>
-                              <Ionicons name="location" size={10} color={COLORS.accent} />
-                              <Text style={styles.enhancedOfferLocationText}>
-                                {offer.displayLocation.city}
-                              </Text>
-                            </View>
-                          )}
-
-                          {modalSortBy === "distance" && (
-                            <View style={styles.enhancedOfferDistanceBadge}>
-                              <Text style={styles.enhancedOfferDistanceText}>
-                                {getDistance(offer.displayLocation?.city || "")}km
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-
-                        <View style={[
-                          styles.enhancedOfferStatusDot,
-                          { backgroundColor: selectedCategory?.config?.color || COLORS.primary }
-                        ]} />
-                      </View>
-
-                      {/* Main Content */}
-                      <View style={styles.enhancedOfferMain}>
-                        <Text style={styles.enhancedOfferTitle} numberOfLines={2}>
-                          {offer.title}
-                        </Text>
-                        
-                        {offer.phase?.name && (
-                          <Text style={styles.enhancedOfferPhase}>
-                            {offer.phase.name}
-                          </Text>
-                        )}
-
-                        <View style={styles.enhancedOfferDetails}>
-                          <View style={styles.enhancedOfferDetailItem}>
-                            <Ionicons name="business" size={12} color={COLORS.textSecondary} />
-                            <Text style={styles.enhancedOfferDetailText}>
-                              {offer.farm?.name || "Finca"}
-                            </Text>
-                          </View>
-                          <View style={styles.enhancedOfferDetailItem}>
-                            <Ionicons name="calendar" size={12} color={COLORS.textSecondary} />
-                            <Text style={styles.enhancedOfferDetailText}>
-                              {offer.duration} días
-                            </Text>
-                          </View>
-                          {offer.workersNeeded && (
-                            <View style={styles.enhancedOfferDetailItem}>
-                              <Ionicons name="people" size={12} color={COLORS.textSecondary} />
-                              <Text style={styles.enhancedOfferDetailText}>
-                                {offer.workersNeeded} trabajadores
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-
-                        {/* Benefits Enhanced */}
-                        {(offer.includesFood || offer.includesLodging) && (
-                          <View style={styles.enhancedOfferBenefits}>
-                            {offer.includesFood && (
-                              <View style={styles.enhancedOfferBenefit}>
-                                <Ionicons name="restaurant" size={11} color="#4CAF50" />
-                                <Text style={styles.enhancedOfferBenefitText}>Alimentación</Text>
-                              </View>
-                            )}
-                            {offer.includesLodging && (
-                              <View style={styles.enhancedOfferBenefit}>
-                                <Ionicons name="home" size={11} color="#2196F3" />
-                                <Text style={styles.enhancedOfferBenefitText}>Alojamiento</Text>
-                              </View>
-                            )}
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Footer Enhanced */}
-                      <View style={styles.enhancedOfferFooter}>
-                        <View style={styles.enhancedOfferEmployer}>
-                          <View style={[
-                            styles.enhancedOfferEmployerAvatar,
-                            { backgroundColor: selectedCategory?.config?.color || COLORS.primary }
-                          ]}>
-                            <Text style={styles.enhancedOfferEmployerInitials}>
-                              {getInitials(getEmployerName(offer.employer))}
-                            </Text>
-                          </View>
-                          <View style={styles.enhancedOfferEmployerInfo}>
-                            <Text style={styles.enhancedOfferEmployerName} numberOfLines={1}>
-                              {getEmployerName(offer.employer)}
-                            </Text>
-                            <Text style={styles.enhancedOfferEmployerLocation} numberOfLines={1}>
-                              {offer.displayLocation?.state}
-                            </Text>
-                          </View>
-                        </View>
-                        
-                        <View style={styles.enhancedOfferSalaryContainer}>
-                          <Text style={styles.enhancedOfferSalaryAmount}>
-                            {formatSalaryCompact(offer.salary)}
-                          </Text>
-                          <Text style={styles.enhancedOfferSalaryPeriod}>
-                            {offer.paymentType === "Por_dia" ? "/día" : "/trabajo"}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Applications count */}
-                      {offer.applicationsCount > 0 && (
-                        <View style={styles.enhancedOfferApplications}>
-                          <Ionicons name="people" size={11} color={COLORS.textSecondary} />
-                          <Text style={styles.enhancedOfferApplicationsText}>
-                            {offer.applicationsCount} {offer.applicationsCount === 1 ? 'aplicante' : 'aplicantes'}
-                          </Text>
-                        </View>
-                      )}
-
-                      {/* Call to action arrow */}
-                      <View style={styles.enhancedOfferCTA}>
-                        <Ionicons name="arrow-forward" size={16} color={selectedCategory?.config?.color || COLORS.primary} />
-                      </View>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.enhancedModalEmpty}>
-                <Ionicons name="search-outline" size={48} color={COLORS.textTertiary} />
-                <Text style={styles.enhancedModalEmptyTitle}>
-                  No hay ofertas disponibles
+                <Text style={styles.visualJobTitle} numberOfLines={2}>
+                  {item.title}
                 </Text>
-                <Text style={styles.enhancedModalEmptyText}>
-                  Esta categoría no tiene ofertas laborales en este momento.
-                  Te notificaremos cuando hayan nuevas oportunidades.
+
+                <View style={styles.visualJobDetails}>
+                  <View style={styles.visualDetailItem}>
+                    <Ionicons name="business-outline" size={14} color="rgba(255,255,255,0.8)" />
+                    <Text style={styles.visualDetailText} numberOfLines={1}>
+                      {item.farm?.name || "Finca"}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.visualDetailItem}>
+                    <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.8)" />
+                    <Text style={styles.visualDetailText}>
+                      {item.duration} días
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Footer con empleador y salario */}
+                <View style={styles.visualCardFooter}>
+                  <View style={styles.visualEmployerSection}>
+                    <View style={[styles.visualEmployerAvatar, { backgroundColor: cropConfig.color }]}>
+                      <Text style={styles.visualEmployerInitials}>{initials}</Text>
+                    </View>
+                    <View style={styles.visualEmployerInfo}>
+                      <Text style={styles.visualEmployerName} numberOfLines={1}>
+                        {employerName}
+                      </Text>
+                      <View style={styles.visualBenefitsRow}>
+                        {item.includesFood && (
+                          <View style={styles.visualBenefitIcon}>
+                            <Ionicons name="restaurant" size={12} color="rgba(255,255,255,0.8)" />
+                          </View>
+                        )}
+                        {item.includesLodging && (
+                          <View style={styles.visualBenefitIcon}>
+                            <Ionicons name="home" size={12} color="rgba(255,255,255,0.8)" />
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.visualSalarySection}>
+                    <Text style={styles.visualSalaryAmount}>
+                      {formatSalaryCompact(item.salary)}
+                    </Text>
+                    <Text style={styles.visualSalaryPeriod}>
+                      {item.paymentType === "Por_dia" ? "por día" : "por trabajo"}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Botón de acción */}
+                <TouchableOpacity style={styles.visualActionButton}>
+                  <Text style={styles.visualActionButtonText}>Ver detalles</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#000000" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Badge de rating/tiempo */}
+            <View style={styles.visualRatingBadge}>
+              <Ionicons name="star" size={12} color="#FFD700" />
+              <Text style={styles.visualRatingText}>5.0</Text>
+            </View>
+
+            {/* Badge de aplicantes si hay */}
+            {item.applicationsCount > 0 && (
+              <View style={styles.visualApplicationsBadge}>
+                <Text style={styles.visualApplicationsText}>
+                  {item.applicationsCount} aplicantes
                 </Text>
               </View>
             )}
-          </ScrollView>
-        </Animated.View>
-      </View>
-    </Modal>
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [activeTab, navigation]
   );
 
-  const displayOffers = activeTab === "nearby" ? nearbyOffers : filteredOffers;
+  const renderFeaturedOffer = useCallback(
+    ({ item }: { item: JobOfferData }) => {
+      const cropConfig = getCropConfig(item.cropType?.name || "");
+      const employerName = getEmployerName(item.employer);
+      const initials = getInitials(employerName);
+
+      return (
+        <View style={styles.featuredCard}>
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate("WorkerJobOfferDetailNoAuth", {
+                jobId: item.id,
+                fromPublic: true,
+              })
+            }
+            activeOpacity={0.9}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={`Oferta destacada: ${item.title}`}>
+            <View style={styles.featuredContainer}>
+              <OptimizedImage
+                source={getCropImage(item.cropType?.name || "")}
+                style={styles.featuredImage}
+                accessible={false}
+              />
+
+              <LinearGradient
+                colors={[
+                  "transparent",
+                  "transparent",
+                  "rgba(0,0,0,0.4)",
+                  "rgba(0,0,0,0.8)",
+                  "rgba(0,0,0,0.95)",
+                ]}
+                locations={[0, 0.3, 0.6, 0.8, 1]}
+                style={styles.featuredOverlay}
+              />
+
+              <View style={styles.featuredContent}>
+                <View style={styles.featuredHeader}>
+                  <View style={styles.featuredBadges}>
+                    <View style={styles.featuredStatusBadge}>
+                      <Text style={styles.featuredStatusText}>
+                        ✨ Destacado
+                      </Text>
+                    </View>
+                    <View style={styles.featuredTimeBadge}>
+                      <Text style={styles.featuredTimeText}>
+                        {formatTimeAgo(item.createdAt || item.startDate)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.featuredSpacer} />
+
+                <View style={styles.featuredBottomContent}>
+                  <View style={styles.featuredQuickInfoTop}>
+                    <View style={styles.featuredInfoBadge}>
+                      <Text style={styles.featuredCropType}>
+                        {item.cropType?.name}
+                      </Text>
+                      <Text style={styles.featuredSeparator}>•</Text>
+                      <Text style={styles.featuredLocation}>
+                        {item.displayLocation?.city}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.featuredTitleSection}>
+                    <Text style={styles.featuredTitle}>{item.title}</Text>
+                  </View>
+
+                  <View style={styles.featuredDetailsGrid}>
+                    <View style={styles.featuredDetailItem}>
+                      <Ionicons
+                        name="business-outline"
+                        size={14}
+                        color="rgba(255,255,255,0.8)"
+                      />
+                      <Text style={styles.featuredDetailText}>
+                        {item.farm?.name || "Finca"}
+                      </Text>
+                    </View>
+                    <View style={styles.featuredDetailItem}>
+                      <Ionicons
+                        name="time-outline"
+                        size={14}
+                        color="rgba(255,255,255,0.8)"
+                      />
+                      <Text style={styles.featuredDetailText}>
+                        {item.duration} días
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.featuredFooter}>
+                    <View style={styles.featuredEmployerSection}>
+                      <View
+                        style={[
+                          styles.featuredEmployerAvatar,
+                          { backgroundColor: cropConfig.color },
+                        ]}>
+                        <Text style={styles.featuredEmployerInitials}>
+                          {initials}
+                        </Text>
+                      </View>
+                      <View style={styles.featuredEmployerInfo}>
+                        <Text style={styles.featuredEmployerName}>
+                          {employerName}
+                        </Text>
+                        <Text style={styles.featuredSalary}>
+                          {formatSalaryCompact(item.salary)}{" "}
+                          {item.paymentType === "Por_dia" ? "/día" : "/trabajo"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.featuredActionButton}
+                      accessible={true}
+                      accessibilityRole="button"
+                      accessibilityLabel="Ver oferta destacada">
+                      <Text style={styles.featuredActionText}>Ver oferta</Text>
+                      <Ionicons
+                        name="arrow-forward"
+                        size={16}
+                        color="#000000"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+      );
+    },
+    [navigation]
+  );
+
+  // 🎭 RENDER PRINCIPAL
+  if (errors.general) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <CustomHeaderNoAuth navigation={navigation} />
+        <ErrorBoundary error={errors.general} onRetry={retryLoad} />
+      </SafeAreaView>
+    );
+  }
+
+  if (loading.offers && loading.categories) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <CustomHeaderNoAuth navigation={navigation} />
+        <LoadingSpinner />
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <CustomHeaderNoAuth navigation={navigation} />
 
@@ -1671,10 +1390,11 @@ const PublicHome: React.FC<PublicHomeProps> = ({ navigation }) => {
         ]}>
         <ScrollView
           style={styles.scrollView}
-          showsVerticalScrollIndicator={false}>
+          showsVerticalScrollIndicator={false}
+          accessible={true}>
           {renderFloatingNavigation()}
 
-          {/* Featured Offers Section - CORREGIDA */}
+          {/* Featured Offers Section */}
           {featuredOffers && featuredOffers.length > 0 && (
             <View style={styles.heroSection}>
               <View style={styles.heroHeader}>
@@ -1694,7 +1414,7 @@ const PublicHome: React.FC<PublicHomeProps> = ({ navigation }) => {
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 pagingEnabled
-                snapToInterval={CARD_WIDTH + CARD_SPACING} // Card width + spacing
+                snapToInterval={CARD_WIDTH + CARD_SPACING}
                 snapToAlignment="start"
                 decelerationRate="fast"
                 ItemSeparatorComponent={() => (
@@ -1709,43 +1429,32 @@ const PublicHome: React.FC<PublicHomeProps> = ({ navigation }) => {
                   }
                 )}
                 scrollEventThrottle={16}
-                onScrollToIndexFailed={(info) => {
-                  setTimeout(() => {
-                    flatListRef.current?.scrollToIndex({
-                      index: info.index,
-                      animated: true,
-                    });
-                  }, 100);
-                }}
+                accessible={true}
+                accessibilityLabel="Lista de ofertas destacadas"
               />
               {featuredOffers.length > 1 && renderPaginationDots()}
             </View>
           )}
 
-          {/* Categories Section Mejorada */}
+          {/* Compact Categories Section */}
           {activeTab === "available" && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>
-                  Explora por categoría
-                </Text>
-                <Text style={styles.sectionSubtitle}>
-                  Encuentra oportunidades en tu área de interés
-                </Text>
-              </View>
-
-              {categories.length > 0 ? (
-                <View style={styles.enhancedCategoriesGrid}>
-                  {categories.slice(0, 6).map(renderCategoryCard)}
-                </View>
+            <>
+              {errors.categories ? (
+                <ErrorBoundary
+                  error={errors.categories}
+                  onRetry={() => loadCropTypes(jobOffers)}
+                />
+              ) : loading.categories ? (
+                <LoadingSpinner />
+              ) : categories.length > 0 ? (
+                renderCompactCategories()
               ) : (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyDescription}>
-                    No hay categorías disponibles
-                  </Text>
-                </View>
+                <EmptyState
+                  title="Sin categorías"
+                  description="No hay categorías disponibles en este momento"
+                />
               )}
-            </View>
+            </>
           )}
 
           {/* All Offers Section */}
@@ -1760,63 +1469,249 @@ const PublicHome: React.FC<PublicHomeProps> = ({ navigation }) => {
               </Text>
             </View>
 
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Cargando ofertas...</Text>
-              </View>
+            {errors.offers ? (
+              <ErrorBoundary error={errors.offers} onRetry={loadJobOffers} />
             ) : activeTab === "nearby" && !selectedCountry ? (
-              <View style={styles.emptyState}>
-                <Ionicons
-                  name="flag-outline"
-                  size={48}
-                  color={COLORS.textTertiary}
-                />
-                <Text style={styles.emptyTitle}>Selecciona un país</Text>
-                <Text style={styles.emptyDescription}>
-                  Elige Colombia o Venezuela para descubrir ofertas cercanas
-                </Text>
-                <TouchableOpacity
-                  style={styles.emptyAction}
-                  onPress={() => setShowFilters(true)}>
-                  <Text style={styles.emptyActionText}>Seleccionar país</Text>
-                </TouchableOpacity>
-              </View>
+              <EmptyState
+                title="Selecciona un país"
+                description="Elige Colombia o Venezuela para descubrir ofertas cercanas"
+                actionText="Seleccionar país"
+                onAction={() => setShowFilters(true)}
+              />
             ) : displayOffers.length > 0 ? (
-              <View style={styles.jobsList}>
+              <View style={styles.visualJobsList}>
                 {displayOffers.map((offer, index) =>
-                  renderJobCard(offer, index)
+                  renderVisualJobCard(offer, index)
                 )}
               </View>
             ) : (
-              <View style={styles.emptyState}>
-                <Ionicons
-                  name="search-outline"
-                  size={48}
-                  color={COLORS.textTertiary}
-                />
-                <Text style={styles.emptyTitle}>
-                  {activeTab === "nearby"
+              <EmptyState
+                title={
+                  activeTab === "nearby"
                     ? `No hay ofertas cercanas en ${selectedCountry}`
-                    : "No se encontraron ofertas"}
-                </Text>
-                <Text style={styles.emptyDescription}>
-                  {activeTab === "nearby"
+                    : "No se encontraron ofertas"
+                }
+                description={
+                  activeTab === "nearby"
                     ? "Intenta seleccionar otro país o explora las ofertas disponibles"
-                    : "Intenta ajustar tu búsqueda o explora otras categorías"}
-                </Text>
-              </View>
+                    : "Intenta ajustar tu búsqueda o explora otras categorías"
+                }
+              />
             )}
           </View>
         </ScrollView>
       </Animated.View>
 
-      {renderFilterModal()}
-      {renderCategoryModal()} {/* MODAL MEJORADO */}
-    </View>
+      {/* Filter Modal */}
+      <Modal
+        visible={showFilters}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowFilters(false)}
+        accessible={true}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            onPress={() => setShowFilters(false)}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar modal"
+          />
+          <View style={styles.modal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Seleccionar país</Text>
+              <TouchableOpacity
+                onPress={() => setShowFilters(false)}
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar">
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalContent}>
+              {COUNTRIES.map((country) => (
+                <TouchableOpacity
+                  key={country}
+                  style={[
+                    styles.countryOption,
+                    selectedCountry === country && styles.countryOptionSelected,
+                  ]}
+                  onPress={() =>
+                    setSelectedCountry(
+                      country === selectedCountry ? "" : country
+                    )
+                  }
+                  accessible={true}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selectedCountry === country }}>
+                  <Text
+                    style={[
+                      styles.countryOptionText,
+                      selectedCountry === country &&
+                        styles.countryOptionTextSelected,
+                    ]}>
+                    {country}
+                  </Text>
+                  {selectedCountry === country && (
+                    <Ionicons
+                      name="checkmark"
+                      size={20}
+                      color={COLORS.accent}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalButtonSecondary}
+                onPress={() => setSelectedCountry("")}
+                accessible={true}
+                accessibilityRole="button">
+                <Text style={styles.modalButtonSecondaryText}>Limpiar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalButtonPrimary}
+                onPress={() => setShowFilters(false)}
+                accessible={true}
+                accessibilityRole="button">
+                <Text style={styles.modalButtonPrimaryText}>Aplicar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Category Modal - Simplified for this example */}
+      {showCategoryModal && selectedCategory && (
+        <Modal
+          visible={showCategoryModal}
+          transparent={true}
+          animationType="none"
+          onRequestClose={closeCategoryModal}
+          accessible={true}>
+          <View style={styles.enhancedModalOverlay}>
+            <TouchableOpacity
+              style={styles.enhancedModalBackdrop}
+              activeOpacity={1}
+              onPress={closeCategoryModal}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="Cerrar modal de categoría"
+            />
+
+            <Animated.View
+              style={[
+                styles.enhancedModalContainer,
+                { transform: [{ translateY: modalSlideAnim }] },
+              ]}>
+              <LinearGradient
+                colors={
+                  selectedCategory.config.gradient || [
+                    COLORS.primary,
+                    COLORS.accent,
+                  ]
+                }
+                style={styles.enhancedModalHeader}>
+                <View style={styles.modalHeaderContent}>
+                  <View style={styles.modalHeaderTop}>
+                    <TouchableOpacity
+                      style={styles.enhancedModalCloseButton}
+                      onPress={closeCategoryModal}
+                      accessible={true}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cerrar">
+                      <Ionicons name="close" size={24} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.modalHeaderMain}>
+                    <View style={styles.modalHeaderInfo}>
+                      <View style={styles.modalEmojiContainer}>
+                        <Text style={styles.modalEmoji}>
+                          {selectedCategory.config.emoji}
+                        </Text>
+                      </View>
+
+                      <View style={styles.modalTitleContainer}>
+                        <Text style={styles.modalMainTitle}>
+                          {selectedCategory.config.title}
+                        </Text>
+                        <Text style={styles.modalSubtitle}>
+                          {selectedCategory.config.description}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.modalStatsGrid}>
+                      <View style={styles.modalStatCard}>
+                        <Text style={styles.modalStatNumber}>
+                          {categoryOffers.length}
+                        </Text>
+                        <Text style={styles.modalStatLabel}>Ofertas</Text>
+                      </View>
+
+                      {selectedCategory.stats?.averageSalary > 0 && (
+                        <View style={styles.modalStatCard}>
+                          <Text style={styles.modalStatNumber}>
+                            {formatSalaryCompact(
+                              selectedCategory.stats.averageSalary
+                            )}
+                          </Text>
+                          <Text style={styles.modalStatLabel}>Promedio</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              </LinearGradient>
+
+              <ScrollView
+                style={styles.enhancedModalContent}
+                showsVerticalScrollIndicator={false}>
+                {sortedCategoryOffers.length > 0 ? (
+                  <View style={styles.enhancedOffersList}>
+                    {sortedCategoryOffers.slice(0, 10).map((offer) => (
+                      <TouchableOpacity
+                        key={offer.id}
+                        style={styles.modalOfferCard}
+                        onPress={() => {
+                          closeCategoryModal();
+                          navigation.navigate("WorkerJobOfferDetailNoAuth", {
+                            jobId: offer.id,
+                            fromPublic: true,
+                          });
+                        }}
+                        accessible={true}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Ver oferta: ${offer.title}`}>
+                        <Text style={styles.modalOfferTitle}>
+                          {offer.title}
+                        </Text>
+                        <Text style={styles.modalOfferSalary}>
+                          {formatSalaryCompact(offer.salary)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : (
+                  <EmptyState
+                    title="Sin ofertas"
+                    description="Esta categoría no tiene ofertas disponibles"
+                  />
+                )}
+              </ScrollView>
+            </Animated.View>
+          </View>
+        </Modal>
+      )}
+    </SafeAreaView>
   );
 };
 
-// 🎨 STYLESHEET MEJORADO CON NUEVOS ESTILOS
+// 🎨 STYLESHEET OPTIMIZADO
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1825,706 +1720,88 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  featuredContent: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: 20,
-    justifyContent: "space-between",
-  },
-  
-  featuredHeader: {
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    alignItems: "flex-start",
-  },
-  
-  featuredBadges: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  
-  featuredStatusBadge: {
-    backgroundColor: "rgba(255,215,0,0.95)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  
-  featuredStatusText: {
-    color: "#8B4513",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  
-  featuredTimeBadge: {
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-  },
-  
-  featuredTimeText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  
-  featuredSpacer: {
-    flex: 1,
-  },
-  
-  featuredBottomContent: {
-    gap: 16,
-    paddingTop: 20,
-  },
-  
-  featuredQuickInfoTop: {
-    marginBottom: 8,
-  },
-  
-  featuredInfoBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.4)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    alignSelf: "flex-start",
-    gap: 6,
-  },
-  
-  featuredCropType: {
-    fontSize: 14,
-    color: "#FFFFFF",
-    fontWeight: "600",
-  },
-  
-  featuredSeparator: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.6)",
-  },
-  
-  featuredLocation: {
-    fontSize: 14,
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
-  
-  featuredTitleSection: {
-    marginBottom: 8,
-  },
-  
-  featuredTitle: {
-    fontSize: 24,
-    color: "#FFFFFF",
-    fontWeight: "800",
-    lineHeight: 30,
-    textShadowColor: "rgba(0,0,0,0.7)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  
-  featuredDetailsGrid: {
-    flexDirection: "row",
-    gap: 16,
-    marginBottom: 8,
-  },
-  
-  featuredDetailItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  
-  featuredDetailText: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.9)",
-    fontWeight: "500",
-  },
-  
-  featuredFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.1)",
-  },
-  
-  featuredEmployerSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  
-  featuredEmployerAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  
-  featuredEmployerInitials: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  
-  featuredEmployerInfo: {
-    flex: 1,
-  },
-  
-  featuredEmployerName: {
-    fontSize: 15,
-    color: "#FFFFFF",
-    fontWeight: "600",
-    marginBottom: 2,
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  
-  featuredSalary: {
-    fontSize: 18,
-    color: "#FFFFFF",
-    fontWeight: "700",
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  
-  featuredActionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 25,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  
-  featuredActionText: {
-    fontSize: 14,
-    color: "#000000",
-    fontWeight: "700",
-  },
-  heroSection: {
-    marginTop: 20,
-  },
-  heroHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  heroSectionTitle: {
-    ...TYPOGRAPHY.title3,
-    color: COLORS.text,
-    fontWeight: "700",
-  },
-  heroCounter: {
-    backgroundColor: COLORS.gray100,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  heroCounterText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-  },
-  heroListContainer: {
-    paddingHorizontal: 20,
-    paddingRight: 40, // Padding extra al final
-  },
-
-  // Pagination - CORREGIDOS
-  paginationContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingTop: 20,
-    paddingBottom: 10,
-    gap: 8,
-  },
-  paginationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.gray300,
-  },
-  paginationDotActive: {
-    backgroundColor: COLORS.primary,
-    width: 24, // Dot activo más ancho
-  },
-
-  // Featured Card - CORREGIDO
-  featuredCard: {
-    width: CARD_WIDTH,
-    height: 380,
-    borderRadius: 24,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-    // No marginRight aquí, se maneja con ItemSeparatorComponent
-  },
-  
-  modernJobCard: {
-    marginBottom: 20,
-  },
-
-  cardTouchable: {
-    borderRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-
-  cardContainer: {
-    borderRadius: 20,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#F0F0F0",
-  },
-
-  cardBackground: {
-    padding: 20,
-  },
-
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-
-  timeAndDistance: {
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  timeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#F8F9FA",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-
-  timeBadgeText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-
-  distanceBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#E3F2FD",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-
-  distanceBadgeText: {
-    fontSize: 12,
-    color: COLORS.accent,
-    fontWeight: "600",
-  },
-
-  statusIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#FFFFFF",
-  },
-
-  cardMainContent: {
-    gap: 16,
-  },
-
-  titleSection: {
-    flexDirection: "row",
-    gap: 12,
-  },
-
-  cropIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  cropEmoji: {
-    fontSize: 20,
-  },
-
-  titleContainer: {
-    flex: 1,
-  },
-
-  jobTitle: {
-    ...TYPOGRAPHY.title3,
-    color: COLORS.text,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-
-  cropTypeContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  cropType: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  phaseSeparator: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.gray400,
-  },
-
-  phaseText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-
-  locationSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  locationIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#E3F2FD",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  locationText: {
-    flex: 1,
-    fontSize: 15,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-
-  countryFlag: {
-    padding: 4,
-  },
-
-  countryFlagText: {
-    fontSize: 16,
-  },
-
-  benefitsSection: {
-    gap: 8,
-  },
-
-  benefitsLabel: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-
-  benefitsContainer: {
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  benefitChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-
-  benefitChipText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-
-  cardFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#F5F5F5",
-  },
-
-  employerSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-
-  employerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  employerInitials: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-
-  employerInfo: {
-    flex: 1,
-  },
-
-  employerName: {
-    fontSize: 15,
-    color: COLORS.text,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-
-  farmInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-
-  farmName: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-
-  salarySection: {
-    alignItems: "flex-end",
-  },
-
-  salaryAmount: {
-    fontSize: 18,
-    color: COLORS.success,
-    fontWeight: "700",
-  },
-
-  salaryPeriod: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-
-  actionButton: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-
-  actionButtonText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-
-  applicationsBadge: {
-    position: "absolute",
-    bottom: 16,
-    right: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-  },
-
-  applicationsBadgeText: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-
-  featuredContainer: {
-    width: "100%",
-    height: "100%",
-    position: "relative",
-  },
-
-  featuredImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
-
-  featuredOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-
-  featuredMainContent: {
-    gap: 16,
-  },
-
-  featuredSubtitle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-
-  featuredQuickInfo: {
-    gap: 12,
-  },
-
-  featuredInfoItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  featuredInfoText: {
-    fontSize: 15,
-    color: "rgba(255,255,255,0.9)",
-    fontWeight: "500",
-  },
-
   scrollView: {
     flex: 1,
   },
 
-  // Benefits Styles con nueva paleta
-  benefitsCompact: {
-    flexDirection: "row",
-    gap: 4,
-  },
-
-  benefitIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
+  // Loading y Error States
+  loadingContainer: {
+    flex: 1,
     justifyContent: "center",
-  },
-
-  benefitsDetailed: {
-    gap: 8,
-    marginVertical: 12,
-  },
-
-  benefitRow: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    paddingVertical: 60,
   },
-
-  benefitText: {
-    ...TYPOGRAPHY.footnote,
-    fontWeight: "500",
+  loadingText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    marginTop: 16,
   },
-
-  benefitsBadges: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginTop: 8,
-  },
-
-  benefitBadge: {
-    flexDirection: "row",
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 40,
+    paddingVertical: 60,
+  },
+  errorTitle: {
+    ...TYPOGRAPHY.title3,
+    color: COLORS.error,
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  errorText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: COLORS.error,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 12,
   },
-
-  benefitBadgeText: {
-    ...TYPOGRAPHY.caption1,
-    color: "#FFFFFF",
+  retryButtonText: {
+    ...TYPOGRAPHY.callout,
+    color: COLORS.background,
     fontWeight: "600",
   },
 
-  benefitDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  // Empty States
+  emptyState: {
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+    alignItems: "center",
+  },
+  emptyTitle: {
+    ...TYPOGRAPHY.title3,
+    color: COLORS.text,
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptyDescription: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  emptyAction: {
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 20,
+  },
+  emptyActionText: {
+    ...TYPOGRAPHY.callout,
+    color: COLORS.background,
+    fontWeight: "600",
   },
 
-  // Simple Navigation con nueva paleta
+  // Navigation
   simpleNavigationContainer: {
     paddingHorizontal: 20,
     paddingTop: 20,
@@ -2553,283 +1830,618 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // NUEVOS ESTILOS PARA CATEGORÍAS MEJORADAS
-  enhancedCategoriesGrid: {
-    paddingHorizontal: 20,
-    gap: 16,
+  // Hero Section
+  heroSection: {
+    marginTop: 20,
   },
-
-  enhancedCategoryCard: {
-    height: 200,
-    borderRadius: 20,
-    overflow: "hidden",
+  heroHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
     marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 6,
   },
-
-  categoryBackgroundImage: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
-
-  categoryGradientOverlay: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    opacity: 0.85,
-  },
-
-  categoryCardContent: {
-    flex: 1,
-    padding: 20,
-    justifyContent: "space-between",
-  },
-
-  categoryCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-
-  categoryEmojiContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-
-  categoryEmoji: {
-    fontSize: 24,
-  },
-
-  categoryOffersCount: {
-    alignItems: "flex-end",
-    backgroundColor: "rgba(255,255,255,0.15)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-  },
-
-  categoryOffersCountText: {
-    fontSize: 20,
-    color: "#FFFFFF",
-    fontWeight: "800",
-    lineHeight: 22,
-  },
-
-  categoryOffersLabel: {
-    fontSize: 11,
-    color: "rgba(255,255,255,0.9)",
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-
-  categorySpacer: {
-    flex: 1,
-  },
-
-  categoryBottomContent: {
-    gap: 12,
-  },
-
-  categoryTitle: {
-    fontSize: 22,
-    color: "#FFFFFF",
-    fontWeight: "800",
-    lineHeight: 26,
-    textShadowColor: "rgba(0,0,0,0.3)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-
-  categoryDescription: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.9)",
-    fontWeight: "500",
-    textShadowColor: "rgba(0,0,0,0.3)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-
-  categoryStatsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 8,
-  },
-
-  categoryStats: {
-    flexDirection: "row",
-    gap: 16,
-    flex: 1,
-  },
-
-  categoryStat: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-
-  categoryStatText: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.9)",
-    fontWeight: "600",
-  },
-
-  categoryAction: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-  },
-
-  categoryNoOffers: {
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-
-  categoryNoOffersText: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.7)",
-    fontWeight: "500",
-  },
-
-  categoryTrendingBadge: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "#FF6B35",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-
-  categoryTrendingText: {
-    fontSize: 10,
-    color: "#FFFFFF",
+  heroSectionTitle: {
+    ...TYPOGRAPHY.title3,
+    color: COLORS.text,
     fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
-
-  categoryCardDisabled: {
-    opacity: 0.5,
-  },
-
-  // Interest Cards (fallback si no se usan las enhanced)
-  interestGrid: {
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  interestCard: {
-    width: (width - 56) / 2,
-    height: 160,
+  heroCounter: {
+    backgroundColor: COLORS.gray100,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 16,
-    overflow: "hidden",
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  interestImageContainer: {
+  heroCounterText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: "600",
+  },
+  heroListContainer: {
+    paddingHorizontal: 20,
+    paddingRight: 40,
+  },
+
+  // Pagination
+  paginationContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 20,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  paginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.gray300,
+  },
+  paginationDotActive: {
+    backgroundColor: COLORS.primary,
+    width: 24,
+  },
+
+  // Featured Cards
+  featuredCard: {
+    width: CARD_WIDTH,
+    height: FEATURED_HEIGHT,
+    borderRadius: 24,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  featuredContainer: {
     width: "100%",
     height: "100%",
     position: "relative",
   },
-  interestImage: {
+  featuredImage: {
     width: "100%",
     height: "100%",
     resizeMode: "cover",
+    backgroundColor: COLORS.gray200,
   },
-  interestOverlay: {
+  featuredOverlay: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
   },
-  interestContent: {
+  featuredContent: {
     position: "absolute",
-    bottom: 60,
-    left: 16,
-    right: 16,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 20,
+    justifyContent: "space-between",
   },
-  interestTitle: {
-    ...TYPOGRAPHY.headline,
-    color: "#FFFFFF",
+  featuredHeader: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
+  },
+  featuredBadges: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  featuredStatusBadge: {
+    backgroundColor: "rgba(255,215,0,0.95)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  featuredStatusText: {
+    color: "#8B4513",
+    fontSize: 12,
     fontWeight: "700",
   },
-  avatarsContainer: {
-    position: "absolute",
-    bottom: 16,
-    left: 16,
-    right: 16,
+  featuredTimeBadge: {
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
   },
-  avatarStack: {
+  featuredTimeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  featuredSpacer: {
+    flex: 1,
+  },
+  featuredBottomContent: {
+    gap: 16,
+    paddingTop: 20,
+  },
+  featuredQuickInfoTop: {
+    marginBottom: 8,
+  },
+  featuredInfoBadge: {
     flexDirection: "row",
     alignItems: "center",
-    height: 32,
-  },
-  miniAvatar: {
-    position: "absolute",
-    width: 32,
-    height: 32,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 16,
+    alignSelf: "flex-start",
+    gap: 6,
+  },
+  featuredCropType: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  featuredSeparator: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.6)",
+  },
+  featuredLocation: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
+  featuredTitleSection: {
+    marginBottom: 8,
+  },
+  featuredTitle: {
+    fontSize: 24,
+    color: "#FFFFFF",
+    fontWeight: "800",
+    lineHeight: 30,
+    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  featuredDetailsGrid: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 8,
+  },
+  featuredDetailItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  featuredDetailText: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.9)",
+    fontWeight: "500",
+  },
+  featuredFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.1)",
+  },
+  featuredEmployerSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  featuredEmployerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
     borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  miniAvatarText: {
+  featuredEmployerInitials: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  featuredEmployerInfo: {
+    flex: 1,
+  },
+  featuredEmployerName: {
+    fontSize: 15,
+    color: "#FFFFFF",
+    fontWeight: "600",
+    marginBottom: 2,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  featuredSalary: {
+    fontSize: 18,
+    color: "#FFFFFF",
+    fontWeight: "700",
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  featuredActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  featuredActionText: {
+    fontSize: 14,
+    color: "#000000",
+    fontWeight: "700",
+  },
+
+  // 🎨 NUEVOS ESTILOS PARA CATEGORÍAS COMPACTAS
+  compactCategoriesSection: {
+    marginTop: 30,
+    marginBottom: 20,
+  },
+  compactCategoriesScroll: {
+    marginTop: 16,
+  },
+  compactCategoriesScrollContainer: {
+    paddingHorizontal: 20,
+    paddingRight: 40,
+  },
+  compactCategoryChip: {
+    width: 160,
+    height: 80,
+    borderRadius: 16,
+    marginRight: 12,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  compactCategoryGradient: {
+    flex: 1,
+    padding: 16,
+    justifyContent: "center",
+  },
+  compactCategoryContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  compactCategoryIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  compactCategoryEmoji: {
+    fontSize: 16,
+  },
+  compactCategoryTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  compactCategoryTitle: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  compactCategoryCount: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.8)",
+    fontWeight: "500",
+  },
+  compactCategoryArrow: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // 🎨 NUEVOS ESTILOS PARA CARDS VISUALES
+  visualJobsList: {
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  visualJobCard: {
+    marginBottom: 16,
+  },
+  visualCardContainer: {
+    height: 320,
+    borderRadius: 24,
+    overflow: "hidden",
+    position: "relative",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  visualCardImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+    // Optimizaciones para mejorar rendimiento
+    backgroundColor: COLORS.gray200,
+  },
+  visualCardOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  visualCardContent: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 20,
+    justifyContent: "space-between",
+  },
+  visualCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  visualCardBadges: {
+    flexDirection: "row",
+    gap: 8,
+    flex: 1,
+  },
+  visualCropBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  visualCropBadgeText: {
     color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: "bold",
+    fontWeight: "700",
   },
-  countBadge: {
-    position: "absolute",
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
+  visualDistanceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
   },
-  countBadgeText: {
+  visualDistanceBadgeText: {
     color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "600",
   },
+  visualFavoriteButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  visualCardSpacer: {
+    flex: 1,
+  },
+  visualCardMainContent: {
+    gap: 16,
+  },
+  visualLocationContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: "flex-start",
+  },
+  visualLocationText: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.9)",
+    fontWeight: "500",
+    flex: 1,
+  },
+  visualCountryFlag: {
+    fontSize: 14,
+  },
+  visualJobTitle: {
+    fontSize: 22,
+    color: "#FFFFFF",
+    fontWeight: "800",
+    lineHeight: 28,
+    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  visualJobDetails: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  visualDetailItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  visualDetailText: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.9)",
+    fontWeight: "500",
+  },
+  visualCardFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.1)",
+  },
+  visualEmployerSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  visualEmployerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  visualEmployerInitials: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  visualEmployerInfo: {
+    flex: 1,
+  },
+  visualEmployerName: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "600",
+    marginBottom: 4,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  visualBenefitsRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  visualBenefitIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  visualSalarySection: {
+    alignItems: "flex-end",
+  },
+  visualSalaryAmount: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    fontWeight: "700",
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  visualSalaryPeriod: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.8)",
+    fontWeight: "500",
+  },
+  visualActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 12,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  visualActionButtonText: {
+    fontSize: 14,
+    color: "#000000",
+    fontWeight: "700",
+  },
+  visualRatingBadge: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  visualRatingText: {
+    fontSize: 11,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  visualApplicationsBadge: {
+    position: "absolute",
+    bottom: 16,
+    left: 20,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  visualApplicationsText: {
+    fontSize: 10,
+    color: "#000000",
+    fontWeight: "600",
+  },
 
-  // Sections mejoradas
+  // Sections
   section: {
     marginTop: 40,
   },
@@ -2848,19 +2460,8 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     lineHeight: 20,
   },
-  sectionAction: {
-    ...TYPOGRAPHY.callout,
-    color: COLORS.accent,
-    fontWeight: "500",
-  },
 
-  // Job Cards
-  jobsList: {
-    paddingHorizontal: 20,
-    gap: 16,
-  },
-
-  // Modal con nueva paleta
+  // Modals
   modalOverlay: {
     flex: 1,
     backgroundColor: COLORS.overlay,
@@ -2939,17 +2540,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // ESTILOS PARA EL MODAL MEJORADO DE CATEGORÍAS
+  // Enhanced Category Modal
   enhancedModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
   },
-
   enhancedModalBackdrop: {
     flex: 1,
   },
-
   enhancedModalContainer: {
     backgroundColor: COLORS.background,
     borderTopLeftRadius: 30,
@@ -2962,32 +2561,21 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 20,
   },
-
   enhancedModalHeader: {
     paddingTop: 20,
     paddingBottom: 30,
     position: "relative",
     overflow: "hidden",
   },
-
-  modalHeaderPattern: {
-    position: "absolute",
-    top: -20,
-    right: -20,
-    opacity: 0.1,
-  },
-
   modalHeaderContent: {
     paddingHorizontal: 24,
     zIndex: 1,
   },
-
   modalHeaderTop: {
     flexDirection: "row",
     justifyContent: "flex-end",
     marginBottom: 20,
   },
-
   enhancedModalCloseButton: {
     width: 40,
     height: 40,
@@ -2998,17 +2586,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.3)",
   },
-
   modalHeaderMain: {
     gap: 20,
   },
-
   modalHeaderInfo: {
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
   },
-
   modalEmojiContainer: {
     width: 60,
     height: 60,
@@ -3019,15 +2604,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.3)",
   },
-
   modalEmoji: {
     fontSize: 28,
   },
-
   modalTitleContainer: {
     flex: 1,
   },
-
   modalMainTitle: {
     fontSize: 28,
     color: "#FFFFFF",
@@ -3037,7 +2619,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
-
   modalSubtitle: {
     fontSize: 16,
     color: "rgba(255,255,255,0.9)",
@@ -3045,407 +2626,58 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textShadowColor: "rgba(0,0,0,0.3)",
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
   },
-
   modalStatsGrid: {
     flexDirection: "row",
-    gap: 12,
+    gap: 20,
   },
-
   modalStatCard: {
-    backgroundColor: "rgba(255,255,255,0.15)",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    minWidth: 80,
   },
-
   modalStatNumber: {
-    fontSize: 18,
+    fontSize: 20,
     color: "#FFFFFF",
     fontWeight: "800",
-    lineHeight: 20,
+    textShadowColor: "rgba(0,0,0,0.3)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
-
   modalStatLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: "rgba(255,255,255,0.8)",
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginTop: 2,
   },
-
-  modalControlsSection: {
-    backgroundColor: COLORS.gray50,
-    paddingVertical: 20,
-    paddingHorizontal: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-
-  modalControlsHeader: {
-    gap: 12,
-  },
-
-  modalControlsTitle: {
-    fontSize: 16,
-    color: COLORS.text,
-    fontWeight: "600",
-  },
-
-  modalSortControls: {
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  modalSortButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  modalSortButtonActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-
-  modalSortButtonText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-
-  modalSortButtonTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-  },
-
   enhancedModalContent: {
     flex: 1,
+    backgroundColor: COLORS.background,
   },
-
   enhancedOffersList: {
     padding: 20,
-    gap: 16,
+    gap: 12,
   },
-
-  enhancedOfferCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-
-  enhancedOfferTouchable: {
-    padding: 20,
-    position: "relative",
-  },
-
-  enhancedOfferHeader: {
+  modalOfferCard: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
-  },
-
-  enhancedOfferBadges: {
-    flexDirection: "row",
-    gap: 6,
-  },
-
-  enhancedOfferTimeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: COLORS.gray100,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-
-  enhancedOfferTimeText: {
-    fontSize: 10,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-
-  enhancedOfferLocationBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: "#E3F2FD",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-
-  enhancedOfferLocationText: {
-    fontSize: 10,
-    color: COLORS.accent,
-    fontWeight: "600",
-  },
-
-  enhancedOfferDistanceBadge: {
-    backgroundColor: "#FFF3E0",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-
-  enhancedOfferDistanceText: {
-    fontSize: 10,
-    color: "#F57C00",
-    fontWeight: "600",
-  },
-
-  enhancedOfferStatusDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-
-  enhancedOfferMain: {
-    gap: 12,
-  },
-
-  enhancedOfferTitle: {
-    fontSize: 18,
-    color: COLORS.text,
-    fontWeight: "700",
-    lineHeight: 24,
-  },
-
-  enhancedOfferPhase: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-    backgroundColor: COLORS.gray100,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    padding: 16,
+    backgroundColor: COLORS.gray50,
     borderRadius: 12,
-    alignSelf: "flex-start",
-  },
-
-  enhancedOfferDetails: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-
-  enhancedOfferDetailItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-
-  enhancedOfferDetailText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-
-  enhancedOfferBenefits: {
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  enhancedOfferBenefit: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: COLORS.gray100,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-
-  enhancedOfferBenefitText: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-
-  enhancedOfferFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray200,
-    marginTop: 16,
-  },
-
-  enhancedOfferEmployer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-
-  enhancedOfferEmployerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  enhancedOfferEmployerInitials: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-
-  enhancedOfferEmployerInfo: {
-    flex: 1,
-  },
-
-  enhancedOfferEmployerName: {
-    fontSize: 14,
-    color: COLORS.text,
-    fontWeight: "600",
-    lineHeight: 18,
-  },
-
-  enhancedOfferEmployerLocation: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-    marginTop: 1,
-  },
-
-  enhancedOfferSalaryContainer: {
-    alignItems: "flex-end",
-  },
-
-  enhancedOfferSalaryAmount: {
-    fontSize: 18,
-    color: COLORS.success,
-    fontWeight: "800",
-    lineHeight: 20,
-  },
-
-  enhancedOfferSalaryPeriod: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-    marginTop: 1,
-  },
-
-  enhancedOfferApplications: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-
-  enhancedOfferApplicationsText: {
-    fontSize: 9,
-    color: COLORS.textSecondary,
-    fontWeight: "500",
-  },
-
-  enhancedOfferCTA: {
-    position: "absolute",
-    top: 20,
-    right: 20,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.gray100,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-
-  enhancedModalEmpty: {
-    padding: 60,
-    alignItems: "center",
-  },
-
-  enhancedModalEmptyTitle: {
-    fontSize: 20,
-    color: COLORS.text,
-    fontWeight: "700",
-    marginTop: 20,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-
-  enhancedModalEmptyText: {
+  modalOfferTitle: {
     fontSize: 16,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    lineHeight: 24,
-  },
-
-  // States
-  loadingContainer: {
-    paddingVertical: 40,
-    alignItems: "center",
-  },
-  loadingText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-  },
-  emptyState: {
-    paddingVertical: 60,
-    paddingHorizontal: 40,
-    alignItems: "center",
-  },
-  emptyTitle: {
-    ...TYPOGRAPHY.title3,
     color: COLORS.text,
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  emptyDescription: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  emptyAction: {
-    backgroundColor: COLORS.accent,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 20,
-  },
-  emptyActionText: {
-    ...TYPOGRAPHY.callout,
-    color: COLORS.background,
     fontWeight: "600",
+    flex: 1,
+    marginRight: 16,
+  },
+  modalOfferSalary: {
+    fontSize: 14,
+    color: COLORS.success,
+    fontWeight: "700",
   },
 });
 

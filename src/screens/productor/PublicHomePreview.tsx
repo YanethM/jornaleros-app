@@ -25,10 +25,9 @@ import { LinearGradient } from "expo-linear-gradient";
 // Importar imágenes específicas para cada cultivo
 import sachaInchiImage from "../../../assets/onboarding/slide3.png";
 import cacaoImage from "../../../assets/onboarding/slide1.png";
-import mielImage from "../../../assets/onboarding/slide2.jpg";
+import mielImage from "../../../assets/onboarding/slide2.png";
 import cafeImage from "../../../assets/onboarding/slide1.png";
 import defaultImage from "../../../assets/onboarding/slide1.png";
-import employerAvatar from "../../../assets/onboarding/slide1.png";
 import ScreenLayout from "../../components/ScreenLayout";
 import CustomTabBar from "../../components/CustomTabBar";
 

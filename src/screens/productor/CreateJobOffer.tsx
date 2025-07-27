@@ -9,8 +9,9 @@ import {
   Switch,
   ActivityIndicator,
   Modal,
+  Platform,
+  Alert,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import ScreenLayout from "../../components/ScreenLayout";
@@ -39,6 +40,140 @@ const COLORS = {
   success: "#059669",
   error: "#DC2626",
   warning: "#D97706",
+};
+
+// Componente Picker personalizado que funciona mejor en iOS
+const CustomPicker = ({ 
+  selectedValue, 
+  onValueChange, 
+  options = [], 
+  placeholder = "Seleccionar...", 
+  icon,
+  disabled = false 
+}) => {
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const selectedOption = options.find(option => option.value === selectedValue);
+  const displayText = selectedOption ? selectedOption.label : placeholder;
+
+  const handleSelect = (value) => {
+    onValueChange(value);
+    setModalVisible(false);
+  };
+
+  if (Platform.OS === 'android') {
+    // En Android, usar el Picker nativo pero con estilos mejorados
+    return (
+      <View style={[styles.customPickerContainer, disabled && styles.disabledPicker]}>
+        {icon && (
+          <Icon
+            name={icon}
+            size={20}
+            color={disabled ? "#999" : PRIMARY_COLOR}
+            style={styles.pickerIcon}
+          />
+        )}
+        <View style={styles.androidPickerWrapper}>
+          <TouchableOpacity 
+            style={styles.androidPickerButton}
+            onPress={() => !disabled && setModalVisible(true)}
+            disabled={disabled}
+          >
+            <Text style={[
+              styles.androidPickerText,
+              !selectedValue && styles.placeholderText,
+              disabled && styles.disabledText
+            ]}>
+              {displayText}
+            </Text>
+            <Icon 
+              name="arrow-drop-down" 
+              size={24} 
+              color={disabled ? "#999" : PRIMARY_COLOR} 
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // En iOS, usar Modal con lista touchable
+  return (
+    <>
+      <TouchableOpacity
+        style={[styles.customPickerContainer, disabled && styles.disabledPicker]}
+        onPress={() => !disabled && setModalVisible(true)}
+        disabled={disabled}
+      >
+        {icon && (
+          <Icon
+            name={icon}
+            size={20}
+            color={disabled ? "#999" : PRIMARY_COLOR}
+            style={styles.pickerIcon}
+          />
+        )}
+        <View style={styles.pickerTextContainer}>
+          <Text style={[
+            styles.pickerText,
+            !selectedValue && styles.placeholderText,
+            disabled && styles.disabledText
+          ]}>
+            {displayText}
+          </Text>
+        </View>
+        <Icon 
+          name="arrow-drop-down" 
+          size={24} 
+          color={disabled ? "#999" : PRIMARY_COLOR} 
+        />
+      </TouchableOpacity>
+
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Seleccionar opción</Text>
+              <TouchableOpacity
+                onPress={() => setModalVisible(false)}
+                style={styles.modalCloseButton}
+              >
+                <Icon name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.optionsList}>
+              {options.map((option, index) => (
+                <TouchableOpacity
+                  key={option.value || index}
+                  style={[
+                    styles.optionItem,
+                    selectedValue === option.value && styles.selectedOption
+                  ]}
+                  onPress={() => handleSelect(option.value)}
+                >
+                  <Text style={[
+                    styles.optionText,
+                    selectedValue === option.value && styles.selectedOptionText
+                  ]}>
+                    {option.label}
+                  </Text>
+                  {selectedValue === option.value && (
+                    <Icon name="check" size={20} color={PRIMARY_COLOR} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
 };
 
 const CustomAlert = ({
@@ -410,7 +545,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
 
       console.log("✅ Found selected crop type:", selectedCropType);
 
-      // USAR las fases activas de los datos del backend (ya filtradas)
       let phasesForCrop = [];
 
       if (farmPhasesData.cultivos) {
@@ -420,40 +554,24 @@ const CreateJobOfferScreen = ({ navigation }) => {
 
         console.log("🔍 Found optimized crop data:", cultivoOptimizado);
 
-        // ❌ ANTES: cultivoOptimizado.fases
-        // ✅ AHORA: cultivoOptimizado.fasesActivas
         if (cultivoOptimizado && cultivoOptimizado.fasesActivas) {
-          // ❌ ANTES: fasesActivas.map (variable indefinida)
-          // ✅ AHORA: cultivoOptimizado.fasesActivas.map
           phasesForCrop = cultivoOptimizado.fasesActivas.map((fase, index) => ({
             id: fase.id,
             cultivationPhaseId: fase.id,
-            farmPhaseId: fase.farmPhaseId, // ✅ NUEVO: ID específico de la fase en la finca
-            // ❌ ANTES: fase.nombre
-            // ✅ AHORA: fase.name
+            farmPhaseId: fase.farmPhaseId,
             name: fase.name,
-            // ❌ ANTES: fase.descripcion
-            // ✅ AHORA: fase.description
             description: fase.description || "",
-            // ❌ ANTES: fase.duracion
-            // ✅ AHORA: fase.estimatedDuration (si existe) o null
             estimatedDuration: fase.estimatedDuration || null,
-            // ❌ ANTES: fase.orden
-            // ✅ AHORA: fase.order
             order: fase.order || index + 1,
-            isActive: true, // Ya están filtradas por el backend
+            isActive: true,
             cropType: { id: cropTypeId, name: selectedCropType.name },
             cropTypeId: cropTypeId,
             cropTypeName: selectedCropType.name,
-            source: "backend-activas", // ✅ CAMBIADO: indicar que vienen del backend
-            // ❌ ANTES: fase.requerida
-            // ✅ AHORA: fase.required (si existe)
+            source: "backend-activas",
             isRequired: fase.required || false,
-            // Información adicional de la finca (si existe)
             plantasEnFase: fase.plantasEnFase || fase.plantCount || 0,
             fechaInicio: fase.fechaInicio || fase.startDate || null,
             progreso: fase.progreso || fase.progress || 0,
-            // ✅ NUEVO: Datos originales para debug
             originalData: { ...fase },
           }));
 
@@ -465,16 +583,14 @@ const CreateJobOfferScreen = ({ navigation }) => {
         }
       }
 
-      // Si no hay fases activas en la finca, mostrar mensaje informativo
       if (phasesForCrop.length === 0) {
         console.warn(
           `❌ No active phases found for crop ${selectedCropType.name}`
         );
         setAvailablePhasesForSelectedCrop([]);
 
-        // Mostrar alerta informativa
         showCustomAlert(
-          "warning", // ✅ CAMBIADO: de "info" a "warning"
+          "warning",
           "Sin Fases Activas",
           `El cultivo "${selectedCropType.name}" no tiene fases activas disponibles en esta finca en este momento. Esto puede deberse a que todas las fases están completadas o no han sido iniciadas aún.`,
           [
@@ -486,7 +602,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
           ]
         );
       } else {
-        // Ordenar las fases por orden o por nombre
         phasesForCrop.sort((a, b) => {
           if (a.order && b.order) return a.order - b.order;
           return a.name.localeCompare(b.name);
@@ -533,7 +648,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
           totalFases,
         });
 
-        // Verificar que tenemos cultivo y fasesActivas válidas
         if (!cultivo || !fasesActivas || !Array.isArray(fasesActivas)) {
           console.warn(
             `⚠️ Invalid crop or fasesActivas data for ${
@@ -543,12 +657,10 @@ const CreateJobOfferScreen = ({ navigation }) => {
           return null;
         }
 
-        // El backend ya envía solo las fases activas, no necesitamos filtrar
         console.log(
           `  ✅ Active phases for ${cultivo.name}: ${fasesActivas.length}/${totalFases}`
         );
 
-        // Solo incluir el cultivo si tiene al menos una fase activa
         if (fasesActivas.length === 0) {
           console.warn(`  ⚠️ No active phases found for crop ${cultivo.name}`);
           return null;
@@ -556,14 +668,14 @@ const CreateJobOfferScreen = ({ navigation }) => {
 
         return {
           id: cultivo.id,
-          name: cultivo.name, // Backend usa 'name', no 'nombre'
+          name: cultivo.name,
           description: cultivo.description || "",
           fasesActivas: fasesActivas.length,
           totalFases: totalFases,
-          fases: fasesActivas, // Usamos fasesActivas directamente
+          fases: fasesActivas,
         };
       })
-      .filter(Boolean); // Remover nulls
+      .filter(Boolean);
 
     console.log(
       `🎯 Final active crop types: ${activeCropTypes.length}`,
@@ -576,7 +688,7 @@ const CreateJobOfferScreen = ({ navigation }) => {
 
     return activeCropTypes;
   };
-  // Modifica la función handleFarmSelection para usar la nueva función de extracción
+
   const handleFarmSelection = async (farmId) => {
     if (!farmId) {
       setSelectedFarmInfo(null);
@@ -600,11 +712,9 @@ const CreateJobOfferScreen = ({ navigation }) => {
         return;
       }
 
-      // Load farm phases data
       const phasesResponse = await getFarmPhasesByCrop(farmId);
 
       if (phasesResponse.success && phasesResponse.data) {
-        // Usar la nueva función que solo extrae cultivos con fases activas
         const extractedActiveCropTypes =
           extractActiveCropTypesFromOptimizedResponse(phasesResponse.data);
 
@@ -630,7 +740,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
           phaseId: "",
         }));
 
-        // Mostrar mensaje informativo si no hay cultivos activos
         if (extractedActiveCropTypes.length === 0) {
           showCustomAlert(
             "warning",
@@ -659,22 +768,6 @@ const CreateJobOfferScreen = ({ navigation }) => {
     } finally {
       setLoadingFarmInfo(false);
     }
-  };
-
-  // Actualiza el texto del helper para las fases
-  const phaseHelperText = () => {
-    const activePhasesCount = availablePhasesForSelectedCrop.length;
-    const selectedCropName = getSelectedCropTypeName();
-
-    if (activePhasesCount === 0) {
-      return `No hay fases activas disponibles para ${selectedCropName} en esta finca`;
-    }
-
-    return `${activePhasesCount} fase${
-      activePhasesCount !== 1 ? "s" : ""
-    } activa${activePhasesCount !== 1 ? "s" : ""} disponible${
-      activePhasesCount !== 1 ? "s" : ""
-    } para ${selectedCropName}`;
   };
 
   const handlePhaseSelection = (selectedPhaseId) => {
@@ -896,6 +989,46 @@ const CreateJobOfferScreen = ({ navigation }) => {
     return selectedPhase ? selectedPhase.name : "No encontrada";
   };
 
+  // Preparar opciones para los CustomPickers
+  const getFarmOptions = () => {
+    return farms.map(farm => ({
+      label: farm.name,
+      value: farm.id
+    }));
+  };
+
+  const getCropTypeOptions = () => {
+    return farmCropTypes.map(cropType => ({
+      label: cropType.name,
+      value: cropType.id
+    }));
+  };
+
+  const getPhaseOptions = () => {
+    return availablePhasesForSelectedCrop.map(phase => ({
+      label: phase.name,
+      value: phase.id
+    }));
+  };
+
+  const getPaymentTypeOptions = () => [
+    { label: "Por Jornal", value: "Por_dia" },
+    { label: "Por Planta", value: "Por_labor" }
+  ];
+
+  const getPaymentModeOptions = () => [
+    { label: "Efectivo", value: "Efectivo" },
+    { label: "Mixto (Efectivo + Beneficios)", value: "Mixto" }
+  ];
+
+  const getWorkTypeOptions = () => [
+    { label: "Seleccione el tipo de trabajo...", value: "" },
+    { label: "Podar", value: "Podar" },
+    { label: "Injertar", value: "Injertar" },
+    { label: "Podar e Injertar", value: "Podar_Injertar" },
+    { label: "Otro", value: "Otro" }
+  ];
+
   // Render functions
   const renderFormStep = () => {
     switch (currentStep) {
@@ -991,30 +1124,13 @@ const CreateJobOfferScreen = ({ navigation }) => {
                     </Text>
                   </View>
                 ) : (
-                  <View style={styles.pickerWrapper}>
-                    <Icon
-                      name="agriculture"
-                      size={20}
-                      color={PRIMARY_COLOR}
-                      style={styles.inputIcon}
-                    />
-                    <View style={styles.pickerContainer}>
-                      <Picker
-                        selectedValue={formData.farmId}
-                        style={styles.picker}
-                        onValueChange={handleFarmSelection}
-                        dropdownIconColor={PRIMARY_COLOR}>
-                        <Picker.Item label="Seleccione una finca..." value="" />
-                        {farms.map((farm) => (
-                          <Picker.Item
-                            key={farm.id}
-                            label={farm.name}
-                            value={farm.id}
-                          />
-                        ))}
-                      </Picker>
-                    </View>
-                  </View>
+                  <CustomPicker
+                    selectedValue={formData.farmId}
+                    onValueChange={handleFarmSelection}
+                    options={getFarmOptions()}
+                    placeholder="Seleccione una finca..."
+                    icon="agriculture"
+                  />
                 )}
                 {loadingFarmInfo && (
                   <View style={styles.simpleLoadingContainer}>
@@ -1032,33 +1148,13 @@ const CreateJobOfferScreen = ({ navigation }) => {
                   <Text style={styles.label}>
                     Seleccione el tipo de cultivo *
                   </Text>
-                  <View style={styles.pickerWrapper}>
-                    <Icon
-                      name="eco"
-                      size={20}
-                      color={PRIMARY_COLOR}
-                      style={styles.inputIcon}
-                    />
-                    <View style={styles.pickerContainer}>
-                      <Picker
-                        selectedValue={formData.cropTypeId}
-                        style={styles.picker}
-                        onValueChange={handleCropTypeSelection}
-                        dropdownIconColor={PRIMARY_COLOR}>
-                        <Picker.Item
-                          label="Seleccione un cultivo..."
-                          value=""
-                        />
-                        {farmCropTypes.map((cropType) => (
-                          <Picker.Item
-                            key={cropType.id}
-                            label={cropType.name}
-                            value={cropType.id}
-                          />
-                        ))}
-                      </Picker>
-                    </View>
-                  </View>
+                  <CustomPicker
+                    selectedValue={formData.cropTypeId}
+                    onValueChange={handleCropTypeSelection}
+                    options={getCropTypeOptions()}
+                    placeholder="Seleccione un cultivo..."
+                    icon="eco"
+                  />
                   <Text style={styles.helperText}>
                     {farmCropTypes.length} cultivo
                     {farmCropTypes.length !== 1 ? "s" : ""} disponible
@@ -1097,33 +1193,13 @@ const CreateJobOfferScreen = ({ navigation }) => {
                     </View>
                   ) : availablePhasesForSelectedCrop.length > 0 ? (
                     <>
-                      <View style={styles.pickerWrapper}>
-                        <Icon
-                          name="timeline"
-                          size={20}
-                          color={PRIMARY_COLOR}
-                          style={styles.inputIcon}
-                        />
-                        <View style={styles.pickerContainer}>
-                          <Picker
-                            selectedValue={formData.phaseId}
-                            style={styles.picker}
-                            onValueChange={handlePhaseSelection}
-                            dropdownIconColor={PRIMARY_COLOR}>
-                            <Picker.Item
-                              label="Seleccione una fase..."
-                              value=""
-                            />
-                            {availablePhasesForSelectedCrop.map((phase) => (
-                              <Picker.Item
-                                key={phase.id}
-                                label={phase.name}
-                                value={phase.id}
-                              />
-                            ))}
-                          </Picker>
-                        </View>
-                      </View>
+                      <CustomPicker
+                        selectedValue={formData.phaseId}
+                        onValueChange={handlePhaseSelection}
+                        options={getPhaseOptions()}
+                        placeholder="Seleccione una fase..."
+                        icon="timeline"
+                      />
                       <Text style={styles.helperText}>
                         {availablePhasesForSelectedCrop.length} fase
                         {availablePhasesForSelectedCrop.length !== 1 ? "s" : ""}{" "}
@@ -1225,26 +1301,14 @@ const CreateJobOfferScreen = ({ navigation }) => {
 
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Tipo de pago *</Text>
-                <View style={styles.pickerWrapper}>
-                  <Icon
-                    name="attach-money"
-                    size={20}
-                    color={PRIMARY_COLOR}
-                    style={styles.inputIcon}
-                  />
-                  <View style={styles.pickerContainer}>
-                    <Picker
-                      selectedValue={formData.paymentType}
-                      style={styles.picker}
-                      onValueChange={(itemValue) =>
-                        handleInputChange("paymentType", itemValue)
-                      }
-                      dropdownIconColor={PRIMARY_COLOR}>
-                      <Picker.Item label="Por Jornal" value="Por_dia" />
-                      <Picker.Item label="Por Planta" value="Por_labor" />
-                    </Picker>
-                  </View>
-                </View>
+                <CustomPicker
+                  selectedValue={formData.paymentType}
+                  onValueChange={(itemValue) =>
+                    handleInputChange("paymentType", itemValue)
+                  }
+                  options={getPaymentTypeOptions()}
+                  icon="attach-money"
+                />
               </View>
 
               {formData.paymentType === "Por_labor" && (
@@ -1297,35 +1361,15 @@ const CreateJobOfferScreen = ({ navigation }) => {
 
                   <View style={styles.inputContainer}>
                     <Text style={styles.label}>Tipo de trabajo realizar *</Text>
-                    <View style={styles.pickerWrapper}>
-                      <Icon
-                        name="build"
-                        size={20}
-                        color={PRIMARY_COLOR}
-                        style={styles.inputIcon}
-                      />
-                      <View style={styles.pickerContainer}>
-                        <Picker
-                          selectedValue={formData.workType}
-                          style={styles.picker}
-                          onValueChange={(itemValue) =>
-                            handleInputChange("workType", itemValue)
-                          }
-                          dropdownIconColor={PRIMARY_COLOR}>
-                          <Picker.Item
-                            label="Seleccione el tipo de trabajo..."
-                            value=""
-                          />
-                          <Picker.Item label="Podar" value="Podar" />
-                          <Picker.Item label="Injertar" value="Injertar" />
-                          <Picker.Item
-                            label="Podar e Injertar"
-                            value="Podar_Injertar"
-                          />
-                          <Picker.Item label="Otro" value="Otro" />
-                        </Picker>
-                      </View>
-                    </View>
+                    <CustomPicker
+                      selectedValue={formData.workType}
+                      onValueChange={(itemValue) =>
+                        handleInputChange("workType", itemValue)
+                      }
+                      options={getWorkTypeOptions()}
+                      placeholder="Seleccione el tipo de trabajo..."
+                      icon="build"
+                    />
                     <Text style={styles.helperText}>
                       Seleccione el tipo de trabajo específico que se realizará
                       en las plantas
@@ -1422,29 +1466,14 @@ const CreateJobOfferScreen = ({ navigation }) => {
 
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Modo de pago *</Text>
-                <View style={styles.pickerWrapper}>
-                  <Icon
-                    name="account-balance-wallet"
-                    size={20}
-                    color={PRIMARY_COLOR}
-                    style={styles.inputIcon}
-                  />
-                  <View style={styles.pickerContainer}>
-                    <Picker
-                      selectedValue={formData.paymentMode}
-                      style={styles.picker}
-                      onValueChange={(itemValue) =>
-                        handleInputChange("paymentMode", itemValue)
-                      }
-                      dropdownIconColor={PRIMARY_COLOR}>
-                      <Picker.Item label="Efectivo" value="Efectivo" />
-                      <Picker.Item
-                        label="Mixto (Efectivo + Beneficios)"
-                        value="Mixto"
-                      />
-                    </Picker>
-                  </View>
-                </View>
+                <CustomPicker
+                  selectedValue={formData.paymentMode}
+                  onValueChange={(itemValue) =>
+                    handleInputChange("paymentMode", itemValue)
+                  }
+                  options={getPaymentModeOptions()}
+                  icon="account-balance-wallet"
+                />
               </View>
 
               {/* Sección de Beneficios Simplificada */}
@@ -1900,60 +1929,6 @@ const customAlertStyles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
   },
-  // Agregar estos estilos dentro de StyleSheet.create({...})
-  simpleLoadingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 12,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 6,
-    marginTop: 8,
-  },
-  simpleLoadingText: {
-    marginLeft: 8,
-    color: PRIMARY_COLOR,
-    fontSize: 14,
-  },
-  warningContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    backgroundColor: "#fff3cd",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#ffeaa7",
-    gap: 8,
-  },
-  warningText: {
-    flex: 1,
-    fontSize: 14,
-    color: "#856404",
-    lineHeight: 18,
-  },
-  noDataContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-    backgroundColor: "#fff3cd",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ffeaa7",
-    gap: 12,
-  },
-  noDataText: {
-    fontSize: 14,
-    color: "#856404",
-    textAlign: "center",
-    flex: 1,
-  },
-  helperText: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginTop: 6,
-    fontStyle: "italic",
-  },
   button: {
     flex: 1,
     flexDirection: "row",
@@ -2192,22 +2167,110 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: "top",
   },
-  pickerWrapper: {
+  
+  // Estilos para CustomPicker
+  customPickerContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f8fafc",
     borderWidth: 2,
     borderColor: "#e2e8f0",
     borderRadius: 12,
-    paddingLeft: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    minHeight: 50,
   },
-  pickerContainer: {
+  disabledPicker: {
+    backgroundColor: "#f1f5f9",
+    opacity: 0.6,
+  },
+  pickerIcon: {
+    marginRight: 12,
+  },
+  pickerTextContainer: {
     flex: 1,
   },
-  picker: {
-    height: 50,
+  pickerText: {
+    fontSize: 16,
     color: "#1f2937",
   },
+  placeholderText: {
+    color: "#999",
+  },
+  disabledText: {
+    color: "#999",
+  },
+  
+  // Estilos para Android picker
+  androidPickerWrapper: {
+    flex: 1,
+  },
+  androidPickerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+  },
+  androidPickerText: {
+    fontSize: 16,
+    color: "#1f2937",
+    flex: 1,
+  },
+  
+  // Estilos para Modal del Picker
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "70%",
+    paddingBottom: Platform.OS === 'ios' ? 34 : 0, // Safe area para iOS
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1f2937",
+  },
+  modalCloseButton: {
+    padding: 5,
+  },
+  optionsList: {
+    maxHeight: 400,
+  },
+  optionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  selectedOption: {
+    backgroundColor: `${PRIMARY_COLOR}10`,
+  },
+  optionText: {
+    fontSize: 16,
+    color: "#374151",
+    flex: 1,
+  },
+  selectedOptionText: {
+    color: PRIMARY_COLOR,
+    fontWeight: "600",
+  },
+
   noDataContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -2223,52 +2286,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#E65100",
   },
-  // Nuevos estilos para carga de fases
-  loadingPhasesContainer: {
+  
+  simpleLoadingContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f0f9ff",
-    padding: 15,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#0ea5e9",
+    justifyContent: "center",
+    padding: 12,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 6,
+    marginTop: 8,
   },
-  loadingPhasesText: {
-    marginLeft: 10,
+  simpleLoadingText: {
+    marginLeft: 8,
+    color: PRIMARY_COLOR,
     fontSize: 14,
-    color: "#0284c7",
-    fontStyle: "italic",
   },
-  noPhasesContainer: {
+  warningContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFF3E0",
-    padding: 15,
-    borderRadius: 12,
+    padding: 12,
+    backgroundColor: "#fff3cd",
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#FFB74D",
+    borderColor: "#ffeaa7",
+    gap: 8,
   },
-  noPhasesText: {
-    marginLeft: 10,
+  warningText: {
     flex: 1,
     fontSize: 14,
-    color: "#E65100",
+    color: "#856404",
+    lineHeight: 18,
   },
-  phaseSourceInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: `${COLORS.info}10`,
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 10,
-    gap: 6,
-  },
-  phaseSourceText: {
-    flex: 1,
-    fontSize: 12,
-    color: COLORS.info,
-    fontWeight: "500",
-  },
+
   datePickerWrapper: {
     flexDirection: "row",
     alignItems: "center",
@@ -2297,6 +2346,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontStyle: "italic",
   },
+  
   // Estilos rediseñados para la sección de beneficios
   benefitsSection: {
     marginTop: 20,
@@ -2399,6 +2449,7 @@ const styles = StyleSheet.create({
     color: "#059669",
     fontWeight: "600",
   },
+  
   // Estilos para cálculo automático de salario
   salaryCalculationContainer: {
     backgroundColor: "#f0fdf4",
@@ -2461,16 +2512,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     lineHeight: 16,
   },
-  calculatedSalaryValue: {
-    color: "#059669",
-    fontWeight: "600",
-  },
-  calculationFormula: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontWeight: "400",
-    fontStyle: "italic",
-  },
+  
   buttonsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2514,230 +2556,6 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.7,
-  },
-  // Estilos mejorados de FarmInfoCard
-  farmInfoContainer: {
-    marginTop: 10,
-  },
-  farmInfoHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e1e8ed",
-  },
-  farmInfoTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: PRIMARY_COLOR,
-    marginLeft: 8,
-    flex: 1,
-  },
-  farmInfoBadge: {
-    backgroundColor: `${PRIMARY_COLOR}20`,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  farmInfoBadgeText: {
-    fontSize: 12,
-    color: PRIMARY_COLOR,
-    fontWeight: "600",
-  },
-  farmInfoCard: {
-    backgroundColor: "white",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#e1e8ed",
-  },
-  farmInfoSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  farmInfoSectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: SECONDARY_COLOR,
-    marginLeft: 8,
-  },
-  locationGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginHorizontal: -6,
-  },
-  locationItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "50%",
-    paddingHorizontal: 6,
-    marginBottom: 12,
-  },
-  locationTextContainer: {
-    marginLeft: 8,
-    flex: 1,
-  },
-  locationLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 2,
-  },
-  locationValue: {
-    fontSize: 14,
-    color: "#333",
-    fontWeight: "500",
-  },
-  // Estilos para múltiples cultivos
-  cropTypesContainer: {
-    gap: 12,
-  },
-  cropTypeCard: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  selectedCropTypeCard: {
-    backgroundColor: `${PRIMARY_COLOR}10`,
-    borderColor: PRIMARY_COLOR,
-    borderWidth: 2,
-  },
-  cropTypeHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  cropTypeName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#374151",
-    flex: 1,
-  },
-  selectedCropTypeName: {
-    color: PRIMARY_COLOR,
-  },
-  phasesPreview: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-  },
-  phasesPreviewText: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontStyle: "italic",
-  },
-  // Estilos para fases
-  phasesContainer: {
-    gap: 10,
-  },
-  phaseInfoNote: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: `${COLORS.info}10`,
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: `${COLORS.info}30`,
-  },
-  phaseInfoNoteText: {
-    flex: 1,
-    fontSize: 13,
-    color: COLORS.info,
-    lineHeight: 18,
-  },
-  phaseCard: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  selectedPhaseCard: {
-    backgroundColor: `${PRIMARY_COLOR}10`,
-    borderColor: PRIMARY_COLOR,
-    borderWidth: 2,
-  },
-  phaseCardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  phaseCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#e2e8f0",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  selectedPhaseCircle: {
-    backgroundColor: PRIMARY_COLOR,
-  },
-  phaseNumber: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#666",
-  },
-  selectedPhaseNumber: {
-    color: "#fff",
-  },
-  phaseInfo: {
-    flex: 1,
-  },
-  phaseName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 4,
-  },
-  selectedPhaseName: {
-    color: PRIMARY_COLOR,
-  },
-  phaseDescription: {
-    fontSize: 13,
-    color: "#6b7280",
-    lineHeight: 18,
-    marginBottom: 4,
-  },
-  phaseDuration: {
-    fontSize: 12,
-    color: "#9ca3af",
-    fontStyle: "italic",
-    marginBottom: 2,
-  },
-  phaseSource: {
-    fontSize: 11,
-    color: "#8b5cf6",
-    fontWeight: "500",
-    marginTop: 2,
-  },
-  statsRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 8,
-  },
-  statItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: PRIMARY_COLOR,
-    marginTop: 4,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: "#666",
-    marginTop: 2,
-    textAlign: "center",
   },
 });
 

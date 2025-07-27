@@ -39,7 +39,7 @@ const slides: OnboardingSlide[] = [
     title: "Si eres Productor",
     description:
       "Encuentra jornaleros disponibles para trabajar en tu terreno, de forma rápida, segura y confiable. Gestiona tus ofertas, fechas y pagos desde un solo lugar.",
-    image: require("../../../assets/onboarding/slide2.jpg"),
+    image: require("../../../assets/onboarding/slide2.png"),
   },
   {
     id: "3",
